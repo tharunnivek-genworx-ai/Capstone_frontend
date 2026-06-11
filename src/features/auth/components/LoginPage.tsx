@@ -21,7 +21,13 @@ const LoginPage: React.FC = () => {
     clearError();
     try {
       await login(email, password);
-      navigate("/dashboard", { replace: true });
+      // Role-based redirect: mentors go to their spaces, admins to dashboard
+      const storedRole = localStorage.getItem("user_role");
+      if (storedRole === "mentor") {
+        navigate("/mentor/spaces", { replace: true });
+      } else {
+        navigate("/dashboard", { replace: true });
+      }
     } catch {
       // error already set in context
     }

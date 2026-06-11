@@ -132,6 +132,8 @@ const ProfileCard: React.FC<ProfileCardProps> = ({ data, onClose }) => {
               <DetailRow label="Employee ID" value={mentor.employeeid} />
               <DetailRow label="Phone" value={mentor.phone} />
               <DetailRow label="Department ID" value={mentor.departmentid} />
+              <DetailRow label="Department Name" value={mentor.department_name} />
+              <DetailRow label="Department Code" value={mentor.department_code} />
             </>
           )}
 

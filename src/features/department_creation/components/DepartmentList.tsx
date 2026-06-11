@@ -84,7 +84,7 @@ const DepartmentList: React.FC<DepartmentListProps> = ({ refreshTrigger }) => {
           <table style={{ width: "100%", borderCollapse: "collapse" }}>
             <thead>
               <tr style={{ borderBottom: "1px solid var(--color-border)" }}>
-                {["Name", "Code", "Description", "Status", "Actions"].map((h) => (
+                {["ID", "Name", "Code", "Description", "Status", "Actions"].map((h) => (
                   <th key={h} style={{ padding: "0.625rem 0.875rem", textAlign: "left", fontSize: "0.75rem", fontWeight: 600, color: "var(--color-text-muted)", textTransform: "uppercase", letterSpacing: "0.05em" }}>
                     {h}
                   </th>
@@ -99,6 +99,11 @@ const DepartmentList: React.FC<DepartmentListProps> = ({ refreshTrigger }) => {
                   onMouseEnter={(e) => (e.currentTarget.style.background = "rgba(37,99,235,0.04)")}
                   onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
                 >
+                  <td style={{ padding: "0.75rem 0.875rem" }}>
+                    <span style={{ fontFamily: "monospace", fontSize: "0.8125rem", color: "var(--color-text-secondary)" }}>
+                      {dept.departmentid}
+                    </span>
+                  </td>
                   <td style={{ padding: "0.75rem 0.875rem", fontSize: "0.875rem", fontWeight: 500 }}>
                     {editingId === dept.departmentid ? (
                       <input
