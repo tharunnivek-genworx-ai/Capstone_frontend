@@ -48,6 +48,8 @@ export interface MentorOut {
   deletedat?: string | null;
   createdat: string;
   updatedat: string;
+  department_name?: string | null;
+  department_code?: string | null;
 }
 
 /** PATCH /admin/mentors/:id/deactivate */
