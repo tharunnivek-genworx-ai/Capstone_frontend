@@ -11,7 +11,7 @@ interface NavItem {
   icon: React.ReactNode;
 }
 
-const navItems: NavItem[] = [
+const adminNavItems: NavItem[] = [
   {
     id: "nav-dashboard",
     label: "Dashboard",
@@ -46,10 +46,30 @@ const navItems: NavItem[] = [
   },
 ];
 
+const mentorNavItems: NavItem[] = [
+  {
+    id: "nav-mentor-spaces",
+    label: "My Learning Spaces",
+    path: "/mentor/spaces",
+    icon: (
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+        <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" />
+      </svg>
+    ),
+  },
+];
+
 const Sidebar: React.FC = () => {
   const { logout, role } = useAuth();
   const navigate = useNavigate();
   const [loggingOut, setLoggingOut] = useState(false);
+
+  const navItems =
+    role === "mentor"
+      ? mentorNavItems
+      : role === "itadmin"
+      ? adminNavItems
+      : [];
 
   const handleLogout = async () => {
     setLoggingOut(true);
@@ -68,7 +88,8 @@ const Sidebar: React.FC = () => {
       style={{
         width: "240px",
         minHeight: "100vh",
-        background: "var(--color-surface-2)",
+        background: "var(--color-bg-surface)",
+        boxShadow: "var(--shadow-subtle)",
         borderRight: "1px solid var(--color-border)",
         display: "flex",
         flexDirection: "column",
@@ -81,15 +102,15 @@ const Sidebar: React.FC = () => {
       {/* Logo */}
       <div style={{ padding: "1.5rem 1.25rem", borderBottom: "1px solid var(--color-border)" }}>
         <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
-          <div style={{ width: "36px", height: "36px", borderRadius: "10px", background: "linear-gradient(135deg, #2563eb, #1d4ed8)", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "var(--shadow-glow)" }}>
+          <div style={{ width: "36px", height: "36px", borderRadius: "10px", background: "var(--color-primary)", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "var(--shadow-subtle)" }}>
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
               <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
             </svg>
           </div>
           <div>
             <p style={{ margin: 0, fontWeight: 800, fontSize: "0.9375rem", color: "var(--color-text-primary)", lineHeight: 1.2 }}>StudyGuru</p>
-            <p style={{ margin: 0, fontSize: "0.6875rem", color: "var(--color-text-muted)", textTransform: "uppercase", letterSpacing: "0.06em" }}>
-              {role ?? "Admin"}
+            <p style={{ margin: 0, fontSize: "0.75rem", fontWeight: 600, color: "var(--color-text-secondary)" }}>
+              {role === "mentor" ? "Instructor" : role === "itadmin" ? "Admin" : role === "trainee" ? "Learner" : "Admin"}
             </p>
           </div>
         </div>
@@ -113,7 +134,7 @@ const Sidebar: React.FC = () => {
               fontSize: "0.875rem",
               color: isActive ? "#fff" : "var(--color-text-secondary)",
               background: isActive ? "var(--color-primary)" : "transparent",
-              boxShadow: isActive ? "var(--shadow-glow)" : "none",
+              boxShadow: isActive ? "var(--shadow-subtle)" : "none",
               transition: "background 0.2s, color 0.2s",
             })}
           >
