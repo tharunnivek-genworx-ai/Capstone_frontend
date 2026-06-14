@@ -8,7 +8,7 @@
  *   tree_default_instruction   – default inherited by all descendants
  *   node_additive_instruction  – additive extra for this node only; NOT inherited
  *
- * Resolution order (also mirrored in the frontend live-preview helper):
+ * Resolution order:
  *   1. node_specific_instruction set → use only it
  *   2. else: inherited tree_default_instruction chain + this node's node_additive_instruction
  */
@@ -35,6 +35,9 @@ export interface NodeRenameRequest {
  *   field = str   → DB value written
  */
 export interface NodeUpdateInstructionRequest {
+  instruction_mode?: "inherit" | "extend" | "replace";
+  instruction_text?: string | null;
+  branch_default_instruction?: string | null;
   node_specific_instruction?: string | null;
   tree_default_instruction?: string | null;
   node_additive_instruction?: string | null;
@@ -60,6 +63,16 @@ export interface NodeArchiveRequest {
 
 // ── Response shapes ───────────────────────────────────────────────────────────
 
+export type EffectiveInstructionPartType = "inherited" | "branch-default" | "extra" | "override";
+
+export interface EffectiveInstructionPart {
+  source_node_id: string;
+  source_node_title: string;
+  text: string;
+  type: EffectiveInstructionPartType;
+  label: string;
+}
+
 export interface NodeResponse {
   node_id: string;
   space_id: string;
@@ -70,6 +83,8 @@ export interface NodeResponse {
   node_specific_instruction: string | null;
   tree_default_instruction: string | null;
   node_additive_instruction: string | null;
+  effective_instruction: string | null;
+  effective_instruction_parts: EffectiveInstructionPart[];
   is_primary_learning_unit: boolean;
   is_active: boolean;
   created_by: string;
@@ -93,6 +108,8 @@ export interface NodeTreeNode {
   node_specific_instruction: string | null;
   tree_default_instruction: string | null;
   node_additive_instruction: string | null;
+  effective_instruction: string | null;
+  effective_instruction_parts: EffectiveInstructionPart[];
   is_active: boolean;
   auto_generated: boolean;
   children: NodeTreeNode[];
@@ -103,3 +120,8 @@ export interface NodeTreeResponse {
   roots: NodeTreeNode[];
   total_nodes: number;
 }
+
+// ── UI-level types ────────────────────────────────────────────────────────────
+
+/** Which page is active in the node detail panel: 1=Teaching, 2=Study Material, 3=Quiz */
+export type TopicContentPage = 1 | 2 | 3;

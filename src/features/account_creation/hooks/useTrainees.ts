@@ -10,7 +10,6 @@ interface UseTraineesReturn {
   error: string | null;
   page: number;
   limit: number;
-  goToPage: (page: number) => void;
   goToNextPage: (totalPages: number) => void;
   goToPrevPage: () => void;
   refetch: () => void;
@@ -19,7 +18,7 @@ interface UseTraineesReturn {
 }
 
 export function useTrainees(defaultLimit = 20): UseTraineesReturn {
-  const { page, limit, goToPage, goToNextPage, goToPrevPage } = usePagination({
+  const { page, limit, goToNextPage, goToPrevPage } = usePagination({
     initialLimit: defaultLimit,
   });
   const [data, setData] = useState<TraineeListResponse | null>(null);
@@ -73,5 +72,5 @@ export function useTrainees(defaultLimit = 20): UseTraineesReturn {
     }
   }, []);
 
-  return { data, isLoading, error, page, limit, goToPage, goToNextPage, goToPrevPage, refetch, deactivateTrainee, reactivateTrainee };
+  return { data, isLoading, error, page, limit, goToNextPage, goToPrevPage, refetch, deactivateTrainee, reactivateTrainee };
 }

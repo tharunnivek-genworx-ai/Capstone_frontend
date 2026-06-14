@@ -72,6 +72,28 @@ export interface SpaceListResponse {
   pages: number;
 }
 
+export interface AdminMentorSpaceOut extends SpaceResponse {
+  needs_ownership_transfer: boolean;
+}
+
+export interface AdminMentorTransferredSpaceIn extends AdminMentorSpaceOut {
+  original_mentor_id: string;
+  original_mentor_name: string;
+}
+
+export interface AdminMentorSpaceOverviewResponse {
+  owned_spaces: AdminMentorSpaceOut[];
+  transferred_in_spaces: AdminMentorTransferredSpaceIn[];
+}
+
+export interface AdminMentorSpaceListResponse {
+  items: AdminMentorSpaceOut[];
+  total: number;
+  page: number;
+  limit: number;
+  pages: number;
+}
+
 export interface SpaceJoinResponse {
   space_id: string;
   space_name: string;

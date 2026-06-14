@@ -26,21 +26,20 @@ export const departmentService = {
    * GET /admin/departments?page=1&limit=20
    * Lists all departments with pagination.
    */
-  async listDepartments(page = 1, limit = 20): Promise<DepartmentListResponse> {
+  async listDepartments(
+    page = 1,
+    limit = 20,
+    isActive?: boolean
+  ): Promise<DepartmentListResponse> {
     const response = await axiosClient.get<DepartmentListResponse>(
       "/admin/departments",
-      { params: { page, limit } }
-    );
-    return response.data;
-  },
-
-  /**
-   * GET /admin/departments/:id
-   * Fetches a single department by UUID.
-   */
-  async getDepartment(departmentId: string): Promise<DepartmentOut> {
-    const response = await axiosClient.get<DepartmentOut>(
-      `/admin/departments/${departmentId}`
+      {
+        params: {
+          page,
+          limit,
+          ...(isActive !== undefined ? { is_active: isActive } : {}),
+        },
+      }
     );
     return response.data;
   },
