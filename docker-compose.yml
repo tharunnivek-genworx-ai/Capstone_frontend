@@ -8,6 +8,7 @@ services:
       - "5173:5173"
     environment:
       - VITE_IDENTITY_SERVICE_URL=http://localhost:8000
+      - VITE_STUDY_AGENT_SERVICE_URL=http://localhost:8001
     volumes:
       - .:/app
       - /app/node_modules

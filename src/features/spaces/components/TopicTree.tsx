@@ -405,7 +405,6 @@ const TopicTree: React.FC<TopicTreeProps> = ({
                 <input
                   autoFocus
                   className="input-field"
-                  defaultValue={renamingNode.title}
                   value={renameTitle}
                   onChange={(e) => setRenameTitle(e.target.value)}
                   maxLength={300}

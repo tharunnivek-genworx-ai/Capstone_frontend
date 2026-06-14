@@ -2,7 +2,7 @@
 import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { accountService } from "../../account_creation/services/accountService";
-import { departmentService } from "../../department_creation/services/departmentService";
+import { dashboardService } from "../services/dashboardService";
 import ProfileCard from "../../../components/ui/ProfileCard";
 import type { MentorOut, TraineeOut } from "../../account_creation/types/account.types";
 
@@ -45,17 +45,17 @@ const AdminDashboard: React.FC = () => {
     const loadDashboard = async () => {
       setIsLoading(true);
       try {
-        const [mentorRes, traineeRes, deptRes] = await Promise.all([
+        const [mentorRes, traineeRes, stats] = await Promise.all([
           accountService.listMentors(1, 5),
           accountService.listTrainees(1, 5),
-          departmentService.listDepartments(1, 1),
+          dashboardService.getStats(),
         ]);
         setStats({
-          totalMentors: mentorRes.total,
-          totalTrainees: traineeRes.total,
-          totalDepartments: deptRes.total,
-          activeMentors: mentorRes.items.filter((m) => m.isactive).length,
-          activeTrainees: traineeRes.items.filter((t) => t.isactive).length,
+          totalMentors: stats.total_mentors,
+          totalTrainees: stats.total_trainees,
+          totalDepartments: stats.total_departments,
+          activeMentors: stats.active_mentors,
+          activeTrainees: stats.active_trainees,
         });
         setRecentMentors(mentorRes.items);
         setRecentTrainees(traineeRes.items);

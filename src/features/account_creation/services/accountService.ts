@@ -5,6 +5,7 @@
  */
 
 import axiosClient from "../../../lib/axiosClient";
+import type { AdminMentorSpaceOverviewResponse } from "../../spaces/types/space.types";
 import type {
   MentorCreate,
   MentorDeactivateRequest,
@@ -30,16 +31,31 @@ export const accountService = {
   },
 
   /** GET /admin/mentors?page=1&limit=20 */
-  async listMentors(page = 1, limit = 20): Promise<MentorListResponse> {
+  async listMentors(
+    page = 1,
+    limit = 20,
+    isActive?: boolean
+  ): Promise<MentorListResponse> {
     const response = await axiosClient.get<MentorListResponse>("/admin/mentors", {
-      params: { page, limit },
+      params: {
+        page,
+        limit,
+        ...(isActive !== undefined ? { is_active: isActive } : {}),
+      },
     });
     return response.data;
   },
 
-  /** GET /admin/mentors/:id */
-  async getMentor(mentorId: string): Promise<MentorOut> {
-    const response = await axiosClient.get<MentorOut>(`/admin/mentors/${mentorId}`);
+  /** GET /admin/mentors/:mentorId/spaces */
+  async listMentorSpaces(
+    mentorId: string,
+    page = 1,
+    limit = 100
+  ): Promise<AdminMentorSpaceOverviewResponse> {
+    const response = await axiosClient.get<AdminMentorSpaceOverviewResponse>(
+      `/admin/mentors/${mentorId}/spaces`,
+      { params: { page, limit } }
+    );
     return response.data;
   },
 
@@ -80,12 +96,6 @@ export const accountService = {
     const response = await axiosClient.get<TraineeListResponse>("/admin/trainees", {
       params: { page, limit },
     });
-    return response.data;
-  },
-
-  /** GET /admin/trainees/:id */
-  async getTrainee(traineeId: string): Promise<TraineeOut> {
-    const response = await axiosClient.get<TraineeOut>(`/admin/trainees/${traineeId}`);
     return response.data;
   },
 

@@ -16,8 +16,8 @@ const CreateMentorForm: React.FC<CreateMentorFormProps> = ({ onSuccess }) => {
   useEffect(() => {
     const fetchDepts = async () => {
       try {
-        const res = await departmentService.listDepartments(1, 100);
-        setDepartments(res.items.filter((d) => d.isactive));
+        const res = await departmentService.listDepartments(1, 100, true);
+        setDepartments(res.items);
       } catch {
         // silent — user will see empty dropdown
       }
