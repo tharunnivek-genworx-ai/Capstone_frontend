@@ -16,11 +16,7 @@ export function usePagination({
   initialLimit = 20,
 }: UsePaginationOptions = {}) {
   const [page, setPage] = useState(initialPage);
-  const [limit, setLimit] = useState(initialLimit);
-
-  const goToPage = useCallback((newPage: number) => {
-    setPage(newPage);
-  }, []);
+  const limit = initialLimit;
 
   const goToNextPage = useCallback((totalPages: number) => {
     setPage((prev) => Math.min(prev + 1, totalPages));
@@ -30,15 +26,5 @@ export function usePagination({
     setPage((prev) => Math.max(prev - 1, 1));
   }, []);
 
-  const changeLimit = useCallback((newLimit: number) => {
-    setLimit(newLimit);
-    setPage(1); // Reset to first page on limit change
-  }, []);
-
-  const reset = useCallback(() => {
-    setPage(initialPage);
-    setLimit(initialLimit);
-  }, [initialPage, initialLimit]);
-
-  return { page, limit, goToPage, goToNextPage, goToPrevPage, changeLimit, reset };
+  return { page, limit, goToNextPage, goToPrevPage };
 }

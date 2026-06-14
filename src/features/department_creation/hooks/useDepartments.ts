@@ -10,7 +10,6 @@ interface UseDepartmentsReturn {
   error: string | null;
   page: number;
   limit: number;
-  goToPage: (page: number) => void;
   goToNextPage: (totalPages: number) => void;
   goToPrevPage: () => void;
   refetch: () => void;
@@ -18,7 +17,7 @@ interface UseDepartmentsReturn {
 }
 
 export function useDepartments(defaultLimit = 20): UseDepartmentsReturn {
-  const { page, limit, goToPage, goToNextPage, goToPrevPage } = usePagination({
+  const { page, limit, goToNextPage, goToPrevPage } = usePagination({
     initialLimit: defaultLimit,
   });
   const [data, setData] = useState<DepartmentListResponse | null>(null);
@@ -65,5 +64,5 @@ export function useDepartments(defaultLimit = 20): UseDepartmentsReturn {
     []
   );
 
-  return { data, isLoading, error, page, limit, goToPage, goToNextPage, goToPrevPage, refetch, updateDepartment };
+  return { data, isLoading, error, page, limit, goToNextPage, goToPrevPage, refetch, updateDepartment };
 }

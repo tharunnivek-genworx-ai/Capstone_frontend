@@ -5,10 +5,6 @@
  */
 
 // ─── Generic pagination ───────────────────────────────────────────────────────
-export interface PageParams {
-  page: number;
-  limit: number;
-}
 
 export interface PaginatedResponse<T> {
   items: T[];

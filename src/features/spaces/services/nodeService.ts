@@ -42,15 +42,6 @@ export const nodeService = {
   },
 
   /**
-   * GET /nodes/:nodeId
-   * Fetch a single node by ID.
-   */
-  async getNode(nodeId: string): Promise<NodeResponse> {
-    const response = await axiosClient.get<NodeResponse>(`/nodes/${nodeId}`);
-    return response.data;
-  },
-
-  /**
    * PATCH /nodes/:nodeId/rename
    * Rename a node's title. node_id remains stable (EC-1).
    */

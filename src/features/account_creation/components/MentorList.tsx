@@ -1,8 +1,9 @@
 // src/features/account_creation/components/MentorList.tsx
-import React from "react";
+import React, { useState } from "react";
 import toast from "react-hot-toast";
 import { useMentors } from "../hooks/useMentors";
 import type { MentorOut } from "../types/account.types";
+import TransferOwnershipModal from "./TransferOwnershipModal";
 
 interface MentorListProps {
   refreshTrigger?: number;
@@ -11,21 +12,28 @@ interface MentorListProps {
 
 const MentorList: React.FC<MentorListProps> = ({ refreshTrigger, onViewProfile }) => {
   const { data, isLoading, error, page, goToNextPage, goToPrevPage, refetch, deactivateMentor, reactivateMentor } = useMentors(10);
+  const [transferMentor, setTransferMentor] = useState<MentorOut | null>(null);
+  const [deactivateMentorTarget, setDeactivateMentorTarget] = useState<MentorOut | null>(null);
 
   React.useEffect(() => {
     if (refreshTrigger) refetch();
   }, [refreshTrigger, refetch]);
 
-  const handleDeactivate = async (mentor: MentorOut) => {
-    const result = await deactivateMentor(mentor.mentorid);
-    if (result) toast.success(`${mentor.fullname} deactivated.`);
-    else toast.error("Failed to deactivate.");
-  };
-
   const handleReactivate = async (mentor: MentorOut) => {
     const result = await reactivateMentor(mentor.mentorid);
     if (result) toast.success(`${mentor.fullname} reactivated.`);
     else toast.error("Failed to reactivate.");
+  };
+
+  const handleDeactivateComplete = async (): Promise<boolean> => {
+    if (!deactivateMentorTarget) return false;
+    const result = await deactivateMentor(deactivateMentorTarget.mentorid);
+    if (result) {
+      toast.success(`${deactivateMentorTarget.fullname} deactivated.`);
+      return true;
+    }
+    toast.error("Failed to deactivate mentor.");
+    return false;
   };
 
   if (isLoading && !data) return (
@@ -78,10 +86,26 @@ const MentorList: React.FC<MentorListProps> = ({ refreshTrigger, onViewProfile }
                   <td style={{ padding: "0.75rem 0.875rem" }}>
                     <div style={{ display: "flex", gap: "0.5rem" }}>
                       <button className="btn-secondary" style={{ padding: "0.3rem 0.65rem", fontSize: "0.75rem" }} onClick={() => onViewProfile(m)}>View</button>
-                      {m.isactive
-                        ? <button className="btn-danger" style={{ padding: "0.3rem 0.65rem", fontSize: "0.75rem" }} onClick={() => handleDeactivate(m)}>Deactivate</button>
-                        : <button className="btn-success" style={{ padding: "0.3rem 0.65rem", fontSize: "0.75rem" }} onClick={() => handleReactivate(m)}>Reactivate</button>
-                      }
+                      {m.isactive ? (
+                        <>
+                          <button
+                            className="btn-secondary"
+                            style={{ padding: "0.3rem 0.65rem", fontSize: "0.75rem" }}
+                            onClick={() => setTransferMentor(m)}
+                          >
+                            Transfer Spaces
+                          </button>
+                          <button
+                            className="btn-danger"
+                            style={{ padding: "0.3rem 0.65rem", fontSize: "0.75rem" }}
+                            onClick={() => setDeactivateMentorTarget(m)}
+                          >
+                            Deactivate
+                          </button>
+                        </>
+                      ) : (
+                        <button className="btn-success" style={{ padding: "0.3rem 0.65rem", fontSize: "0.75rem" }} onClick={() => handleReactivate(m)}>Reactivate</button>
+                      )}
                     </div>
                   </td>
                 </tr>
@@ -98,6 +122,28 @@ const MentorList: React.FC<MentorListProps> = ({ refreshTrigger, onViewProfile }
             <button className="btn-secondary" style={{ padding: "0.375rem 0.75rem", fontSize: "0.8125rem" }} disabled={page >= totalPages} onClick={() => goToNextPage(totalPages)}>Next →</button>
           </div>
         </div>
+      )}
+      {transferMentor && (
+        <TransferOwnershipModal
+          mentor={transferMentor}
+          onClose={() => setTransferMentor(null)}
+          onSuccess={() => {
+            refetch();
+            setTransferMentor(null);
+          }}
+        />
+      )}
+      {deactivateMentorTarget && (
+        <TransferOwnershipModal
+          mentor={deactivateMentorTarget}
+          proceedLabel="Deactivate Mentor"
+          onProceed={handleDeactivateComplete}
+          onClose={() => setDeactivateMentorTarget(null)}
+          onSuccess={() => {
+            refetch();
+            setDeactivateMentorTarget(null);
+          }}
+        />
       )}
     </div>
   );
