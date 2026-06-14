@@ -33,6 +33,8 @@ function insertNode(roots: NodeTreeNode[], newNode: NodeResponse): NodeTreeNode[
     node_specific_instruction: newNode.node_specific_instruction,
     tree_default_instruction: newNode.tree_default_instruction,
     node_additive_instruction: newNode.node_additive_instruction,
+    effective_instruction: newNode.effective_instruction,
+    effective_instruction_parts: newNode.effective_instruction_parts,
     is_active: newNode.is_active,
     auto_generated: newNode.auto_generated,
     children: [],
@@ -60,45 +62,6 @@ function insertIntoChildren(
     return { ...n, children: insertIntoChildren(n.children, parentId, newNode) };
   });
 }
-
-/**
- * Rename a node in the tree.
- */
-function renameInTree(nodes: NodeTreeNode[], nodeId: string, newTitle: string): NodeTreeNode[] {
-  return nodes.map((n) => {
-    if (n.node_id === nodeId) return { ...n, title: newTitle };
-    return { ...n, children: renameInTree(n.children, nodeId, newTitle) };
-  });
-}
-
-/**
- * Update a node's instructions in the tree.
- */
-function updateInstructionsInTree(
-  nodes: NodeTreeNode[],
-  nodeId: string,
-  nodeSpecific: string | null,
-  treeDefault: string | null,
-  nodeAdditive: string | null
-): NodeTreeNode[] {
-  return nodes.map((n) => {
-    if (n.node_id === nodeId) {
-      return {
-        ...n,
-        node_specific_instruction: nodeSpecific,
-        tree_default_instruction: treeDefault,
-        node_additive_instruction: nodeAdditive,
-      };
-    }
-    return {
-      ...n,
-      children: updateInstructionsInTree(n.children, nodeId, nodeSpecific, treeDefault, nodeAdditive),
-    };
-  });
-}
-
-
-
 
 /**
  * Mark a node (and optionally its subtree) as archived.
@@ -198,7 +161,9 @@ export const useTopicTree = (): UseTopicTreeReturn => {
   const renameNode = useCallback(
     async (nodeId: string, payload: NodeRenameRequest): Promise<NodeResponse> => {
       const updated = await nodeService.renameNode(nodeId, payload);
-      setRoots((prev) => renameInTree(prev, nodeId, updated.title));
+      const res = await nodeService.getTree(updated.space_id);
+      setRoots(res.roots);
+      setTotalNodes(res.total_nodes);
       return updated;
     },
     []
@@ -207,15 +172,9 @@ export const useTopicTree = (): UseTopicTreeReturn => {
   const updateNodeInstruction = useCallback(
     async (nodeId: string, payload: NodeUpdateInstructionRequest): Promise<NodeResponse> => {
       const updated = await nodeService.updateNodeInstruction(nodeId, payload);
-      setRoots((prev) =>
-        updateInstructionsInTree(
-          prev,
-          nodeId,
-          updated.node_specific_instruction,
-          updated.tree_default_instruction,
-          updated.node_additive_instruction
-        )
-      );
+      const res = await nodeService.getTree(updated.space_id);
+      setRoots(res.roots);
+      setTotalNodes(res.total_nodes);
       return updated;
     },
     []
@@ -245,11 +204,15 @@ export const useTopicTree = (): UseTopicTreeReturn => {
       };
       try {
         await nodeService.reorderNodes(spaceId, req);
+        const res = await nodeService.getTree(spaceId);
+        setRoots(res.roots);
+        setTotalNodes(res.total_nodes);
       } catch (err) {
         setError(extractError(err));
         // Re-fetch to restore consistent state
         const res = await nodeService.getTree(spaceId);
         setRoots(res.roots);
+        setTotalNodes(res.total_nodes);
       }
     },
     []

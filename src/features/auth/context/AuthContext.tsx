@@ -41,9 +41,7 @@ const isTokenExpired = (token: string): boolean => {
 
 // ─── Context shape ────────────────────────────────────────────────────────────
 interface AuthContextValue {
-  accessToken: string | null;
   role: UserRole | null;
-  userId: string | null;
   isLoading: boolean;
   error: string | null;
   isLoggedIn: boolean;
@@ -63,9 +61,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
   );
   const [role, setRole] = useState<UserRole | null>(
     () => localStorage.getItem("user_role") as UserRole | null
-  );
-  const [userId, setUserId] = useState<string | null>(
-    () => localStorage.getItem("user_id")
   );
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -87,7 +82,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
         localStorage.removeItem("user_id");
         setAccessToken(null);
         setRole(null);
-        setUserId(null);
         return;
       }
 
@@ -100,7 +94,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
         const payload = decodeJwt(result.access_token);
         if (payload) {
           setRole(payload.role);
-          setUserId(payload.sub);
           localStorage.setItem("user_role", payload.role);
           localStorage.setItem("user_id", payload.sub);
         }
@@ -112,7 +105,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
         localStorage.removeItem("user_id");
         setAccessToken(null);
         setRole(null);
-        setUserId(null);
       }
     };
 
@@ -139,7 +131,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
 
       setAccessToken(response.access_token);
       setRole(userRole);
-      setUserId(userSub);
     } catch (err: unknown) {
       const message =
         (err as { response?: { data?: { detail?: string } }; message?: string })
@@ -169,7 +160,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
     localStorage.removeItem("user_id");
     setAccessToken(null);
     setRole(null);
-    setUserId(null);
     setError(null);
   }, []);
 
@@ -177,9 +167,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
 
   const value = useMemo<AuthContextValue>(
     () => ({
-      accessToken,
       role,
-      userId,
       isLoading,
       error,
       isLoggedIn: !!accessToken,
@@ -187,7 +175,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
       logout,
       clearError,
     }),
-    [accessToken, role, userId, isLoading, error, login, logout, clearError]
+    [accessToken, role, isLoading, error, login, logout, clearError]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

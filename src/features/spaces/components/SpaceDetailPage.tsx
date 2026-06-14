@@ -11,6 +11,8 @@ import { spaceService } from "../services/spaceService";
 import { useTopicTree } from "../hooks/useTopicTree";
 import type { SpaceResponse } from "../types/space.types";
 import type { NodeTreeNode, NodeUpdateInstructionRequest } from "../types/node.types";
+import type { NodeStudyState, NodeStudyStatePatch } from "../../study_material/types/studyMaterial.types";
+import type { TopicContentPage } from "../types/node.types";
 import TopicTree from "./TopicTree";
 import NodeDetailPanel from "./NodeDetailPanel";
 import InviteCodeModal from "./InviteCodeModal";
@@ -37,6 +39,42 @@ const SpaceDetailPage: React.FC = () => {
   const [showUnpublishConfirm, setShowUnpublishConfirm] = useState(false);
   const [isMoveMode, setIsMoveMode] = useState(false);
   const [treePanelWidth, setTreePanelWidth] = useState(340);
+  const [nodeStudyStates, setNodeStudyStates] = useState<Map<string, NodeStudyState>>(new Map());
+
+  // Return undefined for nodes never visited so useStudyMaterial can distinguish
+  // "not yet loaded" (undefined) from "loaded, no material" (null) when deciding
+  // whether to fetch reference material from the server.
+  const getNodeStudyState = useCallback((nodeId: string): NodeStudyState | undefined => {
+    return nodeStudyStates.get(nodeId);
+  }, [nodeStudyStates]);
+
+  const updateNodeStudyState = useCallback(
+    (nodeId: string, patch: Partial<NodeStudyState>) => {
+      setNodeStudyStates((prev) => {
+        const existing = prev.get(nodeId) ?? {
+          currentPage: 1 as TopicContentPage,
+          hasTriggeredGeneration: false,
+          studyMaterialContent: null,
+          activeVersion: null,
+          isGenerating: false,
+          referenceMaterial: null,
+        };
+        const next = new Map(prev);
+        next.set(nodeId, { ...existing, ...patch });
+        return next;
+      });
+    },
+    []
+  );
+
+  const selectedNodeId = selectedNode?.node_id ?? null;
+  const handleStudyStateChange = useCallback(
+    (patch: NodeStudyStatePatch) => {
+      if (!selectedNodeId) return;
+      updateNodeStudyState(selectedNodeId, patch);
+    },
+    [selectedNodeId, updateNodeStudyState]
+  );
   const bodyRef = useRef<HTMLDivElement>(null);
   const isResizingRef = useRef(false);
 
@@ -69,7 +107,7 @@ const SpaceDetailPage: React.FC = () => {
       } catch (err) {
         const e = err as { response?: { data?: { detail?: string } }; message?: string };
         toast.error(e?.response?.data?.detail ?? e?.message ?? "Failed to load space.");
-        navigate("/mentor/spaces");
+        navigate(`/${role}/spaces`);
       } finally {
         setIsLoadingSpace(false);
       }
@@ -203,10 +241,19 @@ const SpaceDetailPage: React.FC = () => {
 
   const handleNodeRename = useCallback(
     async (nodeId: string, newTitle: string) => {
-      await renameNode(nodeId, { title: newTitle });
+      const updated = await renameNode(nodeId, { title: newTitle });
       // Keep selected node in sync
       if (selectedNode && selectedNode.node_id === nodeId) {
-        setSelectedNode((prev) => prev ? { ...prev, title: newTitle } : prev);
+        setSelectedNode((prev) =>
+          prev
+            ? {
+                ...prev,
+                title: updated.title,
+                effective_instruction: updated.effective_instruction,
+                effective_instruction_parts: updated.effective_instruction_parts,
+              }
+            : prev
+        );
       }
     },
     [renameNode, selectedNode]
@@ -223,6 +270,8 @@ const SpaceDetailPage: React.FC = () => {
                 node_specific_instruction: updated.node_specific_instruction,
                 tree_default_instruction: updated.tree_default_instruction,
                 node_additive_instruction: updated.node_additive_instruction,
+                effective_instruction: updated.effective_instruction,
+                effective_instruction_parts: updated.effective_instruction_parts,
               }
             : prev
         );
@@ -645,11 +694,13 @@ const SpaceDetailPage: React.FC = () => {
           {isMoveMode && <div style={moveBlurOverlay} aria-hidden />}
           <NodeDetailPanel
             node={selectedNode}
-            roots={roots}
+            spaceId={spaceId ?? ""}
             onRename={handleNodeRename}
             onUpdateInstruction={handleUpdateInstruction}
             onNavigateToNode={handleNavigateToNode}
             isMentor={isMentor}
+            studyState={selectedNode ? getNodeStudyState(selectedNode.node_id) : undefined}
+            onStudyStateChange={selectedNode ? handleStudyStateChange : undefined}
           />
         </main>
       </div>

@@ -10,16 +10,15 @@ interface UseMentorsReturn {
   error: string | null;
   page: number;
   limit: number;
-  goToPage: (page: number) => void;
   goToNextPage: (totalPages: number) => void;
   goToPrevPage: () => void;
   refetch: () => void;
-  deactivateMentor: (id: string, transferTo?: string) => Promise<MentorOut | null>;
+  deactivateMentor: (id: string) => Promise<MentorOut | null>;
   reactivateMentor: (id: string) => Promise<MentorOut | null>;
 }
 
 export function useMentors(defaultLimit = 20): UseMentorsReturn {
-  const { page, limit, goToPage, goToNextPage, goToPrevPage } = usePagination({
+  const { page, limit, goToNextPage, goToPrevPage } = usePagination({
     initialLimit: defaultLimit,
   });
   const [data, setData] = useState<MentorListResponse | null>(null);
@@ -54,11 +53,10 @@ export function useMentors(defaultLimit = 20): UseMentorsReturn {
   const refetch = useCallback(() => setRefresh((v) => v + 1), []);
 
   const deactivateMentor = useCallback(
-    async (id: string, transferTo?: string): Promise<MentorOut | null> => {
+    async (id: string): Promise<MentorOut | null> => {
       try {
         const result = await accountService.deactivateMentor(id, {
           isactive: false,
-          transferred_to_mentor_id: transferTo ?? null,
         });
         setRefresh((v) => v + 1);
         return result;
@@ -82,5 +80,5 @@ export function useMentors(defaultLimit = 20): UseMentorsReturn {
     []
   );
 
-  return { data, isLoading, error, page, limit, goToPage, goToNextPage, goToPrevPage, refetch, deactivateMentor, reactivateMentor };
+  return { data, isLoading, error, page, limit, goToNextPage, goToPrevPage, refetch, deactivateMentor, reactivateMentor };
 }

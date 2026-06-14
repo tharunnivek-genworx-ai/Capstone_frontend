@@ -13,27 +13,6 @@ export function getExcludedMoveTargetIds(node: NodeTreeNode): Set<string> {
   return ids;
 }
 
-export function isDescendantOf(roots: NodeTreeNode[], nodeId: string, ancestorId: string): boolean {
-  const find = (nodes: NodeTreeNode[]): NodeTreeNode | null => {
-    for (const n of nodes) {
-      if (n.node_id === ancestorId) return n;
-      const found = find(n.children);
-      if (found) return found;
-    }
-    return null;
-  };
-  const ancestor = find(roots);
-  if (!ancestor) return false;
-  const check = (nodes: NodeTreeNode[]): boolean => {
-    for (const n of nodes) {
-      if (n.node_id === nodeId) return true;
-      if (check(n.children)) return true;
-    }
-    return false;
-  };
-  return check(ancestor.children);
-}
-
 export function findParentId(roots: NodeTreeNode[], nodeId: string): string | null {
   const search = (nodes: NodeTreeNode[]): string | null | undefined => {
     for (const n of nodes) {

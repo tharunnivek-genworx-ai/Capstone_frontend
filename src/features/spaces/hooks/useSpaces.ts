@@ -10,10 +10,7 @@ import type {
   SpaceResponse,
   SpaceListResponse,
   SpaceCreateRequest,
-  SpaceUpdateRequest,
   SpacePublishRequest,
-  SpaceTransferOwnershipRequest,
-  SpaceAddTraineesRequest,
 } from "../types/space.types";
 
 interface UseSpacesReturn {
@@ -23,12 +20,7 @@ interface UseSpacesReturn {
   error: string | null;
   fetchSpaces: (page?: number, limit?: number) => Promise<void>;
   createSpace: (payload: SpaceCreateRequest) => Promise<SpaceResponse>;
-  getSpace: (spaceId: string) => Promise<SpaceResponse>;
-  updateSpace: (spaceId: string, payload: SpaceUpdateRequest) => Promise<SpaceResponse>;
   publishSpace: (spaceId: string, payload: SpacePublishRequest) => Promise<SpaceResponse>;
-  transferOwnership: (spaceId: string, payload: SpaceTransferOwnershipRequest) => Promise<SpaceResponse>;
-  addTrainees: (spaceId: string, payload: SpaceAddTraineesRequest) => Promise<void>;
-  removeTrainee: (spaceId: string, traineeId: string) => Promise<void>;
   clearError: () => void;
 }
 
@@ -64,34 +56,10 @@ export const useSpaces = (): UseSpacesReturn => {
     return created;
   }, []);
 
-  const getSpace = useCallback(async (spaceId: string): Promise<SpaceResponse> => {
-    return spaceService.getSpace(spaceId);
-  }, []);
-
-  const updateSpace = useCallback(async (spaceId: string, payload: SpaceUpdateRequest): Promise<SpaceResponse> => {
-    const updated = await spaceService.updateSpace(spaceId, payload);
-    setSpaces((prev) => prev.map((s) => (s.space_id === spaceId ? updated : s)));
-    return updated;
-  }, []);
-
   const publishSpace = useCallback(async (spaceId: string, payload: SpacePublishRequest): Promise<SpaceResponse> => {
     const updated = await spaceService.publishSpace(spaceId, payload);
     setSpaces((prev) => prev.map((s) => (s.space_id === spaceId ? updated : s)));
     return updated;
-  }, []);
-
-  const transferOwnership = useCallback(async (spaceId: string, payload: SpaceTransferOwnershipRequest): Promise<SpaceResponse> => {
-    const updated = await spaceService.transferOwnership(spaceId, payload);
-    setSpaces((prev) => prev.map((s) => (s.space_id === spaceId ? updated : s)));
-    return updated;
-  }, []);
-
-  const addTrainees = useCallback(async (spaceId: string, payload: SpaceAddTraineesRequest): Promise<void> => {
-    await spaceService.addTrainees(spaceId, payload);
-  }, []);
-
-  const removeTrainee = useCallback(async (spaceId: string, traineeId: string): Promise<void> => {
-    await spaceService.removeTrainee(spaceId, { trainee_id: traineeId });
   }, []);
 
   const clearError = useCallback(() => setError(null), []);
@@ -103,12 +71,7 @@ export const useSpaces = (): UseSpacesReturn => {
     error,
     fetchSpaces,
     createSpace,
-    getSpace,
-    updateSpace,
     publishSpace,
-    transferOwnership,
-    addTrainees,
-    removeTrainee,
     clearError,
   };
 };
