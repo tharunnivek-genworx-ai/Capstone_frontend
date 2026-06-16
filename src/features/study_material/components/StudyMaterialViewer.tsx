@@ -34,6 +34,9 @@ interface StudyMaterialViewerProps {
   onSelectLineageVersion?: (versionId: string) => void;
   canPublish?: boolean;
   canUnpublish?: boolean;
+  publishButtonLabel?: string;
+  publishDisabledTooltip?: string | null;
+  unpublishDisabledTooltip?: string | null;
   isPublishing?: boolean;
   isUnpublishing?: boolean;
   onPublish?: () => void;
@@ -59,6 +62,9 @@ const StudyMaterialViewer: React.FC<StudyMaterialViewerProps> = ({
   onSelectLineageVersion,
   canPublish = false,
   canUnpublish = false,
+  publishButtonLabel = "Publish for trainees",
+  publishDisabledTooltip = null,
+  unpublishDisabledTooltip = null,
   isPublishing = false,
   isUnpublishing = false,
   onPublish,
@@ -70,6 +76,8 @@ const StudyMaterialViewer: React.FC<StudyMaterialViewerProps> = ({
   scrollContainerRef,
 }) => {
   const markdown = normalizeStudyContent(content);
+  const showPublish = Boolean(onPublish) && (canPublish || publishDisabledTooltip);
+  const showUnpublish = Boolean(onUnpublish) && (canUnpublish || unpublishDisabledTooltip);
 
   return (
     <div className="study-material-viewer">
@@ -98,22 +106,26 @@ const StudyMaterialViewer: React.FC<StudyMaterialViewerProps> = ({
                   Archive
                 </button>
               )}
-              {canPublish && onPublish && (
+              {showPublish && (
                 <button
                   type="button"
                   className="btn-primary study-material-viewer__publish-btn"
-                  onClick={onPublish}
-                  disabled={isPublishing || isUnpublishing}
+                  onClick={canPublish ? onPublish : undefined}
+                  disabled={!canPublish || isPublishing || isUnpublishing}
+                  title={!canPublish ? publishDisabledTooltip ?? undefined : undefined}
+                  style={!canPublish ? { opacity: 0.55, cursor: "not-allowed" } : undefined}
                 >
-                  {isPublishing ? "Publishing…" : "Publish for trainees"}
+                  {isPublishing ? "Publishing…" : publishButtonLabel}
                 </button>
               )}
-              {canUnpublish && onUnpublish && (
+              {showUnpublish && (
                 <button
                   type="button"
                   className="btn-secondary study-material-viewer__unpublish-btn"
-                  onClick={onUnpublish}
-                  disabled={isPublishing || isUnpublishing}
+                  onClick={canUnpublish ? onUnpublish : undefined}
+                  disabled={!canUnpublish || isPublishing || isUnpublishing}
+                  title={!canUnpublish ? unpublishDisabledTooltip ?? undefined : undefined}
+                  style={!canUnpublish ? { opacity: 0.55, cursor: "not-allowed" } : undefined}
                 >
                   {isUnpublishing ? "Unpublishing…" : "Unpublish"}
                 </button>

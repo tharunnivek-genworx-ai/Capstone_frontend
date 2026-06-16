@@ -47,6 +47,24 @@ export interface StudyMaterialPublishRequest {
   version_id: string;
 }
 
+export interface StudyMaterialPublishPreviewOut {
+  requires_confirmation: boolean;
+  has_draft_quizzes: boolean;
+  has_published_quizzes: boolean;
+  draft_quiz_count: number;
+  previous_version_label: string | null;
+  new_version_label: string;
+  is_republishing_older: boolean;
+  current_published_version_label: string | null;
+}
+
+export interface StudyMaterialUnpublishPreviewOut {
+  requires_confirmation: boolean;
+  has_draft_quizzes: boolean;
+  has_published_quizzes: boolean;
+  version_label: string;
+}
+
 export interface StudyMaterialActivateRequest {
   version_id: string;
 }
@@ -119,12 +137,16 @@ export interface VersionAllowedActionsOut {
   can_edit_active_draft: boolean;
   is_viewing_non_active: boolean;
   is_viewing_archived: boolean;
+  publish_button_label?: string;
+  publish_disabled_tooltip?: string | null;
+  unpublish_disabled_tooltip?: string | null;
 }
 
 export interface StudyMaterialMentorUiStateOut {
   node_id: string;
   has_versions: boolean;
   active_version_id: string | null;
+  published_version_id?: string | null;
   can_access_study_material: boolean;
   can_access_quiz: boolean;
   instruction_changed_since_generation: boolean;
@@ -191,6 +213,14 @@ export interface ReferenceImageListOut {
   total: number;
 }
 
+export interface StudyMaterialFeedbackResponse {
+  has_new_version: boolean;
+  new_version_id: string | null;
+  status: "ok" | "feedback_too_vague" | "regeneration_goal_too_vague";
+  status_message: string | null;
+  new_version: StudyMaterialVersionOut | null;
+}
+
 // ── UI-level types ────────────────────────────────────────────────────────────
 
 import type { TopicContentPage } from "../../spaces/types/node.types";
@@ -206,6 +236,7 @@ export interface NodeStudyStatePatch {
   activeVersion?: StudyMaterialVersionOut | null;
   isGenerating?: boolean;
   referenceMaterial?: ReferenceMaterialOut | null;
+  currentQuizId?: string | null;
 }
 
 /** Full node-level study state — each node has its own instance */
@@ -216,4 +247,5 @@ export interface NodeStudyState {
   activeVersion: StudyMaterialVersionOut | null;
   isGenerating: boolean;
   referenceMaterial: ReferenceMaterialOut | null;
+  currentQuizId: string | null;
 }
