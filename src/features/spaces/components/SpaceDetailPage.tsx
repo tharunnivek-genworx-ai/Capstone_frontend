@@ -9,7 +9,7 @@ import { useParams, useNavigate } from "react-router-dom";
 import toast from "react-hot-toast";
 import { spaceService } from "../services/spaceService";
 import { useTopicTree } from "../hooks/useTopicTree";
-import type { SpaceResponse } from "../types/space.types";
+import type { SpaceResponse, SpaceUnpublishPreviewOut, RepublishChecklistNode } from "../types/space.types";
 import type { NodeTreeNode, NodeUpdateInstructionRequest } from "../types/node.types";
 import type { NodeStudyState, NodeStudyStatePatch } from "../../study_material/types/studyMaterial.types";
 import type { TopicContentPage } from "../types/node.types";
@@ -18,6 +18,9 @@ import NodeDetailPanel from "./NodeDetailPanel";
 import InviteCodeModal from "./InviteCodeModal";
 import ManageTraineesModal from "./ManageTraineesModal";
 import { useAuth } from "../../auth/hooks/useAuth";
+import { studyMaterialService } from "../../study_material/services/studyMaterialService";
+import EspaceUnpublishConfirmModal from "./EspaceUnpublishConfirmModal";
+import EspaceRepublishChecklistModal from "./EspaceRepublishChecklistModal";
 
 const SpaceDetailPage: React.FC = () => {
   const { spaceId } = useParams<{ spaceId: string }>();
@@ -36,7 +39,9 @@ const SpaceDetailPage: React.FC = () => {
   const [isSavingEdit, setIsSavingEdit] = useState(false);
   const [copied, setCopied] = useState(false);
   const [showManageTrainees, setShowManageTrainees] = useState(false);
-  const [showUnpublishConfirm, setShowUnpublishConfirm] = useState(false);
+  const [unpublishPreview, setUnpublishPreview] = useState<SpaceUnpublishPreviewOut | null>(null);
+  const [isLoadingUnpublishPreview, setIsLoadingUnpublishPreview] = useState(false);
+  const [republishChecklist, setRepublishChecklist] = useState<RepublishChecklistNode[] | null>(null);
   const [isMoveMode, setIsMoveMode] = useState(false);
   const [treePanelWidth, setTreePanelWidth] = useState(340);
   const [nodeStudyStates, setNodeStudyStates] = useState<Map<string, NodeStudyState>>(new Map());
@@ -58,6 +63,7 @@ const SpaceDetailPage: React.FC = () => {
           activeVersion: null,
           isGenerating: false,
           referenceMaterial: null,
+          currentQuizId: null,
         };
         const next = new Map(prev);
         next.set(nodeId, { ...existing, ...patch });
@@ -179,30 +185,65 @@ const SpaceDetailPage: React.FC = () => {
     }
   };
 
-  const handlePublishToggle = async () => {
+  const loadRepublishChecklist = async (id: string) => {
+    try {
+      const checklist = await studyMaterialService.getRepublishChecklist(id);
+      if (checklist.nodes_with_publishable_material.length > 0) {
+        setRepublishChecklist(checklist.nodes_with_publishable_material);
+      }
+    } catch {
+      // Non-blocking — space publish still succeeded.
+    }
+  };
+
+  const handlePublishSpace = async () => {
     if (!space || !spaceId) return;
     setIsPublishing(true);
     try {
-      const updated = await spaceService.publishSpace(spaceId, {
-        is_published: !space.is_published,
-      });
+      const updated = await spaceService.publishSpace(spaceId, { is_published: true });
       setSpace(updated);
-      setShowUnpublishConfirm(false);
-      toast.success(updated.is_published ? "Space published!" : "Space unpublished.");
+      toast.success("Space published!");
+      await loadRepublishChecklist(spaceId);
     } catch (err) {
       const e = err as { response?: { data?: { detail?: string } }; message?: string };
-      toast.error(e?.response?.data?.detail ?? e?.message ?? "Failed to update.");
+      toast.error(e?.response?.data?.detail ?? e?.message ?? "Failed to publish space.");
+      throw err;
     } finally {
       setIsPublishing(false);
     }
   };
 
-  const handlePublishClick = () => {
-    if (!space) return;
+  const handleUnpublishSpace = async () => {
+    if (!space || !spaceId) return;
+    setIsPublishing(true);
+    try {
+      const updated = await spaceService.publishSpace(spaceId, { is_published: false });
+      setSpace(updated);
+      setUnpublishPreview(null);
+      toast.success("Space unpublished.");
+    } catch (err) {
+      const e = err as { response?: { data?: { detail?: string } }; message?: string };
+      toast.error(e?.response?.data?.detail ?? e?.message ?? "Failed to unpublish space.");
+      throw err;
+    } finally {
+      setIsPublishing(false);
+    }
+  };
+
+  const handlePublishClick = async () => {
+    if (!space || !spaceId) return;
     if (space.is_published) {
-      setShowUnpublishConfirm(true);
+      setIsLoadingUnpublishPreview(true);
+      try {
+        const preview = await spaceService.previewUnpublish(spaceId);
+        setUnpublishPreview(preview);
+      } catch {
+        toast.error("Failed to load unpublish preview.");
+      } finally {
+        setIsLoadingUnpublishPreview(false);
+      }
     } else {
-      handlePublishToggle();
+      void handlePublishSpace();
     }
   };
 
@@ -467,74 +508,27 @@ const SpaceDetailPage: React.FC = () => {
         {/* Right controls */}
         <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", flexShrink: 0 }}>
           {isMentor && (
-            <div style={{ position: "relative" }}>
-              <button
-                onClick={handlePublishClick}
-                className={space.is_published ? "btn-danger" : "btn-primary"}
-                style={{ padding: "0.375rem 0.875rem", fontSize: "0.8125rem" }}
-                disabled={isPublishing}
-              >
-                {isPublishing ? (
-                  <span
-                    className="spinner"
-                    style={{
-                      borderTopColor: space.is_published ? "var(--color-danger)" : "var(--color-primary)",
-                      width: "1rem",
-                      height: "1rem",
-                    }}
-                  />
-                ) : space.is_published ? (
-                  "Unpublish"
-                ) : (
-                  "Publish Space"
-                )}
-              </button>
-              {showUnpublishConfirm && (
-                <>
-                  <div
-                    onClick={() => setShowUnpublishConfirm(false)}
-                    style={{ position: "fixed", inset: 0, zIndex: 40 }}
-                  />
-                  <div
-                    style={{
-                      position: "absolute",
-                      top: "calc(100% + 0.5rem)",
-                      right: 0,
-                      zIndex: 50,
-                      background: "var(--color-bg-surface)",
-                      border: "1px solid var(--color-border)",
-                      borderRadius: "var(--radius-lg)",
-                      padding: "0.875rem 1rem",
-                      boxShadow: "var(--shadow-subtle)",
-                      minWidth: "260px",
-                    }}
-                  >
-                    <p style={{ margin: "0 0 0.75rem", fontSize: "0.8125rem", color: "var(--color-text-secondary)", lineHeight: 1.5 }}>
-                      This will hide the space from trainees. Continue?
-                    </p>
-                    <div style={{ display: "flex", gap: "0.5rem", justifyContent: "flex-end" }}>
-                      <button
-                        type="button"
-                        className="btn-secondary"
-                        style={{ padding: "0.375rem 0.75rem", fontSize: "0.8125rem" }}
-                        onClick={() => setShowUnpublishConfirm(false)}
-                      >
-                        Cancel
-                      </button>
-                      <button
-                        type="button"
-                        className="btn-danger"
-                        style={{ padding: "0.375rem 0.75rem", fontSize: "0.8125rem", background: "var(--color-danger)", color: "#fff", border: "none" }}
-                        onClick={handlePublishToggle}
-                        disabled={isPublishing}
-                      >
-                        Confirm
-                      </button>
-                    </div>
-                  </div>
-                </>
+            <button
+              onClick={() => void handlePublishClick()}
+              className={space.is_published ? "btn-danger" : "btn-primary"}
+              style={{ padding: "0.375rem 0.875rem", fontSize: "0.8125rem" }}
+              disabled={isPublishing || isLoadingUnpublishPreview}
+            >
+              {isPublishing || isLoadingUnpublishPreview ? (
+                <span
+                  className="spinner"
+                  style={{
+                    borderTopColor: space.is_published ? "var(--color-danger)" : "var(--color-primary)",
+                    width: "1rem",
+                    height: "1rem",
+                  }}
+                />
+              ) : space.is_published ? (
+                "Unpublish"
+              ) : (
+                "Publish Space"
               )}
-            </div>
+            </button>
           )}
 
           {/* Invite code */}
@@ -695,6 +689,7 @@ const SpaceDetailPage: React.FC = () => {
           <NodeDetailPanel
             node={selectedNode}
             spaceId={spaceId ?? ""}
+            spaceIsPublished={space.is_published}
             onRename={handleNodeRename}
             onUpdateInstruction={handleUpdateInstruction}
             onNavigateToNode={handleNavigateToNode}
@@ -719,6 +714,23 @@ const SpaceDetailPage: React.FC = () => {
         <ManageTraineesModal
           spaceId={space.space_id}
           onClose={() => setShowManageTrainees(false)}
+        />
+      )}
+
+      {unpublishPreview && (
+        <EspaceUnpublishConfirmModal
+          preview={unpublishPreview}
+          onClose={() => !isPublishing && setUnpublishPreview(null)}
+          onConfirm={() => void handleUnpublishSpace().catch(() => undefined)}
+          isSubmitting={isPublishing}
+        />
+      )}
+
+      {republishChecklist && (
+        <EspaceRepublishChecklistModal
+          spaceName={space.space_name}
+          nodes={republishChecklist}
+          onClose={() => setRepublishChecklist(null)}
         />
       )}
     </div>

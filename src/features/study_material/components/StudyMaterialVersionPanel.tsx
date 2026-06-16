@@ -12,6 +12,7 @@ interface StudyMaterialVersionPanelProps {
   onSelectVersion: (versionId: string) => void;
   onUnarchiveVersion: (versionId: string) => void;
   onBackToActiveHistory?: () => void;
+  children?: React.ReactNode;
 }
 
 function formatDate(iso: string): string {
@@ -37,12 +38,14 @@ const StudyMaterialVersionPanel: React.FC<StudyMaterialVersionPanelProps> = ({
   onSelectVersion,
   onUnarchiveVersion,
   onBackToActiveHistory,
+  children,
 }) => {
   const selectedId = viewingVersionId ?? activeVersionId;
   const isArchiveMode = mode === "archived";
 
   return (
     <aside className="study-material-version-panel">
+      {children}
       <div className="study-material-version-panel__header">
         <h3 className="study-material-version-panel__title">
           {isArchiveMode ? "Archived drafts" : "Version history"}

@@ -1,26 +1,55 @@
-// src/features/spaces/components/SpaceCard.tsx
 import React, { useState } from "react";
-import type { SpaceResponse } from "../types/space.types";
+import toast from "react-hot-toast";
+import type { SpaceResponse, SpaceUnpublishPreviewOut } from "../types/space.types";
+import { spaceService } from "../services/spaceService";
+import EspaceUnpublishConfirmModal from "./EspaceUnpublishConfirmModal";
 
 interface SpaceCardProps {
   space: SpaceResponse;
   onNavigate: () => void;
   onCopyInvite: () => void;
-  onPublishToggle: () => void;
+  onPublish: (space: SpaceResponse) => void;
+  onUnpublish: (space: SpaceResponse) => Promise<void>;
   isPublishing: boolean;
   isMentor: boolean;
 }
 
-const SpaceCard: React.FC<SpaceCardProps> = ({ space, onNavigate, onCopyInvite, onPublishToggle, isPublishing, isMentor }) => {
+const SpaceCard: React.FC<SpaceCardProps> = ({
+  space,
+  onNavigate,
+  onCopyInvite,
+  onPublish,
+  onUnpublish,
+  isPublishing,
+  isMentor,
+}) => {
   const [codeCopied, setCodeCopied] = useState(false);
-  const [showUnpublishConfirm, setShowUnpublishConfirm] = useState(false);
+  const [unpublishPreview, setUnpublishPreview] = useState<SpaceUnpublishPreviewOut | null>(null);
+  const [isLoadingPreview, setIsLoadingPreview] = useState(false);
 
-  const handlePublishClick = (e: React.MouseEvent) => {
+  const handlePublishClick = async (e: React.MouseEvent) => {
     e.stopPropagation();
     if (space.is_published) {
-      setShowUnpublishConfirm(true);
+      setIsLoadingPreview(true);
+      try {
+        const preview = await spaceService.previewUnpublish(space.space_id);
+        setUnpublishPreview(preview);
+      } catch {
+        toast.error("Failed to load unpublish preview.");
+      } finally {
+        setIsLoadingPreview(false);
+      }
     } else {
-      onPublishToggle();
+      onPublish(space);
+    }
+  };
+
+  const handleConfirmUnpublish = async () => {
+    try {
+      await onUnpublish(space);
+      setUnpublishPreview(null);
+    } catch {
+      // Parent shows error toast; keep modal open.
     }
   };
 
@@ -55,7 +84,6 @@ const SpaceCard: React.FC<SpaceCardProps> = ({ space, onNavigate, onCopyInvite, 
         e.currentTarget.style.boxShadow = "var(--shadow-subtle)";
       }}
     >
-      {/* Top accent */}
       <div
         style={{
           position: "absolute",
@@ -70,7 +98,6 @@ const SpaceCard: React.FC<SpaceCardProps> = ({ space, onNavigate, onCopyInvite, 
         }}
       />
 
-      {/* Header */}
       <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: "0.75rem", paddingTop: "0.25rem" }}>
         <div
           style={{
@@ -91,7 +118,6 @@ const SpaceCard: React.FC<SpaceCardProps> = ({ space, onNavigate, onCopyInvite, 
         </div>
       </div>
 
-      {/* Title + description */}
       <div style={{ flex: 1 }}>
         <h3
           style={{
@@ -129,7 +155,6 @@ const SpaceCard: React.FC<SpaceCardProps> = ({ space, onNavigate, onCopyInvite, 
         )}
       </div>
 
-      {/* Invite code */}
       {isMentor && space.invite_code && (
         <div
           onClick={handleCopy}
@@ -178,7 +203,6 @@ const SpaceCard: React.FC<SpaceCardProps> = ({ space, onNavigate, onCopyInvite, 
         </div>
       )}
 
-      {/* Footer */}
       <div
         style={{
           display: "flex",
@@ -191,70 +215,29 @@ const SpaceCard: React.FC<SpaceCardProps> = ({ space, onNavigate, onCopyInvite, 
         <p style={{ margin: 0, fontSize: "0.75rem", color: "var(--color-text-muted)" }}>
           {new Date(space.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
         </p>
-        <div style={{ display: "flex", gap: "0.5rem", position: "relative" }} onClick={(e) => e.stopPropagation()}>
+        <div style={{ display: "flex", gap: "0.5rem" }} onClick={(e) => e.stopPropagation()}>
           {isMentor && (
-            <>
-              <button
-                onClick={handlePublishClick}
-                className={space.is_published ? "btn-danger" : "btn-primary"}
-                style={{ padding: "0.3rem 0.7rem", fontSize: "0.75rem" }}
-                disabled={isPublishing}
-              >
-                {isPublishing ? (
-                  <span
-                    className="spinner"
-                    style={{
-                      borderTopColor: space.is_published ? "var(--color-danger)" : "var(--color-primary)",
-                      width: "0.875rem",
-                      height: "0.875rem",
-                    }}
-                  />
-                ) : space.is_published ? (
-                  "Unpublish"
-                ) : (
-                  "Publish Space"
-                )}
-              </button>
-              {showUnpublishConfirm && (
-                <div
+            <button
+              onClick={handlePublishClick}
+              className={space.is_published ? "btn-danger" : "btn-primary"}
+              style={{ padding: "0.3rem 0.7rem", fontSize: "0.75rem" }}
+              disabled={isPublishing || isLoadingPreview}
+            >
+              {isPublishing || isLoadingPreview ? (
+                <span
+                  className="spinner"
                   style={{
-                    position: "absolute",
-                    bottom: "calc(100% + 0.5rem)",
-                    right: 0,
-                    zIndex: 20,
-                    background: "var(--color-bg-surface)",
-                    border: "1px solid var(--color-border)",
-                    borderRadius: "var(--radius-lg)",
-                    padding: "0.75rem",
-                    boxShadow: "var(--shadow-subtle)",
-                    minWidth: "220px",
+                    borderTopColor: space.is_published ? "var(--color-danger)" : "var(--color-primary)",
+                    width: "0.875rem",
+                    height: "0.875rem",
                   }}
-                >
-                  <p style={{ margin: "0 0 0.5rem", fontSize: "0.75rem", color: "var(--color-text-secondary)", lineHeight: 1.4 }}>
-                    This will hide the space from trainees. Continue?
-                  </p>
-                  <div style={{ display: "flex", gap: "0.375rem", justifyContent: "flex-end" }}>
-                    <button
-                      type="button"
-                      className="btn-secondary"
-                      style={{ padding: "0.25rem 0.5rem", fontSize: "0.75rem" }}
-                      onClick={(e) => { e.stopPropagation(); setShowUnpublishConfirm(false); }}
-                    >
-                      Cancel
-                    </button>
-                    <button
-                      type="button"
-                      className="btn-danger"
-                      style={{ padding: "0.25rem 0.5rem", fontSize: "0.75rem", background: "var(--color-danger)", color: "#fff", border: "none" }}
-                      onClick={(e) => { e.stopPropagation(); setShowUnpublishConfirm(false); onPublishToggle(); }}
-                      disabled={isPublishing}
-                    >
-                      Confirm
-                    </button>
-                  </div>
-                </div>
+                />
+              ) : space.is_published ? (
+                "Unpublish"
+              ) : (
+                "Publish Space"
               )}
-            </>
+            </button>
           )}
           <button
             onClick={onNavigate}
@@ -268,6 +251,15 @@ const SpaceCard: React.FC<SpaceCardProps> = ({ space, onNavigate, onCopyInvite, 
           </button>
         </div>
       </div>
+
+      {unpublishPreview && (
+        <EspaceUnpublishConfirmModal
+          preview={unpublishPreview}
+          onClose={() => !isPublishing && setUnpublishPreview(null)}
+          onConfirm={() => void handleConfirmUnpublish()}
+          isSubmitting={isPublishing}
+        />
+      )}
     </div>
   );
 };
