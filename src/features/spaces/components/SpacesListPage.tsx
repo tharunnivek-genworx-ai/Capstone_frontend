@@ -10,14 +10,13 @@ import { useNavigate } from "react-router-dom";
 import toast from "react-hot-toast";
 import { useSpaces } from "../hooks/useSpaces";
 import { useAuth } from "../../auth/hooks/useAuth";
-import type { SpaceResponse } from "../types/space.types";
+import type { RepublishChecklistNode, SpaceResponse } from "../types/space.types";
+import { studyMaterialService } from "../../study_material/services/studyMaterialService";
 import CreateSpaceModal from "./CreateSpaceModal";
 import InviteCodeModal from "./InviteCodeModal";
 import JoinSpaceModal from "./JoinSpaceModal";
-
+import EspaceRepublishChecklistModal from "./EspaceRepublishChecklistModal";
 import SpaceCard from "./SpaceCard";
-
-// ── Main page ─────────────────────────────────────────────────────────────────
 
 const SpacesListPage: React.FC = () => {
   const navigate = useNavigate();
@@ -30,6 +29,10 @@ const SpacesListPage: React.FC = () => {
   const [showJoin, setShowJoin] = useState(false);
   const [inviteModal, setInviteModal] = useState<{ code: string; name: string } | null>(null);
   const [publishingId, setPublishingId] = useState<string | null>(null);
+  const [republishModal, setRepublishModal] = useState<{
+    spaceName: string;
+    nodes: RepublishChecklistNode[];
+  } | null>(null);
 
   useEffect(() => {
     fetchSpaces();
@@ -42,14 +45,43 @@ const SpacesListPage: React.FC = () => {
     }
   }, [error]);
 
-  const handlePublishToggle = async (space: SpaceResponse) => {
+  const loadRepublishChecklist = async (space: SpaceResponse) => {
+    try {
+      const checklist = await studyMaterialService.getRepublishChecklist(space.space_id);
+      if (checklist.nodes_with_publishable_material.length > 0) {
+        setRepublishModal({
+          spaceName: space.space_name,
+          nodes: checklist.nodes_with_publishable_material,
+        });
+      }
+    } catch {
+      // Non-blocking after successful publish.
+    }
+  };
+
+  const handlePublish = async (space: SpaceResponse) => {
     setPublishingId(space.space_id);
     try {
-      await publishSpace(space.space_id, { is_published: !space.is_published });
-      toast.success(space.is_published ? "Space unpublished." : "Space published!");
+      await publishSpace(space.space_id, { is_published: true });
+      toast.success("Space published!");
+      await loadRepublishChecklist(space);
     } catch (err) {
       const e = err as { response?: { data?: { detail?: string } }; message?: string };
-      toast.error(e?.response?.data?.detail ?? e?.message ?? "Failed to update.");
+      toast.error(e?.response?.data?.detail ?? e?.message ?? "Failed to publish space.");
+    } finally {
+      setPublishingId(null);
+    }
+  };
+
+  const handleUnpublish = async (space: SpaceResponse) => {
+    setPublishingId(space.space_id);
+    try {
+      await publishSpace(space.space_id, { is_published: false });
+      toast.success("Space unpublished.");
+    } catch (err) {
+      const e = err as { response?: { data?: { detail?: string } }; message?: string };
+      toast.error(e?.response?.data?.detail ?? e?.message ?? "Failed to unpublish space.");
+      throw err;
     } finally {
       setPublishingId(null);
     }
@@ -66,7 +98,6 @@ const SpacesListPage: React.FC = () => {
 
   return (
     <div className="animate-fade-in" style={{ padding: "2rem", maxWidth: "1200px", margin: "0 auto" }}>
-      {/* Header */}
       <div
         style={{
           display: "flex",
@@ -119,7 +150,6 @@ const SpacesListPage: React.FC = () => {
         )}
       </div>
 
-      {/* Loading state */}
       {isLoading && (
         <div style={{ display: "flex", justifyContent: "center", padding: "4rem" }}>
           <span
@@ -129,7 +159,6 @@ const SpacesListPage: React.FC = () => {
         </div>
       )}
 
-      {/* Empty state */}
       {!isLoading && spaces.length === 0 && (
         <div
           style={{
@@ -195,7 +224,6 @@ const SpacesListPage: React.FC = () => {
         </div>
       )}
 
-      {/* Spaces grid */}
       {!isLoading && spaces.length > 0 && (
         <div
           style={{
@@ -210,7 +238,8 @@ const SpacesListPage: React.FC = () => {
               space={space}
               onNavigate={() => navigate(`/${role}/spaces/${space.space_id}`)}
               onCopyInvite={() => space.invite_code && handleCopyInvite(space.invite_code)}
-              onPublishToggle={() => handlePublishToggle(space)}
+              onPublish={handlePublish}
+              onUnpublish={handleUnpublish}
               isPublishing={publishingId === space.space_id}
               isMentor={isMentor}
             />
@@ -218,7 +247,6 @@ const SpacesListPage: React.FC = () => {
         </div>
       )}
 
-      {/* Create space modal */}
       {showCreate && (
         <CreateSpaceModal
           onClose={() => setShowCreate(false)}
@@ -232,7 +260,6 @@ const SpacesListPage: React.FC = () => {
         />
       )}
 
-      {/* Invite code modal (shown after create) */}
       {inviteModal && (
         <InviteCodeModal
           inviteCode={inviteModal.code}
@@ -241,7 +268,6 @@ const SpacesListPage: React.FC = () => {
         />
       )}
 
-      {/* Join space modal */}
       {showJoin && (
         <JoinSpaceModal
           onClose={() => setShowJoin(false)}
@@ -249,6 +275,14 @@ const SpacesListPage: React.FC = () => {
             setShowJoin(false);
             fetchSpaces();
           }}
+        />
+      )}
+
+      {republishModal && (
+        <EspaceRepublishChecklistModal
+          spaceName={republishModal.spaceName}
+          nodes={republishModal.nodes}
+          onClose={() => setRepublishModal(null)}
         />
       )}
     </div>

@@ -94,6 +94,26 @@ export interface AdminMentorSpaceListResponse {
   pages: number;
 }
 
+export interface SpaceUnpublishPreviewOut {
+  published_material_count: number;
+  published_quiz_count: number;
+}
+
+export interface RepublishChecklistNode {
+  node_id: string;
+  node_title: string;
+  last_published_version_id: string | null;
+  last_published_version_label: string | null;
+  has_unpublished_quiz: boolean;
+  quiz_id: string | null;
+  quiz_title: string | null;
+}
+
+export interface SpaceRepublishChecklistOut {
+  space_id: string;
+  nodes_with_publishable_material: RepublishChecklistNode[];
+}
+
 export interface SpaceJoinResponse {
   space_id: string;
   space_name: string;

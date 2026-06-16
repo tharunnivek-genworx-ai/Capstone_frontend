@@ -3,6 +3,7 @@ import type {
   StudyMaterialActivateRequest,
   StudyMaterialClearDraftsEligibilityOut,
   StudyMaterialClearDraftsOut,
+  StudyMaterialFeedbackResponse,
   StudyMaterialGenerateRequest,
   StudyMaterialImproveRequest,
   StudyMaterialManualEditRequest,
@@ -15,6 +16,7 @@ import type {
   StudyMaterialProgressUpdateRequest,
   StudyMaterialProgressOut,
 } from "../types/studyMaterial.types";
+import type { SpaceRepublishChecklistOut } from "../../spaces/types/space.types";
 
 export const studyMaterialService = {
   async generate(
@@ -31,8 +33,8 @@ export const studyMaterialService = {
   async regenerate(
     nodeId: string,
     payload: StudyMaterialRegenerateRequest
-  ): Promise<StudyMaterialVersionOut> {
-    const response = await studyAgentClient.post<StudyMaterialVersionOut>(
+  ): Promise<StudyMaterialFeedbackResponse> {
+    const response = await studyAgentClient.post<StudyMaterialFeedbackResponse>(
       `/nodes/${nodeId}/study-material/regenerate`,
       payload
     );
@@ -42,8 +44,8 @@ export const studyMaterialService = {
   async improve(
     nodeId: string,
     payload: StudyMaterialImproveRequest
-  ): Promise<StudyMaterialVersionOut> {
-    const response = await studyAgentClient.post<StudyMaterialVersionOut>(
+  ): Promise<StudyMaterialFeedbackResponse> {
+    const response = await studyAgentClient.post<StudyMaterialFeedbackResponse>(
       `/nodes/${nodeId}/study-material/improve`,
       payload
     );
@@ -61,6 +63,17 @@ export const studyMaterialService = {
     return response.data;
   },
 
+  async previewPublish(
+    nodeId: string,
+    versionId: string
+  ): Promise<import("../types/studyMaterial.types").StudyMaterialPublishPreviewOut> {
+    const response = await studyAgentClient.get(
+      `/nodes/${nodeId}/study-material/publish-preview`,
+      { params: { version_id: versionId } }
+    );
+    return response.data;
+  },
+
   async publish(
     nodeId: string,
     payload: StudyMaterialPublishRequest
@@ -68,6 +81,17 @@ export const studyMaterialService = {
     const response = await studyAgentClient.patch<StudyMaterialVersionOut>(
       `/nodes/${nodeId}/study-material/publish`,
       payload
+    );
+    return response.data;
+  },
+
+  async previewUnpublish(
+    nodeId: string,
+    versionId: string
+  ): Promise<import("../types/studyMaterial.types").StudyMaterialUnpublishPreviewOut> {
+    const response = await studyAgentClient.get(
+      `/nodes/${nodeId}/study-material/unpublish-preview`,
+      { params: { version_id: versionId } }
     );
     return response.data;
   },
@@ -202,6 +226,28 @@ export const studyMaterialService = {
     const response = await studyAgentClient.patch<StudyMaterialProgressOut>(
       `/nodes/${nodeId}/study-material/progress`,
       payload
+    );
+    return response.data;
+  },
+
+  async getPublishedResources(spaceId: string): Promise<{
+    space_id: string;
+    published_topics: Array<{
+      node_id: string;
+      topic_title: string;
+      published_study_material_version_id: string | null;
+      published_quiz_id: string | null;
+    }>;
+  }> {
+    const response = await studyAgentClient.get(
+      `/spaces/${spaceId}/published-resources`
+    );
+    return response.data;
+  },
+
+  async getRepublishChecklist(spaceId: string): Promise<SpaceRepublishChecklistOut> {
+    const response = await studyAgentClient.get<SpaceRepublishChecklistOut>(
+      `/spaces/${spaceId}/republish-checklist`
     );
     return response.data;
   },

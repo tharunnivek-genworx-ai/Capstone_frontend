@@ -18,6 +18,7 @@ import type {
   SpaceListResponse,
   SpaceJoinResponse,
   SpaceMemberSummary,
+  SpaceUnpublishPreviewOut,
 } from "../types/space.types";
 
 export const spaceService = {
@@ -70,6 +71,13 @@ export const spaceService = {
     const response = await axiosClient.patch<SpaceResponse>(
       `/spaces/${spaceId}/publish`,
       payload
+    );
+    return response.data;
+  },
+
+  async previewUnpublish(spaceId: string): Promise<SpaceUnpublishPreviewOut> {
+    const response = await axiosClient.get<SpaceUnpublishPreviewOut>(
+      `/spaces/${spaceId}/unpublish-preview`
     );
     return response.data;
   },

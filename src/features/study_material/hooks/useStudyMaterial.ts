@@ -7,6 +7,8 @@ import type {
   StudyMaterialClearDraftsEligibilityOut,
   StudyMaterialFeedbackMode,
   StudyMaterialMentorUiStateOut,
+  StudyMaterialPublishPreviewOut,
+  StudyMaterialUnpublishPreviewOut,
   StudyMaterialVersionOut,
   StudyMaterialVersionSummary,
   NodeStudyStatePatch,
@@ -21,6 +23,7 @@ export type { NodeStudyStatePatch, NodeStudyState };
 interface UseStudyMaterialParams {
   node: NodeTreeNode | null;
   spaceId: string;
+  spaceIsPublished?: boolean;
   isMentor: boolean;
   studyState?: NodeStudyState;
   onStudyStateChange?: (patch: NodeStudyStatePatch) => void;
@@ -74,10 +77,24 @@ export interface UseStudyMaterialReturn {
   canArchiveDisplayedVersion: boolean;
   canPublishDisplayedVersion: boolean;
   canUnpublishDisplayedVersion: boolean;
+  publishButtonLabel: string;
+  publishDisabledTooltip: string | null;
+  unpublishDisabledTooltip: string | null;
+  publishedVersionId: string | null;
   canClearAllDrafts: boolean;
   clearDraftsBlockReason: string | undefined;
   showInstructionChangeBanner: boolean;
   mentorUiState: StudyMaterialMentorUiStateOut | null;
+  publishPreview: StudyMaterialPublishPreviewOut | null;
+  unpublishPreview: StudyMaterialUnpublishPreviewOut | null;
+  showEspaceNotPublishedModal: boolean;
+  publishTransactionError: string | null;
+  unpublishTransactionError: string | null;
+  setShowEspaceNotPublishedModal: (v: boolean) => void;
+  closePublishModal: () => void;
+  closeUnpublishModal: () => void;
+  confirmPublish: () => Promise<void>;
+  confirmUnpublish: () => Promise<void>;
 
   // ── Handlers ─────────────────────────────────────────────────────────
   handleGenerateStudyMaterial: () => Promise<void>;
@@ -102,7 +119,8 @@ export interface UseStudyMaterialReturn {
 
 export function useStudyMaterial({
   node,
-  spaceId,
+  spaceId: _spaceId,
+  spaceIsPublished,
   isMentor,
   studyState,
   onStudyStateChange,
@@ -133,6 +151,15 @@ export function useStudyMaterial({
     useState<StudyMaterialClearDraftsEligibilityOut | null>(null);
   const [mentorUiState, setMentorUiState] =
     useState<StudyMaterialMentorUiStateOut | null>(null);
+  const [publishPreview, setPublishPreview] =
+    useState<StudyMaterialPublishPreviewOut | null>(null);
+  const [unpublishPreview, setUnpublishPreview] =
+    useState<StudyMaterialUnpublishPreviewOut | null>(null);
+  const [showEspaceNotPublishedModal, setShowEspaceNotPublishedModal] = useState(false);
+  const [publishTransactionError, setPublishTransactionError] = useState<string | null>(null);
+  const [unpublishTransactionError, setUnpublishTransactionError] = useState<string | null>(null);
+  const [pendingPublishVersionId, setPendingPublishVersionId] = useState<string | null>(null);
+  const [pendingUnpublishVersionId, setPendingUnpublishVersionId] = useState<string | null>(null);
   const [isDeletingDrafts, setIsDeletingDrafts] = useState(false);
   const [showRefModal, setShowRefModal] = useState(false);
 
@@ -310,7 +337,32 @@ export function useStudyMaterial({
   useEffect(() => {
     if (!node || !isMentor) return;
     void refreshMentorUiStateRef.current(node.node_id, viewingVersionId);
-  }, [node?.node_id, isMentor, viewingVersionId, currentEffectiveInstruction]);
+  }, [node?.node_id, isMentor, viewingVersionId, currentEffectiveInstruction, spaceIsPublished]);
+
+  // Reload active version after space publish/unpublish so is_published flags stay in sync.
+  useEffect(() => {
+    if (!node || !isMentor || currentPage !== 2) return;
+    studyMaterialService
+      .getActiveVersion(node.node_id)
+      .then((version) => {
+        if (!version) return;
+        onStudyStateChangeRef.current?.({
+          studyMaterialContent: version.content,
+          activeVersion: version,
+          hasTriggeredGeneration: true,
+        });
+      })
+      .catch(() => {/* non-critical */ });
+    void refreshVersionHistoryRef.current(node.node_id);
+  }, [node?.node_id, isMentor, currentPage, spaceIsPublished]);
+
+  // Leave quiz/hints pages when the space is unpublished — mentors may still
+  // view quiz drafts per Part 4; only trainees are restricted.
+  useEffect(() => {
+    if (!isMentor && spaceIsPublished === false && currentPage > 2) {
+      setCurrentPage(2);
+    }
+  }, [spaceIsPublished, currentPage, isMentor]);
 
   // Load active study material version when opening page 2 without cached content
   useEffect(() => {
@@ -336,6 +388,12 @@ export function useStudyMaterial({
     void refreshVersionHistoryRef.current(node.node_id);
   }, [node?.node_id, currentPage, isMentor]);
 
+  // Refresh mentor UI when returning to study material (e.g. after publishing a quiz)
+  useEffect(() => {
+    if (!node || !isMentor || currentPage !== 2) return;
+    void refreshMentorUiStateRef.current(node.node_id, viewingVersionId);
+  }, [node?.node_id, isMentor, currentPage, viewingVersionId]);
+
   // Load delete/regenerate eligibility whenever material exists
   useEffect(() => {
     if (!node || !isMentor || !hasTriggeredGeneration) return;
@@ -345,9 +403,146 @@ export function useStudyMaterial({
   // ── Helpers ───────────────────────────────────────────────────────────────
 
   const extractErrorDetail = (err: unknown): string => {
-    const e = err as { response?: { data?: string | { detail?: string } }; message?: string };
+    const e = err as {
+      response?: { data?: string | { detail?: string | { message?: string; error_code?: string } } };
+      message?: string;
+    };
     if (typeof e?.response?.data === "string") return e.response.data;
-    return e?.response?.data?.detail ?? e?.message ?? "Request failed.";
+    const detail = e?.response?.data?.detail;
+    if (typeof detail === "object" && detail?.message) return detail.message;
+    return (typeof detail === "string" ? detail : undefined) ?? e?.message ?? "Request failed.";
+  };
+
+  const isEspaceNotPublishedError = (err: unknown): boolean => {
+    const e = err as { response?: { data?: { detail?: { error_code?: string } } } };
+    return e?.response?.data?.detail?.error_code === "ESPACE_NOT_PUBLISHED";
+  };
+
+  const isPublishTransactionError = (err: unknown): boolean => {
+    const e = err as { response?: { data?: { detail?: { error_code?: string } } } };
+    return e?.response?.data?.detail?.error_code === "PUBLISH_TRANSACTION_FAILED";
+  };
+
+  const isUnpublishTransactionError = (err: unknown): boolean => {
+    const e = err as { response?: { data?: { detail?: { error_code?: string } } } };
+    return e?.response?.data?.detail?.error_code === "UNPUBLISH_TRANSACTION_FAILED";
+  };
+
+  const finalizeVersionMutation = async (version: StudyMaterialVersionOut) => {
+    if (!node) return;
+    await refreshVersionHistory(node.node_id);
+    const activeFromServer = await studyMaterialService.getActiveVersion(node.node_id);
+    onStudyStateChangeRef.current?.({
+      activeVersion: activeFromServer,
+      ...(viewingVersionId === version.version_id
+        ? { studyMaterialContent: version.content }
+        : {}),
+    });
+    await refreshMentorUiStateRef.current(node.node_id, viewingVersionId);
+  };
+
+  const handlePublishVersion = async (versionId: string) => {
+    if (!node || isPublishingVersion) return;
+    setPublishTransactionError(null);
+    try {
+      const preview = await studyMaterialService.previewPublish(node.node_id, versionId);
+      if (preview.requires_confirmation) {
+        setPendingPublishVersionId(versionId);
+        setPublishPreview(preview);
+        return;
+      }
+      setIsPublishingVersion(true);
+      const version = await studyMaterialService.publish(node.node_id, { version_id: versionId });
+      await finalizeVersionMutation(version);
+      toast.success(`${version.display_label} published for trainees.`);
+    } catch (err) {
+      if (isEspaceNotPublishedError(err)) {
+        setShowEspaceNotPublishedModal(true);
+      } else {
+        toast.error(extractErrorDetail(err));
+      }
+    } finally {
+      setIsPublishingVersion(false);
+    }
+  };
+
+  const confirmPublish = async () => {
+    if (!node || !pendingPublishVersionId || isPublishingVersion) return;
+    setIsPublishingVersion(true);
+    setPublishTransactionError(null);
+    try {
+      const version = await studyMaterialService.publish(node.node_id, {
+        version_id: pendingPublishVersionId,
+      });
+      setPublishPreview(null);
+      setPendingPublishVersionId(null);
+      await finalizeVersionMutation(version);
+      toast.success(`${version.display_label} published for trainees.`);
+    } catch (err) {
+      if (isPublishTransactionError(err)) {
+        setPublishTransactionError(
+          "Something went wrong. No changes were made. Please try again."
+        );
+      } else if (isEspaceNotPublishedError(err)) {
+        setPublishPreview(null);
+        setShowEspaceNotPublishedModal(true);
+      } else {
+        toast.error(extractErrorDetail(err));
+      }
+    } finally {
+      setIsPublishingVersion(false);
+    }
+  };
+
+  const closePublishModal = () => {
+    if (isPublishingVersion) return;
+    setPublishPreview(null);
+    setPendingPublishVersionId(null);
+    setPublishTransactionError(null);
+  };
+
+  const handleUnpublishVersion = async (versionId: string) => {
+    if (!node || isUnpublishingVersion) return;
+    setUnpublishTransactionError(null);
+    try {
+      const preview = await studyMaterialService.previewUnpublish(node.node_id, versionId);
+      setPendingUnpublishVersionId(versionId);
+      setUnpublishPreview(preview);
+    } catch (err) {
+      toast.error(extractErrorDetail(err));
+    }
+  };
+
+  const confirmUnpublish = async () => {
+    if (!node || !pendingUnpublishVersionId || isUnpublishingVersion) return;
+    setIsUnpublishingVersion(true);
+    setUnpublishTransactionError(null);
+    try {
+      const version = await studyMaterialService.unpublish(node.node_id, {
+        version_id: pendingUnpublishVersionId,
+      });
+      setUnpublishPreview(null);
+      setPendingUnpublishVersionId(null);
+      await finalizeVersionMutation(version);
+      toast.success(`${version.display_label} unpublished.`);
+    } catch (err) {
+      if (isUnpublishTransactionError(err)) {
+        setUnpublishTransactionError(
+          "Something went wrong. No changes were made. Please try again."
+        );
+      } else {
+        toast.error(extractErrorDetail(err));
+      }
+    } finally {
+      setIsUnpublishingVersion(false);
+    }
+  };
+
+  const closeUnpublishModal = () => {
+    if (isUnpublishingVersion) return;
+    setUnpublishPreview(null);
+    setPendingUnpublishVersionId(null);
+    setUnpublishTransactionError(null);
   };
 
   // ── Handlers ──────────────────────────────────────────────────────────────
@@ -366,6 +561,7 @@ export function useStudyMaterial({
       });
       applyVersion(version);
       await refreshVersionHistory(node.node_id);
+      await refreshMentorUiStateRef.current(node.node_id, null);
       onStudyStateChangeRef.current?.({ isGenerating: false });
       toast.success(`Study material saved as ${version.display_label}.`);
     } catch (err) {
@@ -442,7 +638,7 @@ export function useStudyMaterial({
     setIsGenerating(true);
     setProcessingLabel(mode === "regenerate" ? "Regenerating study material" : "Improving study material");
     try {
-      const version =
+      const res =
         mode === "regenerate"
           ? await studyMaterialService.regenerate(node.node_id, {
             mentor_regeneration_goal: feedback,
@@ -450,10 +646,25 @@ export function useStudyMaterial({
           : await studyMaterialService.improve(node.node_id, {
             mentor_feedback: feedback,
           });
-      applyVersion(version);
-      await refreshVersionHistory(node.node_id);
+      
+      if (!res.has_new_version) {
+        toast(res.status_message || "Feedback was too vague to apply.", {
+          icon: "⚠️",
+          style: {
+            background: "var(--color-warning-subtle)",
+            color: "var(--color-warning)",
+            border: "1px solid var(--color-warning)",
+          },
+        });
+      } else {
+        if (res.new_version) {
+          applyVersion(res.new_version);
+          await refreshVersionHistory(node.node_id);
+          await refreshMentorUiStateRef.current(node.node_id, null);
+          toast.success(`Saved as ${res.new_version.display_label}.`);
+        }
+      }
       setFeedbackModalMode(null);
-      toast.success(`Saved as ${version.display_label}.`);
     } catch (err) {
       toast.error(extractErrorDetail(err));
     } finally {
@@ -469,6 +680,7 @@ export function useStudyMaterial({
       const version = await studyMaterialService.manualEdit(node.node_id, { content });
       applyVersion(version);
       await refreshVersionHistory(node.node_id);
+      await refreshMentorUiStateRef.current(node.node_id, null);
       setIsManualEditMode(false);
       toast.success(`Manual edit saved as ${version.display_label}.`);
     } catch (err) {
@@ -508,45 +720,6 @@ export function useStudyMaterial({
       toast.error(extractErrorDetail(err));
     } finally {
       setIsActivatingVersion(false);
-    }
-  };
-
-  const handlePublishVersion = async (versionId: string) => {
-    if (!node || isPublishingVersion) return;
-    setIsPublishingVersion(true);
-    try {
-      const version = await studyMaterialService.publish(node.node_id, {
-        version_id: versionId,
-      });
-      applyVersion(version, false);
-      await refreshVersionHistory(node.node_id);
-      // Refresh mentor UI state so can_publish / can_unpublish update immediately
-      // without requiring a page reload.
-      await refreshMentorUiStateRef.current(node.node_id, viewingVersionId);
-      toast.success(`${version.display_label} published for trainees.`);
-    } catch (err) {
-      toast.error(extractErrorDetail(err));
-    } finally {
-      setIsPublishingVersion(false);
-    }
-  };
-
-  const handleUnpublishVersion = async (versionId: string) => {
-    if (!node || isUnpublishingVersion) return;
-    setIsUnpublishingVersion(true);
-    try {
-      const version = await studyMaterialService.unpublish(node.node_id, {
-        version_id: versionId,
-      });
-      applyVersion(version, false);
-      await refreshVersionHistory(node.node_id);
-      // Refresh mentor UI state so the button flips to "Publish" immediately.
-      await refreshMentorUiStateRef.current(node.node_id, viewingVersionId);
-      toast.success(`${version.display_label} unpublished.`);
-    } catch (err) {
-      toast.error(extractErrorDetail(err));
-    } finally {
-      setIsUnpublishingVersion(false);
     }
   };
 
@@ -687,38 +860,20 @@ export function useStudyMaterial({
 
   const versionActions = mentorUiState?.displayed_version_actions;
 
-  const canAccessStudyMaterial = mentorUiState?.can_access_study_material ?? hasTriggeredGeneration;
-  const canAccessQuiz =
-    (mentorUiState?.can_access_quiz ?? false) && !isGenerating && Boolean(studyMaterialContent);
+  const canAccessStudyMaterial = mentorUiState?.can_access_study_material ?? false;
+  const canAccessQuiz = mentorUiState?.can_access_quiz ?? false;
   const displayedVersionId = viewingVersionId ?? activeVersion?.version_id ?? null;
   const displayedVersionSummary = findVersionSummary(displayedVersionId);
-  const isViewingArchivedVersion = versionActions?.is_viewing_archived ?? Boolean(displayedVersionSummary?.is_archived);
-  const isViewingNonActiveVersion = versionActions?.is_viewing_non_active ?? Boolean(
-    viewingVersionId && viewingVersionId !== activeVersion?.version_id
-  );
-  const canEditActiveDraft = versionActions?.can_edit_active_draft ?? (
-    Boolean(activeVersion?.is_active) &&
-    !isViewingNonActiveVersion &&
-    !isViewingArchivedVersion
-  );
-  const canArchiveDisplayedVersion = versionActions?.can_archive ?? Boolean(
-    displayedVersionId &&
-    displayedVersionSummary &&
-    !displayedVersionSummary.is_published &&
-    !displayedVersionSummary.is_archived
-  );
-  const canPublishDisplayedVersion = versionActions?.can_publish ?? Boolean(
-    displayedVersionId &&
-    displayedVersionSummary &&
-    !displayedVersionSummary.is_published &&
-    !displayedVersionSummary.is_archived &&
-    !isViewingArchivedVersion
-  );
-  const canUnpublishDisplayedVersion = versionActions?.can_unpublish ?? Boolean(
-    displayedVersionId &&
-    displayedVersionSummary?.is_published &&
-    !isViewingArchivedVersion
-  );
+  const isViewingArchivedVersion = versionActions?.is_viewing_archived ?? false;
+  const isViewingNonActiveVersion = versionActions?.is_viewing_non_active ?? false;
+  const canEditActiveDraft = versionActions?.can_edit_active_draft ?? false;
+  const canArchiveDisplayedVersion = versionActions?.can_archive ?? false;
+  const canPublishDisplayedVersion = versionActions?.can_publish ?? false;
+  const canUnpublishDisplayedVersion = versionActions?.can_unpublish ?? false;
+  const publishButtonLabel = versionActions?.publish_button_label ?? "Publish for trainees";
+  const publishDisabledTooltip = versionActions?.publish_disabled_tooltip ?? null;
+  const unpublishDisabledTooltip = versionActions?.unpublish_disabled_tooltip ?? null;
+  const publishedVersionId = mentorUiState?.published_version_id ?? null;
   const canClearAllDrafts = Boolean(clearDraftsEligibility?.can_clear);
   const clearDraftsBlockReason = clearDraftsEligibility?.block_reason ?? undefined;
   const instructionBannerDismissedFor = node
@@ -779,10 +934,24 @@ export function useStudyMaterial({
     canArchiveDisplayedVersion,
     canPublishDisplayedVersion,
     canUnpublishDisplayedVersion,
+    publishButtonLabel,
+    publishDisabledTooltip,
+    unpublishDisabledTooltip,
+    publishedVersionId,
     canClearAllDrafts,
     clearDraftsBlockReason,
     showInstructionChangeBanner,
     mentorUiState,
+    publishPreview,
+    unpublishPreview,
+    showEspaceNotPublishedModal,
+    publishTransactionError,
+    unpublishTransactionError,
+    setShowEspaceNotPublishedModal,
+    closePublishModal,
+    closeUnpublishModal,
+    confirmPublish,
+    confirmUnpublish,
 
     // Handlers
     handleGenerateStudyMaterial,

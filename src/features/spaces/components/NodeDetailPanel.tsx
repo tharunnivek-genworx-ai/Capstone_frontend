@@ -11,6 +11,7 @@ import {
   useStudyMaterial,
   type NodeStudyStatePatch,
 } from "../../study_material/hooks/useStudyMaterial";
+import { useQuiz } from "../../quiz/hooks/useQuiz";
 import type {
   ReferenceMaterialOut,
   StudyMaterialVersionOut,
@@ -23,7 +24,12 @@ import TopicPageNav from "./TopicPageNav";
 import ReferenceMaterialModal from "../../study_material/components/ReferenceMaterialModal";
 import DeleteDraftConfirmModal from "../../study_material/components/DeleteDraftConfirmModal";
 import RegenerateStudyMaterialConfirmModal from "../../study_material/components/RegenerateStudyMaterialConfirmModal";
+import StudyMaterialPublishConfirmModal from "../../study_material/components/StudyMaterialPublishConfirmModal";
+import StudyMaterialUnpublishConfirmModal from "../../study_material/components/StudyMaterialUnpublishConfirmModal";
+import EspaceNotPublishedModal from "../../study_material/components/EspaceNotPublishedModal";
 import TraineeStudyMaterialPanel from "../../study_material/components/TraineeStudyMaterialPanel";
+import QuizPage3 from "../../quiz/components/QuizPage3";
+import QuizPage4 from "../../quiz/components/QuizPage4";
 
 // Re-export for consumers that import from here
 export type { NodeStudyStatePatch };
@@ -88,6 +94,7 @@ const modeButtonActive: React.CSSProperties = {
 interface NodeDetailPanelProps {
   node: NodeTreeNode | null;
   spaceId: string;
+  spaceIsPublished?: boolean;
   onRename: (nodeId: string, newTitle: string) => Promise<void>;
   onUpdateInstruction: (nodeId: string, payload: NodeUpdateInstructionRequest) => Promise<void>;
   onNavigateToNode: (nodeId: string) => void;
@@ -99,6 +106,7 @@ interface NodeDetailPanelProps {
     activeVersion: StudyMaterialVersionOut | null;
     isGenerating: boolean;
     referenceMaterial: ReferenceMaterialOut | null;
+    currentQuizId: string | null;
   };
   onStudyStateChange?: (patch: NodeStudyStatePatch) => void;
 }
@@ -106,6 +114,7 @@ interface NodeDetailPanelProps {
 const NodeDetailPanel: React.FC<NodeDetailPanelProps> = ({
   node,
   spaceId,
+  spaceIsPublished,
   onRename,
   onUpdateInstruction,
   onNavigateToNode,
@@ -128,9 +137,22 @@ const NodeDetailPanel: React.FC<NodeDetailPanelProps> = ({
   const sm = useStudyMaterial({
     node,
     spaceId,
+    spaceIsPublished,
     isMentor,
     studyState,
     onStudyStateChange,
+  });
+
+  // ── Quiz hook ─────────────────────────────────────────────────────────────
+  const qz = useQuiz({
+    node,
+    isMentor,
+    spaceIsPublished,
+    currentPage: sm.currentPage,
+    canAccessQuiz: sm.canAccessQuiz,
+    currentQuizId: studyState?.currentQuizId ?? null,
+    onQuizIdChange: (quizId) => onStudyStateChange?.({ currentQuizId: quizId }),
+    onPageChange: sm.setCurrentPage,
   });
 
   // ── Sync local instruction UI when node changes ─────────────────────────
@@ -291,7 +313,7 @@ const NodeDetailPanel: React.FC<NodeDetailPanelProps> = ({
                 <p style={{ margin: "0.375rem 0 0", fontSize: "13px", color: "var(--color-text-secondary)", lineHeight: 1.4 }}>
                   {metadataParts.join(" · ")}
                 </p>
-                {isMentor && (
+                {isMentor && sm.currentPage === 1 && (
                   <div className="node-detail-branch" style={{ marginTop: "0.75rem", maxWidth: "min(360px, 100%)" }}>
                     <button type="button" id="branch-default-toggle" onClick={() => setShowBranchPanel((v) => !v)}
                       style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "space-between", gap: "0.5rem", padding: "0.5rem 0.75rem", background: "var(--color-bg-surface)", border: `1px solid ${branchDefault.trim() ? "var(--color-primary)" : "var(--color-border)"}`, borderRadius: "var(--radius-lg)", cursor: "pointer", fontSize: "0.75rem", fontWeight: 600, color: "var(--color-text-secondary)", boxShadow: "var(--shadow-subtle)" }}>
@@ -308,9 +330,29 @@ const NodeDetailPanel: React.FC<NodeDetailPanelProps> = ({
                           placeholder="Default instruction for all subtopics in this branch…"
                           value={branchDefault} onChange={(e) => setBranchDefault(e.target.value)}
                           rows={4} style={{ resize: "vertical", minHeight: "88px", fontSize: "0.8125rem" }} />
-                        <p style={{ fontSize: "0.6875rem", color: "var(--color-text-muted)", margin: "0.375rem 0 0", lineHeight: 1.4 }}>
-                          Applies to subtopics in this branch. Topic-only prompts are never inherited.
-                        </p>
+                        <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between", gap: "0.75rem", marginTop: "0.5rem", flexWrap: "wrap" }}>
+                          <p style={{ fontSize: "0.6875rem", color: "var(--color-text-muted)", margin: 0, lineHeight: 1.4, flex: 1, minWidth: "140px" }}>
+                            Applies to subtopics in this branch. Topic-only prompts are never inherited.
+                          </p>
+                          <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", flexShrink: 0 }}>
+                            {showSavedConfirm && (
+                              <span className="save-confirm-fade" style={{ display: "inline-flex", alignItems: "center", gap: "0.25rem", fontSize: "0.75rem", fontWeight: 600, color: "var(--color-success)" }}>
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="20 6 9 17 4 12" /></svg>
+                                Saved
+                              </span>
+                            )}
+                            <button
+                              type="button"
+                              id="save-branch-instruction-btn"
+                              onClick={handleSaveInstruction}
+                              className="btn-primary"
+                              style={{ height: "32px", padding: "0 0.75rem", fontSize: "0.75rem", whiteSpace: "nowrap" }}
+                              disabled={isSavingInstruction}
+                            >
+                              {isSavingInstruction ? <><span className="spinner" />Saving…</> : "Save Instructions"}
+                            </button>
+                          </div>
+                        </div>
                       </div>
                     )}
                   </div>
@@ -320,16 +362,44 @@ const NodeDetailPanel: React.FC<NodeDetailPanelProps> = ({
           </div>
 
           {/* Right: pagination */}
-          {isMentor && !isRenaming && (
-            <div style={{ flexShrink: 0 }}>
-              <TopicPageNav
-                currentPage={sm.currentPage}
-                canAccessStudyMaterial={sm.canAccessStudyMaterial}
-                canAccessQuiz={sm.canAccessQuiz}
-                onPageChange={sm.setCurrentPage}
-              />
-            </div>
-          )}
+          {isMentor && !isRenaming && (() => {
+            // ── Compute accurate tab tooltips from backend state ─────────────
+            // Quiz tab: three distinct locked states
+            let quizDisabledTooltip: string;
+            if (!sm.mentorUiState?.has_versions) {
+              quizDisabledTooltip = "Generate study material first";
+            } else if (spaceIsPublished === false) {
+              quizDisabledTooltip = "Publish the space to access Quiz";
+            } else if (!sm.mentorUiState?.published_version_id) {
+              quizDisabledTooltip = "Publish study material to access Quiz";
+            } else {
+              quizDisabledTooltip = "Generate study material first";
+            }
+
+            // Hints tab: locked until a quiz exists, or if version is stale
+            let hintsDisabledTooltip: string;
+            if (qz.isStaleVersion) {
+              hintsDisabledTooltip = "Study material was updated — generate a new quiz first";
+            } else if (!qz.canAccessHints && qz.quizDraftExists) {
+              hintsDisabledTooltip = "Quiz must be in an accessible state to view Hints";
+            } else {
+              hintsDisabledTooltip = "Generate a quiz first";
+            }
+
+            return (
+              <div style={{ flexShrink: 0 }}>
+                <TopicPageNav
+                  currentPage={sm.currentPage}
+                  canAccessStudyMaterial={sm.canAccessStudyMaterial}
+                  canAccessQuiz={sm.canAccessQuiz}
+                  canAccessHints={sm.canAccessQuiz && qz.canAccessHints}
+                  onPageChange={sm.setCurrentPage}
+                  quizDisabledTooltip={quizDisabledTooltip}
+                  hintsDisabledTooltip={hintsDisabledTooltip}
+                />
+              </div>
+            );
+          })()}
         </div>
       </div>
 
@@ -624,9 +694,7 @@ const NodeDetailPanel: React.FC<NodeDetailPanelProps> = ({
                         )}
                       </div>
                     )}
-                    {!sm.isViewingArchivedVersion &&
-                      sm.viewingVersionId &&
-                      sm.viewingVersionId !== sm.activeVersion?.version_id && (
+                    {!sm.isViewingArchivedVersion && sm.isViewingNonActiveVersion && (
                       <div className="study-material-page__viewing-notice">
                         <div className="study-material-page__viewing-banner">
                           <span>
@@ -685,6 +753,9 @@ const NodeDetailPanel: React.FC<NodeDetailPanelProps> = ({
                         onSelectLineageVersion={sm.handleSelectVersion}
                         canPublish={sm.canPublishDisplayedVersion}
                         canUnpublish={sm.canUnpublishDisplayedVersion}
+                        publishButtonLabel={sm.publishButtonLabel}
+                        publishDisabledTooltip={sm.publishDisabledTooltip}
+                        unpublishDisabledTooltip={sm.unpublishDisabledTooltip}
                         isPublishing={sm.isPublishingVersion}
                         isUnpublishing={sm.isUnpublishingVersion}
                         onPublish={sm.handlePublishCurrentVersion}
@@ -696,7 +767,7 @@ const NodeDetailPanel: React.FC<NodeDetailPanelProps> = ({
                   {isMentor && !sm.isManualEditMode && (
                     <StudyMaterialVersionPanel
                       versions={sm.showArchivedPanel ? sm.archivedVersionHistory : sm.versionHistory}
-                      activeVersionId={sm.activeVersion?.version_id ?? null}
+                      activeVersionId={sm.mentorUiState?.active_version_id ?? sm.activeVersion?.version_id ?? null}
                       viewingVersionId={sm.viewingVersionId}
                       isLoading={sm.isLoadingVersions}
                       isUnarchiving={sm.isUnarchivingVersion}
@@ -704,7 +775,42 @@ const NodeDetailPanel: React.FC<NodeDetailPanelProps> = ({
                       onSelectVersion={sm.handleSelectVersion}
                       onUnarchiveVersion={sm.handleUnarchiveVersion}
                       onBackToActiveHistory={() => sm.setShowArchivedPanel(false)}
-                    />
+                    >
+                      {/* Proceed to Quiz Generation button — above version history */}
+                      <div style={{ padding: "0.625rem 0.875rem", borderBottom: "1px solid var(--color-border)", marginBottom: "0.5rem" }}>
+                        <button
+                          type="button"
+                          disabled={!sm.canAccessQuiz}
+                          title={!sm.canAccessQuiz ? "Publish study material to enable quiz generation" : undefined}
+                          onClick={() => {
+                            if (sm.canAccessQuiz) {
+                              sm.setCurrentPage(3);
+                            }
+                          }}
+                          style={{
+                            width: "100%", padding: "0.5rem 0.875rem",
+                            borderRadius: "var(--radius-md)",
+                            border: `1px solid ${!sm.canAccessQuiz ? "var(--color-border)" : qz.quizDraftExists ? "var(--color-border)" : "var(--color-primary)"}`,
+                            background: !sm.canAccessQuiz ? "transparent" : qz.quizDraftExists ? "var(--color-bg-surface-alt)" : "var(--color-primary-subtle)",
+                            color: !sm.canAccessQuiz ? "var(--color-text-muted)" : qz.quizDraftExists ? "var(--color-text-secondary)" : "var(--color-primary)",
+                            cursor: !sm.canAccessQuiz ? "not-allowed" : "pointer", 
+                            fontSize: "0.8125rem", fontWeight: 600,
+                            display: "flex", alignItems: "center", justifyContent: "center", gap: "0.5rem",
+                            transition: "all 0.15s",
+                            opacity: !sm.canAccessQuiz ? 0.5 : 1,
+                          }}
+                        >
+                          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                            {qz.quizDraftExists ? (
+                              <><rect x="3" y="3" width="18" height="18" rx="2" /><path d="M9 9h6M9 12h6M9 15h4" /></>
+                            ) : (
+                              <><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" /></>
+                            )}
+                          </svg>
+                          {qz.quizDraftExists ? "View Quiz Draft" : "Proceed to Quiz Generation"}
+                        </button>
+                      </div>
+                    </StudyMaterialVersionPanel>
                   )}
                 </div>
               </>
@@ -719,16 +825,20 @@ const NodeDetailPanel: React.FC<NodeDetailPanelProps> = ({
           </div>
         )}
 
-        {/* PAGE 3 — Quiz placeholder */}
+        {/* PAGE 3 — Quiz */}
         {sm.currentPage === 3 && (
-          <div style={{ flex: 1, borderTop: "1px solid var(--color-border)", paddingTop: "1.25rem" }}>
-            <div style={{ background: "var(--color-bg-surface-alt)", border: "1px dashed var(--color-border)", borderRadius: "var(--radius-lg)", padding: "2rem", textAlign: "center", minHeight: "280px", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "0.5rem" }}>
-              <p style={{ fontSize: "0.9375rem", fontWeight: 600, color: "var(--color-text-secondary)", margin: 0 }}>Quiz generation</p>
-              <p style={{ fontSize: "0.8125rem", color: "var(--color-text-muted)", margin: 0, maxWidth: "360px", lineHeight: 1.5 }}>
-                MCQ quiz generation from published study material will be available in a future phase.
-              </p>
-            </div>
-          </div>
+          <QuizPage3
+            nodeTitle={node.title}
+            qz={qz}
+          />
+        )}
+
+        {/* PAGE 4 — Hints */}
+        {sm.currentPage === 4 && (
+          <QuizPage4
+            qz={qz}
+            onPageChange={sm.setCurrentPage}
+          />
         )}
           </>
         )}
@@ -743,6 +853,30 @@ const NodeDetailPanel: React.FC<NodeDetailPanelProps> = ({
           onClose={() => !sm.isGenerating && sm.setFeedbackModalMode(null)}
           onSubmit={(feedback) => sm.runFeedbackAction(sm.feedbackModalMode!, feedback)}
         />
+      )}
+
+      {isMentor && sm.publishPreview && (
+        <StudyMaterialPublishConfirmModal
+          preview={sm.publishPreview}
+          onClose={sm.closePublishModal}
+          onConfirm={() => void sm.confirmPublish()}
+          isSubmitting={sm.isPublishingVersion}
+          transactionError={sm.publishTransactionError}
+        />
+      )}
+
+      {isMentor && sm.unpublishPreview && (
+        <StudyMaterialUnpublishConfirmModal
+          preview={sm.unpublishPreview}
+          onClose={sm.closeUnpublishModal}
+          onConfirm={() => void sm.confirmUnpublish()}
+          isSubmitting={sm.isUnpublishingVersion}
+          transactionError={sm.unpublishTransactionError}
+        />
+      )}
+
+      {isMentor && sm.showEspaceNotPublishedModal && (
+        <EspaceNotPublishedModal onClose={() => sm.setShowEspaceNotPublishedModal(false)} />
       )}
 
       {isMentor && sm.showRegenerateConfirmModal && (
