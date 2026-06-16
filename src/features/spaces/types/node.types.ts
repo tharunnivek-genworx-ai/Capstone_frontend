@@ -123,5 +123,5 @@ export interface NodeTreeResponse {
 
 // ── UI-level types ────────────────────────────────────────────────────────────
 
-/** Which page is active in the node detail panel: 1=Teaching, 2=Study Material, 3=Quiz */
-export type TopicContentPage = 1 | 2 | 3;
+/** Which page is active in the node detail panel: 1=Teaching, 2=Study Material, 3=Quiz, 4=Hints */
+export type TopicContentPage = 1 | 2 | 3 | 4;
