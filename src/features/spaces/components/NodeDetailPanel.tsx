@@ -27,7 +27,6 @@ import RegenerateStudyMaterialConfirmModal from "../../study_material/components
 import StudyMaterialPublishConfirmModal from "../../study_material/components/StudyMaterialPublishConfirmModal";
 import StudyMaterialUnpublishConfirmModal from "../../study_material/components/StudyMaterialUnpublishConfirmModal";
 import EspaceNotPublishedModal from "../../study_material/components/EspaceNotPublishedModal";
-import TraineeStudyMaterialPanel from "../../study_material/components/TraineeStudyMaterialPanel";
 import QuizPage3 from "../../quiz/components/QuizPage3";
 import QuizPage4 from "../../quiz/components/QuizPage4";
 
@@ -131,6 +130,7 @@ const NodeDetailPanel: React.FC<NodeDetailPanelProps> = ({
   const [branchDefault, setBranchDefault] = useState("");
   const [showBranchPanel, setShowBranchPanel] = useState(false);
   const [isSavingInstruction, setIsSavingInstruction] = useState(false);
+  const [hasAcceptedFailedQcByNode, setHasAcceptedFailedQcByNode] = useState<Record<string, boolean>>({});
   const [showSavedConfirm, setShowSavedConfirm] = useState(false);
 
   // ── Study material hook ─────────────────────────────────────────────────
@@ -405,11 +405,6 @@ const NodeDetailPanel: React.FC<NodeDetailPanelProps> = ({
 
       {/* ── Page content ─────────────────────────────────────────────────── */}
       <div className="node-detail-panel__body" style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column", padding: "0 1.5rem 1.5rem", overflow: "hidden" }}>
-
-        {/* Trainee — published study material */}
-        {!isMentor && node && (
-          <TraineeStudyMaterialPanel nodeId={node.node_id} nodeTitle={node.title} />
-        )}
 
         {/* Mentor pages */}
         {isMentor && (
@@ -764,54 +759,250 @@ const NodeDetailPanel: React.FC<NodeDetailPanelProps> = ({
                     )}
                   </div>
 
-                  {isMentor && !sm.isManualEditMode && (
-                    <StudyMaterialVersionPanel
-                      versions={sm.showArchivedPanel ? sm.archivedVersionHistory : sm.versionHistory}
-                      activeVersionId={sm.mentorUiState?.active_version_id ?? sm.activeVersion?.version_id ?? null}
-                      viewingVersionId={sm.viewingVersionId}
-                      isLoading={sm.isLoadingVersions}
-                      isUnarchiving={sm.isUnarchivingVersion}
-                      mode={sm.showArchivedPanel ? "archived" : "active"}
-                      onSelectVersion={sm.handleSelectVersion}
-                      onUnarchiveVersion={sm.handleUnarchiveVersion}
-                      onBackToActiveHistory={() => sm.setShowArchivedPanel(false)}
-                    >
-                      {/* Proceed to Quiz Generation button — above version history */}
-                      <div style={{ padding: "0.625rem 0.875rem", borderBottom: "1px solid var(--color-border)", marginBottom: "0.5rem" }}>
-                        <button
-                          type="button"
-                          disabled={!sm.canAccessQuiz}
-                          title={!sm.canAccessQuiz ? "Publish study material to enable quiz generation" : undefined}
-                          onClick={() => {
-                            if (sm.canAccessQuiz) {
-                              sm.setCurrentPage(3);
-                            }
-                          }}
+                  {isMentor && !sm.isManualEditMode && (() => {
+                    const hasAcceptedFailedQc = node ? !!hasAcceptedFailedQcByNode[node.node_id] : false;
+                    const showQcWarning = !!(sm.activeVersion?.qc_failed_permanently && !hasAcceptedFailedQc);
+
+                    if (showQcWarning) {
+                      return (
+                        <div
+                          className="study-material-qc-warning-panel animate-fade-in"
                           style={{
-                            width: "100%", padding: "0.5rem 0.875rem",
-                            borderRadius: "var(--radius-md)",
-                            border: `1px solid ${!sm.canAccessQuiz ? "var(--color-border)" : qz.quizDraftExists ? "var(--color-border)" : "var(--color-primary)"}`,
-                            background: !sm.canAccessQuiz ? "transparent" : qz.quizDraftExists ? "var(--color-bg-surface-alt)" : "var(--color-primary-subtle)",
-                            color: !sm.canAccessQuiz ? "var(--color-text-muted)" : qz.quizDraftExists ? "var(--color-text-secondary)" : "var(--color-primary)",
-                            cursor: !sm.canAccessQuiz ? "not-allowed" : "pointer", 
-                            fontSize: "0.8125rem", fontWeight: 600,
-                            display: "flex", alignItems: "center", justifyContent: "center", gap: "0.5rem",
-                            transition: "all 0.15s",
-                            opacity: !sm.canAccessQuiz ? 0.5 : 1,
+                            width: "360px",
+                            flexShrink: 0,
+                            display: "flex",
+                            flexDirection: "column",
+                            borderLeft: "1px solid var(--color-border)",
+                            background: "var(--color-bg-surface-alt)",
+                            padding: "1rem",
+                            overflowY: "auto",
+                            gap: "1rem",
                           }}
                         >
-                          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                            {qz.quizDraftExists ? (
-                              <><rect x="3" y="3" width="18" height="18" rx="2" /><path d="M9 9h6M9 12h6M9 15h4" /></>
-                            ) : (
-                              <><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" /></>
-                            )}
-                          </svg>
-                          {qz.quizDraftExists ? "View Quiz Draft" : "Proceed to Quiz Generation"}
-                        </button>
-                      </div>
-                    </StudyMaterialVersionPanel>
-                  )}
+                          {/* Warning Header */}
+                          <div
+                            style={{
+                              border: "1px solid #d97706",
+                              backgroundColor: "#fffbeb",
+                              borderRadius: "var(--radius-lg)",
+                              padding: "0.875rem",
+                              display: "flex",
+                              flexDirection: "column",
+                              gap: "0.5rem",
+                            }}
+                          >
+                            <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#d97706" strokeWidth="2.5">
+                                <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
+                                <line x1="12" y1="9" x2="12" y2="13" />
+                                <line x1="12" y1="17" x2="12.01" y2="17" />
+                              </svg>
+                              <span style={{ fontSize: "0.9375rem", fontWeight: 700, color: "#92400e" }}>
+                                Quality Check Failed
+                              </span>
+                            </div>
+                            <p style={{ margin: 0, fontSize: "0.8125rem", color: "#b45309", lineHeight: 1.45 }}>
+                              This generated study material did not meet quality standards after 3 attempts. Please inspect the draft on the left before deciding how to proceed.
+                            </p>
+                          </div>
+
+                          {/* Choices Box */}
+                          <div
+                            style={{
+                              background: "var(--color-bg-surface)",
+                              border: "1px solid var(--color-border)",
+                              borderRadius: "var(--radius-lg)",
+                              padding: "1rem",
+                              boxShadow: "var(--shadow-subtle)",
+                              display: "flex",
+                              flexDirection: "column",
+                              gap: "0.75rem",
+                            }}
+                          >
+                            <span style={{ fontSize: "0.8125rem", fontWeight: 600, color: "var(--color-text-primary)" }}>
+                              How do you want to proceed?
+                            </span>
+                            <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
+                              <button
+                                type="button"
+                                className="btn-primary"
+                                onClick={() => {
+                                  if (node) {
+                                    setHasAcceptedFailedQcByNode((prev) => ({
+                                      ...prev,
+                                      [node.node_id]: true,
+                                    }));
+                                  }
+                                }}
+                                style={{
+                                  width: "100%",
+                                  height: "36px",
+                                  fontSize: "0.8125rem",
+                                  fontWeight: 600,
+                                }}
+                              >
+                                Continue with this draft
+                              </button>
+                              <button
+                                type="button"
+                                className="btn-secondary"
+                                onClick={() => {
+                                  sm.setShowDeleteDraftModal(true);
+                                }}
+                                style={{
+                                  width: "100%",
+                                  height: "36px",
+                                  fontSize: "0.8125rem",
+                                  fontWeight: 600,
+                                  borderColor: "var(--color-danger)",
+                                  color: "var(--color-danger)",
+                                }}
+                              >
+                                Delete draft & start over
+                              </button>
+                            </div>
+                          </div>
+
+                          {/* QC Report Details */}
+                          {sm.activeVersion?.qc_result && (
+                            <div
+                              style={{
+                                display: "flex",
+                                flexDirection: "column",
+                                gap: "0.875rem",
+                                background: "var(--color-bg-surface)",
+                                border: "1px solid var(--color-border)",
+                                borderRadius: "var(--radius-lg)",
+                                padding: "1rem",
+                                boxShadow: "var(--shadow-subtle)",
+                              }}
+                            >
+                              <span style={{ fontSize: "0.875rem", fontWeight: 700, color: "var(--color-text-primary)" }}>
+                                QC Evaluation Report
+                              </span>
+
+                              {/* Scores */}
+                              <div style={{ display: "flex", flexDirection: "column", gap: "0.375rem" }}>
+                                <span style={{ fontSize: "0.75rem", fontWeight: 600, color: "var(--color-text-secondary)" }}>
+                                  Scores:
+                                </span>
+                                <div
+                                  style={{
+                                    display: "grid",
+                                    gridTemplateColumns: "1fr 1fr",
+                                    gap: "0.5rem 0.75rem",
+                                    fontSize: "0.75rem",
+                                    color: "var(--color-text-secondary)",
+                                  }}
+                                >
+                                  <div>Structure: <strong>{sm.activeVersion.qc_result.scores.structure ?? 0}/10</strong></div>
+                                  <div>Accuracy: <strong>{sm.activeVersion.qc_result.scores.content_accuracy ?? 0}/10</strong></div>
+                                  <div>Code Quality: <strong>{sm.activeVersion.qc_result.scores.code_quality ?? 0}/10</strong></div>
+                                  <div>Readability: <strong>{sm.activeVersion.qc_result.scores.readability ?? 0}/10</strong></div>
+                                  <div>Section Depth: <strong>{sm.activeVersion.qc_result.scores.section_depth ?? 0}/10</strong></div>
+                                  <div>Alignment: <strong>{sm.activeVersion.qc_result.scores.teaching_alignment ?? 0}/10</strong></div>
+                                </div>
+                              </div>
+
+                              <div style={{ borderTop: "1px solid var(--color-border)", margin: "0.25rem 0" }} />
+
+                              {/* Hallucination Risk */}
+                              <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.8125rem" }}>
+                                <span style={{ color: "var(--color-text-secondary)" }}>Hallucination Risk:</span>
+                                <span
+                                  style={{
+                                    fontWeight: 700,
+                                    color: sm.activeVersion.qc_result.hallucination_risk === "none"
+                                      ? "var(--color-success)"
+                                      : sm.activeVersion.qc_result.hallucination_risk === "low"
+                                      ? "#84cc16"
+                                      : "#d97706",
+                                  }}
+                                >
+                                  {sm.activeVersion.qc_result.hallucination_risk.toUpperCase()}
+                                </span>
+                              </div>
+
+                              {/* Issues */}
+                              {sm.activeVersion.qc_result.issues.length > 0 && (
+                                <div style={{ display: "flex", flexDirection: "column", gap: "0.375rem" }}>
+                                  <span style={{ fontSize: "0.75rem", fontWeight: 600, color: "var(--color-text-secondary)" }}>
+                                    Issues Found:
+                                  </span>
+                                  <ul style={{ margin: 0, paddingLeft: "1rem", fontSize: "0.75rem", color: "var(--color-text-secondary)", lineHeight: 1.5 }}>
+                                    {sm.activeVersion.qc_result.issues.map((issue, idx) => (
+                                      <li key={idx}>{issue}</li>
+                                    ))}
+                                  </ul>
+                                </div>
+                              )}
+
+                              {/* Corrective instructions */}
+                              {sm.activeVersion.qc_result.corrective_instructions && (
+                                <div style={{ display: "flex", flexDirection: "column", gap: "0.375rem" }}>
+                                  <span style={{ fontSize: "0.75rem", fontWeight: 600, color: "var(--color-text-secondary)" }}>
+                                    Corrective Action:
+                                  </span>
+                                  <p style={{ margin: 0, fontSize: "0.75rem", color: "var(--color-text-secondary)", lineHeight: 1.5, fontStyle: "italic" }}>
+                                    {sm.activeVersion.qc_result.corrective_instructions}
+                                  </p>
+                                </div>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    }
+
+                    return (
+                      <StudyMaterialVersionPanel
+                        versions={sm.showArchivedPanel ? sm.archivedVersionHistory : sm.versionHistory}
+                        activeVersionId={sm.mentorUiState?.active_version_id ?? sm.activeVersion?.version_id ?? null}
+                        viewingVersionId={sm.viewingVersionId}
+                        isLoading={sm.isLoadingVersions}
+                        isUnarchiving={sm.isUnarchivingVersion}
+                        mode={sm.showArchivedPanel ? "archived" : "active"}
+                        onSelectVersion={sm.handleSelectVersion}
+                        onUnarchiveVersion={sm.handleUnarchiveVersion}
+                        onBackToActiveHistory={() => sm.setShowArchivedPanel(false)}
+                      >
+                        {/* Proceed to Quiz Generation button — above version history */}
+                        <div style={{ padding: "0.625rem 0.875rem", borderBottom: "1px solid var(--color-border)", marginBottom: "0.5rem" }}>
+                          <button
+                            type="button"
+                            disabled={!sm.canAccessQuiz}
+                            title={!sm.canAccessQuiz ? "Publish study material to enable quiz generation" : undefined}
+                            onClick={() => {
+                              if (sm.canAccessQuiz) {
+                                sm.setCurrentPage(3);
+                              }
+                            }}
+                            style={{
+                              width: "100%", padding: "0.5rem 0.875rem",
+                              borderRadius: "var(--radius-md)",
+                              border: `1px solid ${!sm.canAccessQuiz ? "var(--color-border)" : qz.quizDraftExists ? "var(--color-border)" : "var(--color-primary)"}`,
+                              background: !sm.canAccessQuiz ? "transparent" : qz.quizDraftExists ? "var(--color-bg-surface-alt)" : "var(--color-primary-subtle)",
+                              color: !sm.canAccessQuiz ? "var(--color-text-muted)" : qz.quizDraftExists ? "var(--color-text-secondary)" : "var(--color-primary)",
+                              cursor: !sm.canAccessQuiz ? "not-allowed" : "pointer", 
+                              fontSize: "0.8125rem", fontWeight: 600,
+                              display: "flex", alignItems: "center", justifyContent: "center", gap: "0.5rem",
+                              transition: "all 0.15s",
+                              opacity: !sm.canAccessQuiz ? 0.5 : 1,
+                            }}
+                          >
+                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                              {qz.quizDraftExists ? (
+                                <><rect x="3" y="3" width="18" height="18" rx="2" /><path d="M9 9h6M9 12h6M9 15h4" /></>
+                              ) : (
+                                <><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" /></>
+                              )}
+                            </svg>
+                            {qz.quizDraftExists ? "View Quiz Draft" : "Proceed to Quiz Generation"}
+                          </button>
+                        </div>
+                      </StudyMaterialVersionPanel>
+                    );
+                  })()}
                 </div>
               </>
             ) : (

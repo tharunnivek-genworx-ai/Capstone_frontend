@@ -37,6 +37,7 @@ function insertNode(roots: NodeTreeNode[], newNode: NodeResponse): NodeTreeNode[
     effective_instruction_parts: newNode.effective_instruction_parts,
     is_active: newNode.is_active,
     auto_generated: newNode.auto_generated,
+    hasPublishedMaterial: newNode.hasPublishedMaterial ?? false,
     children: [],
   };
 

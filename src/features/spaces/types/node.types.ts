@@ -93,6 +93,7 @@ export interface NodeResponse {
   source_pdf_id: string | null;
   source_section_path: string | null;
   auto_generated: boolean;
+  hasPublishedMaterial?: boolean;
 }
 
 /**
@@ -112,6 +113,7 @@ export interface NodeTreeNode {
   effective_instruction_parts: EffectiveInstructionPart[];
   is_active: boolean;
   auto_generated: boolean;
+  hasPublishedMaterial?: boolean;
   children: NodeTreeNode[];
 }
 

@@ -24,6 +24,32 @@ export interface QuizQuestionOut {
   is_active: boolean;
 }
 
+export interface QuizQualityCheckScoresOut {
+  answer_correctness?: number | null;
+  topic_relevance?: number | null;
+  option_quality?: number | null;
+  question_clarity?: number | null;
+  difficulty_alignment?: number | null;
+  explanation_quality?: number | null;
+  duplicate_overlap?: number | null;
+}
+
+export interface QuizQualityCheckFlaggedQuestionOut {
+  question_id: string;
+  question_number: number;
+  flags: string[];
+}
+
+export interface QuizQualityCheckResultOut {
+  overall_status: "pass" | "warn" | "fail";
+  wrong_answer_risk: "none" | "low" | "medium" | "high";
+  scores: QuizQualityCheckScoresOut;
+  flagged_questions?: QuizQualityCheckFlaggedQuestionOut[];
+  issues?: string[];
+  corrective_instructions?: string;
+  summary?: string;
+}
+
 export interface QuizOut {
   quiz_id: string;
   node_id: string;
@@ -39,6 +65,8 @@ export interface QuizOut {
   updated_at: string;
   hints_status: HintsStatus;
   questions: QuizQuestionOut[];
+  qc_failed_permanently?: boolean;
+  qc_result?: QuizQualityCheckResultOut | null;
 }
 
 export interface QuizMentorUiStateOut {

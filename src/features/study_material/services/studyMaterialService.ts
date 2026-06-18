@@ -12,9 +12,6 @@ import type {
   StudyMaterialVersionHistoryOut,
   StudyMaterialVersionOut,
   StudyMaterialMentorUiStateOut,
-  TraineeStudyMaterialOut,
-  StudyMaterialProgressUpdateRequest,
-  StudyMaterialProgressOut,
 } from "../types/studyMaterial.types";
 import type { SpaceRepublishChecklistOut } from "../../spaces/types/space.types";
 
@@ -192,43 +189,7 @@ export const studyMaterialService = {
     return response.data;
   },
 
-  /** Trainee: fetch published study material for a node. */
-  async getPublished(nodeId: string): Promise<TraineeStudyMaterialOut> {
-    const response = await studyAgentClient.get<TraineeStudyMaterialOut>(
-      `/nodes/${nodeId}/study-material`
-    );
-    return response.data;
-  },
 
-  /** Trainee: download published study material as PDF. */
-  async downloadPublishedPdf(nodeId: string, filename: string): Promise<void> {
-    const response = await studyAgentClient.get<Blob>(
-      `/nodes/${nodeId}/study-material/pdf`,
-      { responseType: "blob" }
-    );
-    const url = window.URL.createObjectURL(
-      new Blob([response.data], { type: "application/pdf" })
-    );
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = filename;
-    document.body.appendChild(link);
-    link.click();
-    link.remove();
-    window.URL.revokeObjectURL(url);
-  },
-
-  /** Trainee: report scroll read progress (backend keeps max value). */
-  async updateProgress(
-    nodeId: string,
-    payload: StudyMaterialProgressUpdateRequest
-  ): Promise<StudyMaterialProgressOut> {
-    const response = await studyAgentClient.patch<StudyMaterialProgressOut>(
-      `/nodes/${nodeId}/study-material/progress`,
-      payload
-    );
-    return response.data;
-  },
 
   async getPublishedResources(spaceId: string): Promise<{
     space_id: string;
