@@ -3,6 +3,9 @@ import toast from "react-hot-toast";
 import type { SpaceResponse, SpaceUnpublishPreviewOut } from "../types/space.types";
 import { spaceService } from "../services/spaceService";
 import EspaceUnpublishConfirmModal from "./EspaceUnpublishConfirmModal";
+import type { TraineeOwnSpaceProgressOut } from "../../trainee_space_progress/types/traineeSpaceProgress.types";
+import SpaceCardProgressPreview from "../../trainee_space_progress/components/SpaceCardProgressPreview";
+import type { MentorSpaceProgressSummaryOut } from "../../mentor_progress_view/types/mentorProgress.types";
 
 interface SpaceCardProps {
   space: SpaceResponse;
@@ -12,6 +15,10 @@ interface SpaceCardProps {
   onUnpublish: (space: SpaceResponse) => Promise<void>;
   isPublishing: boolean;
   isMentor: boolean;
+  traineeProgress?: TraineeOwnSpaceProgressOut | null;
+  isTraineeProgressLoading?: boolean;
+  mentorProgress?: MentorSpaceProgressSummaryOut | null;
+  isMentorProgressLoading?: boolean;
 }
 
 const SpaceCard: React.FC<SpaceCardProps> = ({
@@ -22,6 +29,10 @@ const SpaceCard: React.FC<SpaceCardProps> = ({
   onUnpublish,
   isPublishing,
   isMentor,
+  traineeProgress = null,
+  isTraineeProgressLoading = false,
+  mentorProgress = null,
+  isMentorProgressLoading = false,
 }) => {
   const [codeCopied, setCodeCopied] = useState(false);
   const [unpublishPreview, setUnpublishPreview] = useState<SpaceUnpublishPreviewOut | null>(null);
@@ -70,6 +81,7 @@ const SpaceCard: React.FC<SpaceCardProps> = ({
         display: "flex",
         flexDirection: "column",
         gap: "1rem",
+        minHeight: isMentor ? "unset" : "270px",
         position: "relative",
         overflow: "hidden",
       }}
@@ -154,6 +166,97 @@ const SpaceCard: React.FC<SpaceCardProps> = ({
           </p>
         )}
       </div>
+
+      {!isMentor && (
+        <SpaceCardProgressPreview
+          progress={traineeProgress}
+          isLoading={isTraineeProgressLoading}
+        />
+      )}
+
+      {isMentor && (
+        <div
+          style={{
+            border: "1px solid var(--color-border)",
+            borderRadius: "12px",
+            padding: "0.625rem",
+            background: "#f8fafc",
+            display: "flex",
+            gap: "0.75rem",
+            justifyContent: "space-between",
+            alignItems: "center",
+          }}
+        >
+          {isMentorProgressLoading ? (
+            <div style={{ display: "flex", justifyContent: "center", width: "100%", padding: "0.5rem 0" }}>
+              <span className="spinner" style={{ width: "1.1rem", height: "1.1rem", borderTopColor: "var(--color-primary)" }} />
+            </div>
+          ) : mentorProgress ? (
+            <>
+              {/* Total Topics */}
+              <div style={{ display: "flex", alignItems: "center", gap: "0.625rem" }}>
+                <div
+                  style={{
+                    width: "40px",
+                    height: "40px",
+                    borderRadius: "999px",
+                    background: "rgba(37,99,235,0.08)",
+                    border: "1px solid rgba(37,99,235,0.15)",
+                    display: "grid",
+                    placeItems: "center",
+                    flexShrink: 0,
+                    color: "var(--color-primary)",
+                  }}
+                >
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                    <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" />
+                    <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" />
+                  </svg>
+                </div>
+                <div>
+                  <p style={{ margin: 0, fontSize: "0.6875rem", color: "#6b7280" }}>Total topics</p>
+                  <p style={{ margin: "1px 0 0", fontSize: "0.75rem", fontWeight: 700, color: "#111827" }}>
+                    {mentorProgress.total_nodes}
+                  </p>
+                </div>
+              </div>
+
+              {/* Enrolled Trainees */}
+              <div style={{ display: "flex", alignItems: "center", gap: "0.625rem" }}>
+                <div
+                  style={{
+                    width: "40px",
+                    height: "40px",
+                    borderRadius: "999px",
+                    background: "rgba(22,163,74,0.08)",
+                    border: "1px solid rgba(22,163,74,0.15)",
+                    display: "grid",
+                    placeItems: "center",
+                    flexShrink: 0,
+                    color: "#16a34a",
+                  }}
+                >
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                    <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+                    <circle cx="9" cy="7" r="4" />
+                  </svg>
+                </div>
+                <div>
+                  <p style={{ margin: 0, fontSize: "0.6875rem", color: "#6b7280" }}>Enrolled trainees</p>
+                  <p style={{ margin: "1px 0 0", fontSize: "0.75rem", fontWeight: 700, color: "#111827" }}>
+                    {mentorProgress.total_enrolled_trainees}
+                  </p>
+                </div>
+              </div>
+            </>
+          ) : (
+            <div style={{ fontSize: "0.75rem", color: "#6b7280", textAlign: "center", width: "100%" }}>
+              No progress summary
+            </div>
+          )}
+        </div>
+      )}
+
 
       {isMentor && space.invite_code && (
         <div

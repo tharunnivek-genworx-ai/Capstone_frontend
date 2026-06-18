@@ -5,7 +5,7 @@
  */
 
 import React, { useEffect, useState, useCallback, useRef } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { useParams, useNavigate, useSearchParams } from "react-router-dom";
 import toast from "react-hot-toast";
 import { spaceService } from "../services/spaceService";
 import { useTopicTree } from "../hooks/useTopicTree";
@@ -15,16 +15,31 @@ import type { NodeStudyState, NodeStudyStatePatch } from "../../study_material/t
 import type { TopicContentPage } from "../types/node.types";
 import TopicTree from "./TopicTree";
 import NodeDetailPanel from "./NodeDetailPanel";
+import TraineeTopicTree from "../../trainee_study_material/components/TraineeTopicTree";
+import TraineeNodeDetailPanel from "../../trainee_study_material/components/TraineeNodeDetailPanel";
 import InviteCodeModal from "./InviteCodeModal";
 import ManageTraineesModal from "./ManageTraineesModal";
 import { useAuth } from "../../auth/hooks/useAuth";
 import { studyMaterialService } from "../../study_material/services/studyMaterialService";
 import EspaceUnpublishConfirmModal from "./EspaceUnpublishConfirmModal";
 import EspaceRepublishChecklistModal from "./EspaceRepublishChecklistModal";
+import { useTraineeSpaceProgress } from "../../trainee_space_progress/hooks/useTraineeSpaceProgress";
+import SpaceProgressPanel from "../../trainee_space_progress/components/SpaceProgressPanel";
+import { useMentorSpaceProgress, MentorSpaceProgressPanel } from "../../mentor_progress_view";
+
+function findNodeInTree(nodes: NodeTreeNode[], id: string): NodeTreeNode | null {
+  for (const n of nodes) {
+    if (n.node_id === id) return n;
+    const found = findNodeInTree(n.children, id);
+    if (found) return found;
+  }
+  return null;
+}
 
 const SpaceDetailPage: React.FC = () => {
   const { spaceId } = useParams<{ spaceId: string }>();
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { role } = useAuth();
   const isMentor = role === "mentor";
 
@@ -45,6 +60,21 @@ const SpaceDetailPage: React.FC = () => {
   const [isMoveMode, setIsMoveMode] = useState(false);
   const [treePanelWidth, setTreePanelWidth] = useState(340);
   const [nodeStudyStates, setNodeStudyStates] = useState<Map<string, NodeStudyState>>(new Map());
+  const [showSpaceProgress, setShowSpaceProgress] = useState(false);
+  const [cameFromSpaceProgress, setCameFromSpaceProgress] = useState(false);
+  const {
+    progress: traineeSpaceProgress,
+    isLoading: isLoadingTraineeSpaceProgress,
+    error: traineeSpaceProgressError,
+    refresh: refreshTraineeSpaceProgress,
+  } = useTraineeSpaceProgress(!isMentor && spaceId ? spaceId : null);
+
+  const {
+    progress: mentorSpaceProgress,
+    isLoading: isLoadingMentorSpaceProgress,
+    error: mentorSpaceProgressError,
+    refresh: refreshMentorSpaceProgress,
+  } = useMentorSpaceProgress(isMentor && spaceId ? spaceId : null);
 
   // Return undefined for nodes never visited so useStudyMaterial can distinguish
   // "not yet loaded" (undefined) from "loaded, no material" (null) when deciding
@@ -128,6 +158,18 @@ const SpaceDetailPage: React.FC = () => {
     }
   }, [treeError]);
 
+  useEffect(() => {
+    if (traineeSpaceProgressError) {
+      toast.error(traineeSpaceProgressError);
+    }
+  }, [traineeSpaceProgressError]);
+
+  useEffect(() => {
+    if (mentorSpaceProgressError) {
+      toast.error(mentorSpaceProgressError);
+    }
+  }, [mentorSpaceProgressError]);
+
   // Keep selected node in sync after tree changes (e.g. move/reorder)
   useEffect(() => {
     if (!selectedNode || roots.length === 0) return;
@@ -144,6 +186,18 @@ const SpaceDetailPage: React.FC = () => {
       setSelectedNode(updated);
     }
   }, [roots, selectedNode?.node_id]);
+
+  // Restore selected topic from ?node= when returning from quiz or deep-linking.
+  useEffect(() => {
+    if (isMentor || roots.length === 0) return;
+    if (showSpaceProgress) return;
+    const nodeIdFromUrl = searchParams.get("node");
+    if (!nodeIdFromUrl) return;
+    const node = findNodeInTree(roots, nodeIdFromUrl);
+    if (node && selectedNode?.node_id !== nodeIdFromUrl) {
+      setSelectedNode(node);
+    }
+  }, [isMentor, roots, searchParams, selectedNode?.node_id, showSpaceProgress]);
 
   useEffect(() => {
     const handleMouseMove = (e: MouseEvent) => {
@@ -267,18 +321,43 @@ const SpaceDetailPage: React.FC = () => {
     }
   };
 
-  const handleNavigateToNode = useCallback((nodeId: string) => {
-    const findNode = (nodes: NodeTreeNode[], id: string): NodeTreeNode | null => {
-      for (const n of nodes) {
-        if (n.node_id === id) return n;
-        const found = findNode(n.children, id);
-        if (found) return found;
+  const selectNode = useCallback(
+    (node: NodeTreeNode | null) => {
+      setSelectedNode(node);
+      setCameFromSpaceProgress(false);
+      if (node) setShowSpaceProgress(false);
+      if (!isMentor && spaceId) {
+        if (node) {
+          setSearchParams({ node: node.node_id }, { replace: true });
+        } else {
+          setSearchParams({}, { replace: true });
+        }
       }
-      return null;
-    };
-    const node = findNode(roots, nodeId);
-    if (node) setSelectedNode(node);
-  }, [roots]);
+    },
+    [isMentor, spaceId, setSearchParams],
+  );
+
+  const handleNavigateToNode = useCallback(
+    (nodeId: string) => {
+      const node = findNodeInTree(roots, nodeId);
+      if (node) selectNode(node);
+    },
+    [roots, selectNode],
+  );
+
+  const handleNavigateFromSpaceProgress = useCallback(
+    (nodeId: string) => {
+      const node = findNodeInTree(roots, nodeId);
+      if (!node) return;
+      setSelectedNode(node);
+      setCameFromSpaceProgress(true);
+      setShowSpaceProgress(true);
+      if (!isMentor && spaceId) {
+        setSearchParams({ node: node.node_id }, { replace: true });
+      }
+    },
+    [roots, isMentor, spaceId, setSearchParams],
+  );
 
   const handleNodeRename = useCallback(
     async (nodeId: string, newTitle: string) => {
@@ -507,6 +586,72 @@ const SpaceDetailPage: React.FC = () => {
 
         {/* Right controls */}
         <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", flexShrink: 0 }}>
+          {cameFromSpaceProgress && selectedNode && (
+            <button
+              type="button"
+              onClick={() => {
+                setSelectedNode(null);
+                setShowSpaceProgress(true);
+                setCameFromSpaceProgress(false);
+              }}
+              className="btn-secondary"
+              style={{ padding: "0.375rem 0.875rem", fontSize: "0.8125rem", display: "inline-flex", alignItems: "center", gap: "0.375rem" }}
+            >
+              <i
+                className="ti ti-chevron-right"
+                aria-hidden="true"
+                style={{ transform: "rotate(180deg)" }}
+              />
+              Back to per topic breakdown
+            </button>
+          )}
+
+          {!isMentor && !(cameFromSpaceProgress && selectedNode) && (
+            <button
+              type="button"
+              onClick={() => {
+                const next = !showSpaceProgress;
+                setShowSpaceProgress(next);
+                if (next) {
+                  setSelectedNode(null);
+                  setCameFromSpaceProgress(false);
+                  // Prevent URL-driven node auto-restore while showing the panel.
+                  setSearchParams({}, { replace: true });
+                  void refreshTraineeSpaceProgress();
+                }
+              }}
+              className={showSpaceProgress ? "btn-primary" : "btn-secondary"}
+              style={{ padding: "0.375rem 0.875rem", fontSize: "0.8125rem" }}
+            >
+              {showSpaceProgress
+                ? "Hide overall space progress"
+                : "Show overall space progress"}
+            </button>
+          )}
+
+          {isMentor && !(cameFromSpaceProgress && selectedNode) && (
+            <button
+              type="button"
+              onClick={() => {
+                const next = !showSpaceProgress;
+                setShowSpaceProgress(next);
+                if (next) {
+                  setSelectedNode(null);
+                  setCameFromSpaceProgress(false);
+                  // Prevent URL-driven node auto-restore while showing the panel.
+                  setSearchParams({}, { replace: true });
+                  void refreshMentorSpaceProgress();
+                }
+              }}
+              className={showSpaceProgress ? "btn-primary" : "btn-secondary"}
+              style={{ padding: "0.375rem 0.875rem", fontSize: "0.8125rem" }}
+            >
+              {showSpaceProgress
+                ? "Hide overall space progress"
+                : "Show overall space progress"}
+            </button>
+          )}
+
           {isMentor && (
             <button
               onClick={() => void handlePublishClick()}
@@ -615,7 +760,11 @@ const SpaceDetailPage: React.FC = () => {
       </header>
 
       {/* ── Two-panel body ── */}
-      <div ref={bodyRef} style={{ flex: 1, display: "flex", overflow: "hidden", minHeight: 0 }}>
+      <div
+        ref={bodyRef}
+        className={!isMentor ? "trainee-space-detail-body" : undefined}
+        style={{ flex: 1, display: "flex", overflow: "hidden", minHeight: 0 }}
+      >
         {/* Left: Topic tree panel */}
         <aside
           style={{
@@ -648,12 +797,12 @@ const SpaceDetailPage: React.FC = () => {
                 Loading topics…
               </p>
             </div>
-          ) : (
+          ) : isMentor ? (
             <TopicTree
               spaceId={spaceId!}
               roots={roots}
               selectedNodeId={selectedNode?.node_id ?? null}
-              onSelectNode={setSelectedNode}
+              onSelectNode={selectNode}
               onCreate={createNode}
               onRename={(nodeId, payload) => renameNode(nodeId, payload)}
               onMove={reparentNode}
@@ -661,6 +810,12 @@ const SpaceDetailPage: React.FC = () => {
               onArchive={archiveNode}
               isMentor={isMentor}
               onMoveModeChange={setIsMoveMode}
+            />
+          ) : (
+            <TraineeTopicTree
+              roots={roots}
+              selectedNodeId={selectedNode?.node_id ?? null}
+              onSelectNode={selectNode}
             />
           )}
         </aside>
@@ -686,17 +841,71 @@ const SpaceDetailPage: React.FC = () => {
           }}
         >
           {isMoveMode && <div style={moveBlurOverlay} aria-hidden />}
-          <NodeDetailPanel
-            node={selectedNode}
-            spaceId={spaceId ?? ""}
-            spaceIsPublished={space.is_published}
-            onRename={handleNodeRename}
-            onUpdateInstruction={handleUpdateInstruction}
-            onNavigateToNode={handleNavigateToNode}
-            isMentor={isMentor}
-            studyState={selectedNode ? getNodeStudyState(selectedNode.node_id) : undefined}
-            onStudyStateChange={selectedNode ? handleStudyStateChange : undefined}
-          />
+          {isMentor ? (
+            showSpaceProgress && !selectedNode ? (
+              isLoadingMentorSpaceProgress ? (
+                <div style={{ display: "grid", placeItems: "center", height: "100%" }}>
+                  <span className="spinner" style={{ width: "2rem", height: "2rem", borderTopColor: "var(--color-primary)" }} />
+                </div>
+              ) : mentorSpaceProgress ? (
+                <MentorSpaceProgressPanel
+                  progress={mentorSpaceProgress}
+                  onNavigateNode={handleNavigateFromSpaceProgress}
+                />
+              ) : (
+                <NodeDetailPanel
+                  node={selectedNode}
+                  spaceId={spaceId ?? ""}
+                  spaceIsPublished={space.is_published}
+                  onRename={handleNodeRename}
+                  onUpdateInstruction={handleUpdateInstruction}
+                  onNavigateToNode={handleNavigateToNode}
+                  isMentor={isMentor}
+                  studyState={undefined}
+                  onStudyStateChange={undefined}
+                />
+              )
+            ) : (
+              <NodeDetailPanel
+                node={selectedNode}
+                spaceId={spaceId ?? ""}
+                spaceIsPublished={space.is_published}
+                onRename={handleNodeRename}
+                onUpdateInstruction={handleUpdateInstruction}
+                onNavigateToNode={handleNavigateToNode}
+                isMentor={isMentor}
+                studyState={selectedNode ? getNodeStudyState(selectedNode.node_id) : undefined}
+                onStudyStateChange={selectedNode ? handleStudyStateChange : undefined}
+              />
+            )
+          ) : (
+            <>
+              {showSpaceProgress && !selectedNode ? (
+                isLoadingTraineeSpaceProgress ? (
+                  <div style={{ display: "grid", placeItems: "center", height: "100%" }}>
+                    <span className="spinner" style={{ width: "2rem", height: "2rem", borderTopColor: "var(--color-primary)" }} />
+                  </div>
+                ) : traineeSpaceProgress ? (
+                  <SpaceProgressPanel
+                    progress={traineeSpaceProgress}
+                    onNavigateNode={handleNavigateFromSpaceProgress}
+                  />
+                ) : (
+                  <TraineeNodeDetailPanel
+                    node={selectedNode}
+                    spaceId={spaceId ?? ""}
+                    onNavigateToNode={handleNavigateToNode}
+                  />
+                )
+              ) : (
+                <TraineeNodeDetailPanel
+                  node={selectedNode}
+                  spaceId={spaceId ?? ""}
+                  onNavigateToNode={handleNavigateToNode}
+                />
+              )}
+            </>
+          )}
         </main>
       </div>
 

@@ -30,22 +30,10 @@ const ReferenceImagesPanel: React.FC<ReferenceImagesPanelProps> = ({
     setError(null);
 
     referenceMaterialService
-      .listNodeMedia(nodeId, materialId)
-      .then((media) => {
+      .listReferenceImages(nodeId, materialId)
+      .then((result) => {
         if (cancelled) return;
-        const items: ReferenceImageOut[] = [];
-        for (const item of media.items) {
-          if (item.media_type !== "image") continue;
-          const url = item.public_url ?? item.url;
-          if (!url) continue;
-          items.push({
-            filename: item.title ?? `image-${item.order_index}`,
-            url,
-            source_page: item.source_page_number,
-            title: item.title,
-          });
-        }
-        setImages(items);
+        setImages(result.items);
       })
       .catch(() => {
         if (!cancelled) {
@@ -90,7 +78,7 @@ const ReferenceImagesPanel: React.FC<ReferenceImagesPanelProps> = ({
           )}
           <div className="reference-images-panel__scroll">
             {images.map((img) => (
-              <figure key={img.url} className="reference-images-panel__figure">
+              <figure key={img.llamaparse_image_id ?? img.url} className="reference-images-panel__figure">
                 <img
                   className="reference-images-panel__image"
                   src={img.url}

@@ -1,5 +1,9 @@
 import studyAgentClient from "../../../lib/studyAgentClient";
-import type { NodeMediaListOut, ReferenceMaterialOut } from "../types/studyMaterial.types";
+import type {
+  NodeMediaListOut,
+  ReferenceImageListOut,
+  ReferenceMaterialOut,
+} from "../types/studyMaterial.types";
 
 export const referenceMaterialService = {
   async uploadToNode(
@@ -34,16 +38,20 @@ export const referenceMaterialService = {
     await studyAgentClient.delete(`/reference-materials/${materialId}`);
   },
 
-  async listNodeMedia(
-    nodeId: string,
-    referenceMaterialId?: string | null
-  ): Promise<NodeMediaListOut> {
-    const params = referenceMaterialId
-      ? { reference_material_id: referenceMaterialId }
-      : undefined;
+  async listNodeMedia(nodeId: string): Promise<NodeMediaListOut> {
     const response = await studyAgentClient.get<NodeMediaListOut>(
+      `/nodes/${nodeId}/media`
+    );
+    return response.data;
+  },
+
+  async listReferenceImages(
+    nodeId: string,
+    materialId: string
+  ): Promise<ReferenceImageListOut> {
+    const response = await studyAgentClient.get<ReferenceImageListOut>(
       `/nodes/${nodeId}/media`,
-      { params }
+      { params: { reference_material_id: materialId } }
     );
     return response.data;
   },

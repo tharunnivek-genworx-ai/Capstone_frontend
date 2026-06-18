@@ -7,6 +7,9 @@ import DepartmentManagementPage from "../../features/department_creation/compone
 import AccountManagementPage from "../../features/account_creation/components/AccountManagementPage";
 import SpacesListPage from "../../features/spaces/components/SpacesListPage";
 import SpaceDetailPage from "../../features/spaces/components/SpaceDetailPage";
+import QuizAttemptPage from "../../features/trainee_quiz/components/QuizAttemptPage";
+import QuizAttemptResultsPage from "../../features/trainee_quiz/components/QuizAttemptResultsPage";
+import QuizAttemptHistoryPage from "../../features/trainee_quiz/components/QuizAttemptHistoryPage";
 import ProtectedRoute from "./ProtectedRoute";
 import Sidebar from "../../components/layout/Sidebar";
 import LearningSpacesSidebar from "../../components/layout/LearningSpacesSidebar";
@@ -134,6 +137,45 @@ const AppRoutes: React.FC = () => {
               <LearningSpacesSidebar />
               <div style={{ flex: 1, marginLeft: "240px", minHeight: "100vh", background: "var(--color-bg-page)", overflow: "hidden", display: "flex", flexDirection: "column" }}>
                 <SpaceDetailPage />
+              </div>
+            </div>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/trainee/spaces/:spaceId/quiz/attempt/:attemptId"
+        element={
+          <ProtectedRoute requiredRole="trainee">
+            <div style={{ display: "flex", minHeight: "100vh" }}>
+              <LearningSpacesSidebar />
+              <div style={{ flex: 1, marginLeft: "240px", minHeight: "100vh", background: "#f5f5f7", overflow: "hidden" }}>
+                <QuizAttemptPage />
+              </div>
+            </div>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/trainee/spaces/:spaceId/nodes/:nodeId/quiz/:quizId/attempts"
+        element={
+          <ProtectedRoute requiredRole="trainee">
+            <div style={{ display: "flex", minHeight: "100vh" }}>
+              <LearningSpacesSidebar />
+              <div style={{ flex: 1, marginLeft: "240px", minHeight: "100vh", background: "#f5f5f7", overflow: "auto" }}>
+                <QuizAttemptHistoryPage />
+              </div>
+            </div>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/trainee/spaces/:spaceId/quiz/attempt/:attemptId/results"
+        element={
+          <ProtectedRoute requiredRole="trainee">
+            <div style={{ display: "flex", minHeight: "100vh" }}>
+              <LearningSpacesSidebar />
+              <div style={{ flex: 1, marginLeft: "240px", minHeight: "100vh", background: "#f5f5f7", overflow: "auto" }}>
+                <QuizAttemptResultsPage />
               </div>
             </div>
           </ProtectedRoute>
