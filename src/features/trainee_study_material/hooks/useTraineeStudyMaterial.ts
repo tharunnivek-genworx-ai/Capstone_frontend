@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import toast from "react-hot-toast";
-import type { TraineeStudyMaterialOut } from "../types/studyMaterial.types";
-import { studyMaterialService } from "../services/studyMaterialService";
+import type { TraineeStudyMaterialOut } from "../types/traineeStudyMaterial.types";
+import { traineeStudyMaterialService } from "../services/traineeStudyMaterialService";
 
 interface UseTraineeStudyMaterialParams {
   nodeId: string | null;
@@ -24,7 +24,8 @@ function extractErrorDetail(err: unknown): string {
   return e?.response?.data?.detail ?? e?.message ?? "Request failed.";
 }
 
-function computeScrollPercent(container: HTMLElement): number {
+/** Collect scroll depth from the DOM to send as raw input to the backend. */
+function measureScrollDepth(container: HTMLElement): number {
   const maxScroll = container.scrollHeight - container.clientHeight;
   if (maxScroll <= 0) return 100;
   return Math.min(100, Math.round((container.scrollTop / maxScroll) * 100));
@@ -41,14 +42,18 @@ export function useTraineeStudyMaterial({
   const [readPercent, setReadPercent] = useState(0);
   const scrollContainerRef = useRef<HTMLDivElement | null>(null);
   const lastReportedPercent = useRef(0);
+  const latestMeasuredDepth = useRef(0);
   const progressTimer = useRef<number | null>(null);
 
   const reportProgress = useCallback(
-    async (percent: number) => {
-      if (!nodeId || percent <= lastReportedPercent.current) return;
-      lastReportedPercent.current = percent;
+    async (measuredDepth: number) => {
+      if (!nodeId || measuredDepth <= lastReportedPercent.current) return;
       try {
-        await studyMaterialService.updateProgress(nodeId, { read_percent: percent });
+        const updated = await traineeStudyMaterialService.updateProgress(nodeId, {
+          read_percent: measuredDepth,
+        });
+        lastReportedPercent.current = updated.study_material_read_percent;
+        setReadPercent(updated.study_material_read_percent);
       } catch {
         /* non-critical — progress is best-effort */
       }
@@ -61,6 +66,7 @@ export function useTraineeStudyMaterial({
       setMaterial(null);
       setLoadError(null);
       setReadPercent(0);
+      latestMeasuredDepth.current = 0;
       lastReportedPercent.current = 0;
       return;
     }
@@ -69,13 +75,16 @@ export function useTraineeStudyMaterial({
     setIsLoading(true);
     setLoadError(null);
     setReadPercent(0);
+    latestMeasuredDepth.current = 0;
     lastReportedPercent.current = 0;
 
-    studyMaterialService
+    traineeStudyMaterialService
       .getPublished(nodeId)
       .then((published) => {
         if (cancelled) return;
         setMaterial(published);
+        setReadPercent(published.study_material_read_percent);
+        lastReportedPercent.current = published.study_material_read_percent;
       })
       .catch((err) => {
         if (cancelled) return;
@@ -96,22 +105,26 @@ export function useTraineeStudyMaterial({
     if (!container || !nodeId || !material) return;
 
     const handleScroll = () => {
-      const percent = computeScrollPercent(container);
-      setReadPercent((prev) => Math.max(prev, percent));
+      const measuredDepth = measureScrollDepth(container);
+      latestMeasuredDepth.current = measuredDepth;
       if (progressTimer.current !== null) {
         window.clearTimeout(progressTimer.current);
       }
       progressTimer.current = window.setTimeout(() => {
-        void reportProgress(percent);
+        void reportProgress(measuredDepth);
       }, 400);
     };
 
+    const initialMeasureFrame = window.requestAnimationFrame(handleScroll);
+
     container.addEventListener("scroll", handleScroll, { passive: true });
     return () => {
+      window.cancelAnimationFrame(initialMeasureFrame);
       container.removeEventListener("scroll", handleScroll);
       if (progressTimer.current !== null) {
         window.clearTimeout(progressTimer.current);
       }
+      void reportProgress(latestMeasuredDepth.current);
     };
   }, [nodeId, material, reportProgress]);
 
@@ -120,7 +133,7 @@ export function useTraineeStudyMaterial({
     setIsDownloadingPdf(true);
     try {
       const safeTitle = nodeTitle.trim() || "study-material";
-      await studyMaterialService.downloadPublishedPdf(nodeId, `${safeTitle}.pdf`);
+      await traineeStudyMaterialService.downloadPublishedPdf(nodeId, `${safeTitle}.pdf`);
     } catch (err) {
       toast.error(extractErrorDetail(err));
     } finally {
@@ -137,4 +150,4 @@ export function useTraineeStudyMaterial({
     handleDownloadPdf,
     scrollContainerRef,
   };
-}
+};

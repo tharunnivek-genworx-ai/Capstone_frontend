@@ -76,6 +76,25 @@ export interface VersionLineageItem {
   is_archived: boolean;
 }
 
+export interface QualityCheckScoresOut {
+  structure?: number | null;
+  content_accuracy?: number | null;
+  code_quality?: number | null;
+  section_depth?: number | null;
+  readability?: number | null;
+  teaching_alignment?: number | null;
+}
+
+export interface QualityCheckResultOut {
+  overall_status: "pass" | "warn" | "fail";
+  is_refusal: boolean;
+  hallucination_risk: "none" | "low" | "medium" | "high";
+  scores: QualityCheckScoresOut;
+  issues: string[];
+  corrective_instructions: string;
+  summary: string;
+}
+
 export interface StudyMaterialVersionOut {
   version_id: string;
   node_id: string;
@@ -92,6 +111,8 @@ export interface StudyMaterialVersionOut {
   archived_at: string | null;
   created_at: string;
   display_label: string;
+  qc_failed_permanently?: boolean;
+  qc_result?: QualityCheckResultOut | null;
 }
 
 export interface StudyMaterialVersionSummary {
@@ -155,29 +176,6 @@ export interface StudyMaterialMentorUiStateOut {
   displayed_version_actions: VersionAllowedActionsOut | null;
 }
 
-/** GET /nodes/:id/study-material — trainee-safe published content */
-export interface TraineeStudyMaterialOut {
-  version_id: string;
-  node_id: string;
-  space_id: string;
-  version_number: number;
-  content: string;
-  reference_material_id: string | null;
-  published_at: string | null;
-}
-
-/** PATCH /nodes/:id/study-material/progress */
-export interface StudyMaterialProgressUpdateRequest {
-  read_percent: number;
-}
-
-export interface StudyMaterialProgressOut {
-  node_id: string;
-  study_material_viewed: boolean;
-  study_material_read_percent: number;
-  study_material_completed: boolean;
-  completion_status: string;
-}
 
 export interface NodeMediaOut {
   media_id: string;
@@ -190,8 +188,6 @@ export interface NodeMediaOut {
   public_url: string | null;
   order_index: number;
   uploaded_by: string;
-  source_pdf_material_id: string | null;
-  source_page_number: number | null;
   created_at: string | null;
 }
 
@@ -201,6 +197,7 @@ export interface NodeMediaListOut {
 }
 
 export interface ReferenceImageOut {
+  llamaparse_image_id?: string;
   filename: string;
   url: string;
   source_page: number | null;
@@ -209,6 +206,7 @@ export interface ReferenceImageOut {
 
 export interface ReferenceImageListOut {
   material_id: string;
+  node_id: string;
   items: ReferenceImageOut[];
   total: number;
 }
@@ -219,6 +217,8 @@ export interface StudyMaterialFeedbackResponse {
   status: "ok" | "feedback_too_vague" | "regeneration_goal_too_vague";
   status_message: string | null;
   new_version: StudyMaterialVersionOut | null;
+  qc_failed_permanently?: boolean;
+  qc_result?: QualityCheckResultOut | null;
 }
 
 // ── UI-level types ────────────────────────────────────────────────────────────

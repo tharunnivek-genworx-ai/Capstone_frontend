@@ -17,6 +17,11 @@ import InviteCodeModal from "./InviteCodeModal";
 import JoinSpaceModal from "./JoinSpaceModal";
 import EspaceRepublishChecklistModal from "./EspaceRepublishChecklistModal";
 import SpaceCard from "./SpaceCard";
+import { traineeSpaceProgressService } from "../../trainee_space_progress/services/traineeSpaceProgressService";
+import type { TraineeOwnSpaceProgressOut } from "../../trainee_space_progress/types/traineeSpaceProgress.types";
+import { mentorProgressService } from "../../mentor_progress_view/services/mentorProgressService";
+import type { MentorSpaceProgressSummaryOut } from "../../mentor_progress_view/types/mentorProgress.types";
+
 
 const SpacesListPage: React.FC = () => {
   const navigate = useNavigate();
@@ -33,6 +38,10 @@ const SpacesListPage: React.FC = () => {
     spaceName: string;
     nodes: RepublishChecklistNode[];
   } | null>(null);
+  const [spaceProgressById, setSpaceProgressById] = useState<Record<string, TraineeOwnSpaceProgressOut>>({});
+  const [loadingProgressIds, setLoadingProgressIds] = useState<Record<string, boolean>>({});
+  const [mentorProgressById, setMentorProgressById] = useState<Record<string, MentorSpaceProgressSummaryOut>>({});
+  const [loadingMentorProgressIds, setLoadingMentorProgressIds] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
     fetchSpaces();
@@ -44,6 +53,66 @@ const SpacesListPage: React.FC = () => {
       clearError();
     }
   }, [error]);
+
+  useEffect(() => {
+    if (isMentor || spaces.length === 0) {
+      setSpaceProgressById({});
+      setLoadingProgressIds({});
+      return;
+    }
+    const load = async () => {
+      const loadingMap: Record<string, boolean> = {};
+      for (const space of spaces) loadingMap[space.space_id] = true;
+      setLoadingProgressIds(loadingMap);
+      const results = await Promise.all(
+        spaces.map(async (space) => {
+          try {
+            const progress = await traineeSpaceProgressService.getOwnSpaceProgress(space.space_id);
+            return [space.space_id, progress] as const;
+          } catch {
+            return [space.space_id, null] as const;
+          }
+        }),
+      );
+      const next: Record<string, TraineeOwnSpaceProgressOut> = {};
+      for (const [spaceId, progress] of results) {
+        if (progress) next[spaceId] = progress;
+      }
+      setSpaceProgressById(next);
+      setLoadingProgressIds({});
+    };
+    void load();
+  }, [isMentor, spaces]);
+
+  useEffect(() => {
+    if (!isMentor || spaces.length === 0) {
+      setMentorProgressById({});
+      setLoadingMentorProgressIds({});
+      return;
+    }
+    const load = async () => {
+      const loadingMap: Record<string, boolean> = {};
+      for (const space of spaces) loadingMap[space.space_id] = true;
+      setLoadingMentorProgressIds(loadingMap);
+      const results = await Promise.all(
+        spaces.map(async (space) => {
+          try {
+            const summary = await mentorProgressService.getSpaceProgressSummary(space.space_id);
+            return [space.space_id, summary] as const;
+          } catch {
+            return [space.space_id, null] as const;
+          }
+        }),
+      );
+      const next: Record<string, MentorSpaceProgressSummaryOut> = {};
+      for (const [spaceId, summary] of results) {
+        if (summary) next[spaceId] = summary;
+      }
+      setMentorProgressById(next);
+      setLoadingMentorProgressIds({});
+    };
+    void load();
+  }, [isMentor, spaces]);
 
   const loadRepublishChecklist = async (space: SpaceResponse) => {
     try {
@@ -228,7 +297,9 @@ const SpacesListPage: React.FC = () => {
         <div
           style={{
             display: "grid",
-            gridTemplateColumns: "repeat(auto-fill, minmax(300px, 1fr))",
+            gridTemplateColumns: isMentor
+              ? "repeat(auto-fill, minmax(300px, 1fr))"
+              : "repeat(auto-fill, minmax(360px, 1fr))",
             gap: "1.25rem",
           }}
         >
@@ -242,6 +313,10 @@ const SpacesListPage: React.FC = () => {
               onUnpublish={handleUnpublish}
               isPublishing={publishingId === space.space_id}
               isMentor={isMentor}
+              traineeProgress={spaceProgressById[space.space_id] ?? null}
+              isTraineeProgressLoading={Boolean(loadingProgressIds[space.space_id])}
+              mentorProgress={mentorProgressById[space.space_id] ?? null}
+              isMentorProgressLoading={Boolean(loadingMentorProgressIds[space.space_id])}
             />
           ))}
         </div>
