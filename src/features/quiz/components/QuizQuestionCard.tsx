@@ -9,7 +9,7 @@ interface QuizQuestionCardProps {
   question: QuizQuestionOut;
   index: number;
   isPublished: boolean;
-  isLinkedVersionPublished?: boolean;
+  canEdit?: boolean;
   isSaving: boolean;
   isDeleting: boolean;
   onUpdate: (questionId: string, data: QuizQuestionUpdateRequest) => Promise<void>;
@@ -22,7 +22,7 @@ const QuizQuestionCard: React.FC<QuizQuestionCardProps> = ({
   question,
   index,
   isPublished,
-  isLinkedVersionPublished = true,
+  canEdit = true,
   isSaving,
   isDeleting,
   onUpdate,
@@ -38,7 +38,7 @@ const QuizQuestionCard: React.FC<QuizQuestionCardProps> = ({
     transform,
     transition,
     isDragging,
-  } = useSortable({ id: question.question_id, disabled: !question.is_active || isPublished || !isLinkedVersionPublished });
+  } = useSortable({ id: question.question_id, disabled: !question.is_active || isPublished || !canEdit });
 
   const style: React.CSSProperties = {
     transform: CSS.Transform.toString(transform),
@@ -75,15 +75,15 @@ const QuizQuestionCard: React.FC<QuizQuestionCardProps> = ({
             type="button"
             {...attributes}
             {...listeners}
-            disabled={!question.is_active || isPublished || !isLinkedVersionPublished}
+            disabled={!question.is_active || isPublished || !canEdit}
             style={{
               flexShrink: 0, background: "none", border: "none",
-              cursor: (question.is_active && !isPublished && isLinkedVersionPublished) ? "grab" : "not-allowed",
+              cursor: (question.is_active && !isPublished && canEdit) ? "grab" : "not-allowed",
               color: "var(--color-text-muted)", padding: "0.125rem 0.25rem",
               marginTop: "2px",
-              opacity: !isLinkedVersionPublished ? 0.5 : 1,
+              opacity: !canEdit ? 0.5 : 1,
             }}
-            title={!isLinkedVersionPublished ? "To edit or publish this quiz, first re-publish the associated study material version." : "Drag to reorder"}
+            title={!canEdit ? "Editing is not available for this quiz" : "Drag to reorder"}
           >
             <svg width="14" height="20" viewBox="0 0 14 20" fill="currentColor">
               <circle cx="4" cy="4" r="1.5" /><circle cx="10" cy="4" r="1.5" />
@@ -125,17 +125,17 @@ const QuizQuestionCard: React.FC<QuizQuestionCardProps> = ({
                 type="button"
                 className="btn-secondary"
                 onClick={() => setShowEditModal(true)}
-                disabled={isSaving || !isLinkedVersionPublished}
+                disabled={isSaving || !canEdit}
                 style={{
                   padding: "0.375rem 0.625rem",
                   fontSize: "0.75rem",
                   display: "flex",
                   alignItems: "center",
                   gap: "0.25rem",
-                  opacity: !isLinkedVersionPublished ? 0.5 : 1,
-                  cursor: !isLinkedVersionPublished ? "not-allowed" : "pointer"
+                  opacity: !canEdit ? 0.5 : 1,
+                  cursor: !canEdit ? "not-allowed" : "pointer"
                 }}
-                title={!isLinkedVersionPublished ? "To edit or publish this quiz, first re-publish the associated study material version." : "Edit question"}
+                title={!canEdit ? "Editing is not available for this quiz" : "Edit question"}
               >
                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                   <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7" />
@@ -146,16 +146,16 @@ const QuizQuestionCard: React.FC<QuizQuestionCardProps> = ({
               <button
                 type="button"
                 onClick={() => setShowDeleteConfirm(true)}
-                disabled={isDeleting || !isLinkedVersionPublished}
+                disabled={isDeleting || !canEdit}
                 style={{
                   padding: "0.375rem 0.625rem", fontSize: "0.75rem",
                   display: "flex", alignItems: "center", gap: "0.25rem",
                   background: "none", border: "1px solid var(--color-border)",
-                  borderRadius: "var(--radius-md)", cursor: !isLinkedVersionPublished ? "not-allowed" : "pointer",
+                  borderRadius: "var(--radius-md)", cursor: !canEdit ? "not-allowed" : "pointer",
                   color: "var(--color-danger, #dc2626)",
-                  opacity: (isDeleting || !isLinkedVersionPublished) ? 0.5 : 1,
+                  opacity: (isDeleting || !canEdit) ? 0.5 : 1,
                 }}
-                title={!isLinkedVersionPublished ? "To edit or publish this quiz, first re-publish the associated study material version." : "Delete question"}
+                title={!canEdit ? "Editing is not available for this quiz" : "Delete question"}
               >
                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                   <polyline points="3 6 5 6 21 6" />

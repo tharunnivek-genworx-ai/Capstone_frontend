@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useTraineeStudyMaterial } from "../hooks/useTraineeStudyMaterial";
-import StudyMaterialViewer from "../../study_material/components/StudyMaterialViewer";
+import StudyMaterialViewer from "../../study_material/components/material/StudyMaterialViewer";
 
 interface TraineeStudyMaterialPanelProps {
   nodeId: string;

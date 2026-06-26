@@ -3,6 +3,7 @@ import type { TraineeNodePanelOut } from "../../types/traineeNodePanel.types";
 import TopicPanelHeader from "./TopicPanelHeader";
 import SubtopicList from "./SubtopicList";
 import OverallProgressFooter from "./OverallProgressFooter";
+import TraineeTopicResourcesPanel from "./TraineeTopicResourcesPanel";
 
 interface PureParentPanelProps {
   panel: TraineeNodePanelOut;
@@ -29,6 +30,11 @@ const PureParentPanel: React.FC<PureParentPanelProps> = ({ panel, onNavigate }) 
             Your mentor is still preparing material for this section.
           </p>
         </div>
+        <TraineeTopicResourcesPanel
+          resources={panel.topic_resources}
+          sectionTitle={panel.topic_resources_section_title}
+          emptyMessage={panel.topic_resources_empty_message}
+        />
       </div>
     );
   }
@@ -50,6 +56,11 @@ const PureParentPanel: React.FC<PureParentPanelProps> = ({ panel, onNavigate }) 
       {panel.children_progress_label && (
         <p className="topic-detail-panel__summary">{panel.children_progress_label}</p>
       )}
+      <TraineeTopicResourcesPanel
+        resources={panel.topic_resources}
+        sectionTitle={panel.topic_resources_section_title}
+        emptyMessage={panel.topic_resources_empty_message}
+      />
       {panel.overall_progress && <OverallProgressFooter progress={panel.overall_progress} />}
     </div>
   );

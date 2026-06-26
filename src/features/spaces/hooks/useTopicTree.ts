@@ -14,7 +14,6 @@ import type {
   NodeRenameRequest,
   NodeUpdateInstructionRequest,
   NodeReparentRequest,
-  NodeReorderRequest,
   NodeArchiveRequest,
 } from "../types/node.types";
 
@@ -82,29 +81,47 @@ function archiveInTree(nodes: NodeTreeNode[], nodeId: string, withChildren: bool
 /**
  * Reorder siblings in the tree.
  */
-function reorderInTree(
+/**
+ * Optimistically find and swap a node with its sibling in tree.
+ */
+function findAndSwapInTree(
   nodes: NodeTreeNode[],
-  parentId: string | null,
-  reorderedItems: Array<{ node_id: string; order_index: number }>
-): NodeTreeNode[] {
-  if (parentId === null) {
-    // Reordering root nodes
-    return nodes.map((n) => {
-      const item = reorderedItems.find((r) => r.node_id === n.node_id);
-      return item ? { ...n, order_index: item.order_index } : n;
-    }).sort((a, b) => a.order_index - b.order_index);
+  nodeId: string,
+  direction: "up" | "down"
+): { updated: NodeTreeNode[]; success: boolean } {
+  const idx = nodes.findIndex((n) => n.node_id === nodeId);
+  if (idx !== -1) {
+    if (direction === "up" && idx > 0) {
+      const copy = [...nodes];
+      const tmp = copy[idx].order_index;
+      copy[idx] = { ...copy[idx], order_index: copy[idx - 1].order_index };
+      copy[idx - 1] = { ...copy[idx - 1], order_index: tmp };
+      [copy[idx], copy[idx - 1]] = [copy[idx - 1], copy[idx]];
+      return { updated: copy, success: true };
+    }
+    if (direction === "down" && idx < nodes.length - 1) {
+      const copy = [...nodes];
+      const tmp = copy[idx].order_index;
+      copy[idx] = { ...copy[idx], order_index: copy[idx + 1].order_index };
+      copy[idx + 1] = { ...copy[idx + 1], order_index: tmp };
+      [copy[idx], copy[idx + 1]] = [copy[idx + 1], copy[idx]];
+      return { updated: copy, success: true };
+    }
+    return { updated: nodes, success: false };
   }
 
-  return nodes.map((n) => {
-    if (n.node_id === parentId) {
-      const updatedChildren = n.children.map((c) => {
-        const item = reorderedItems.find((r) => r.node_id === c.node_id);
-        return item ? { ...c, order_index: item.order_index } : c;
-      }).sort((a, b) => a.order_index - b.order_index);
-      return { ...n, children: updatedChildren };
+  let swapped = false;
+  const updated = nodes.map((n) => {
+    if (swapped) return n;
+    const res = findAndSwapInTree(n.children, nodeId, direction);
+    if (res.success) {
+      swapped = true;
+      return { ...n, children: res.updated };
     }
-    return { ...n, children: reorderInTree(n.children, parentId, reorderedItems) };
+    return n;
   });
+
+  return { updated, success: swapped };
 }
 
 // ── Hook ─────────────────────────────────────────────────────────────────────
@@ -119,7 +136,7 @@ interface UseTopicTreeReturn {
   renameNode: (nodeId: string, payload: NodeRenameRequest) => Promise<NodeResponse>;
   updateNodeInstruction: (nodeId: string, payload: NodeUpdateInstructionRequest) => Promise<NodeResponse>;
   reparentNode: (spaceId: string, nodeId: string, payload: NodeReparentRequest) => Promise<void>;
-  reorderNodes: (spaceId: string, parentId: string | null, reorderedItems: Array<{ node_id: string; order_index: number }>) => Promise<void>;
+  reorderNode: (spaceId: string, nodeId: string, direction: "up" | "down") => Promise<void>;
   archiveNode: (nodeId: string, payload: NodeArchiveRequest) => Promise<void>;
   clearError: () => void;
 }
@@ -192,19 +209,16 @@ export const useTopicTree = (): UseTopicTreeReturn => {
     []
   );
 
-  const reorderNodes = useCallback(
+  const reorderNode = useCallback(
     async (
       spaceId: string,
-      parentId: string | null,
-      reorderedItems: Array<{ node_id: string; order_index: number }>
+      nodeId: string,
+      direction: "up" | "down"
     ): Promise<void> => {
       // Optimistic update
-      setRoots((prev) => reorderInTree(prev, parentId, reorderedItems));
-      const req: NodeReorderRequest = {
-        nodes: reorderedItems.map((r) => ({ node_id: r.node_id, order_index: r.order_index })),
-      };
+      setRoots((prev) => findAndSwapInTree(prev, nodeId, direction).updated);
       try {
-        await nodeService.reorderNodes(spaceId, req);
+        await nodeService.reorderNode(nodeId, { direction });
         const res = await nodeService.getTree(spaceId);
         setRoots(res.roots);
         setTotalNodes(res.total_nodes);
@@ -240,7 +254,7 @@ export const useTopicTree = (): UseTopicTreeReturn => {
     renameNode,
     updateNodeInstruction,
     reparentNode,
-    reorderNodes,
+    reorderNode,
     archiveNode,
     clearError,
   };

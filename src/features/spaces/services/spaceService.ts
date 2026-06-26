@@ -24,7 +24,7 @@ import type {
 export const spaceService = {
   /**
    * POST /spaces
-   * Mentor creates a new e-learning space. Invite code is auto-generated.
+   * Mentor creates a new e-learning space. Invite code is auto-generated; space is published on creation.
    */
   async createSpace(payload: SpaceCreateRequest): Promise<SpaceResponse> {
     const response = await axiosClient.post<SpaceResponse>("/spaces", payload);

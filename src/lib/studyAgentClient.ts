@@ -19,6 +19,10 @@ studyAgentClient.interceptors.request.use(
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }
+    // FormData must not use application/json — browser must set multipart boundary.
+    if (config.data instanceof FormData) {
+      config.headers.setContentType(false);
+    }
     return config;
   },
   (error) => Promise.reject(error)

@@ -1,11 +1,23 @@
 import studyAgentClient from "../../../lib/studyAgentClient";
 import type {
   NodeMediaListOut,
+  NodeMediaOut,
   ReferenceImageListOut,
   ReferenceMaterialOut,
 } from "../types/studyMaterial.types";
+import { resolveStudyAgentMediaUrl } from "../utils/mediaUrl";
+
+export type NodeMediaAttachType = "image" | "pdf" | "video_url" | "article_link";
 
 export const referenceMaterialService = {
+  materialFileUrl(material: ReferenceMaterialOut): string | null {
+    return resolveStudyAgentMediaUrl(material.file_url);
+  },
+
+  mediaPublicUrl(media: NodeMediaOut): string | null {
+    return resolveStudyAgentMediaUrl(media.public_url ?? media.file_url ?? media.url);
+  },
+
   async uploadToNode(
     spaceId: string,
     nodeId: string,
@@ -21,8 +33,7 @@ export const referenceMaterialService = {
 
     const response = await studyAgentClient.post<ReferenceMaterialOut>(
       `/spaces/${spaceId}/reference-materials`,
-      formData,
-      { headers: { "Content-Type": "multipart/form-data" } }
+      formData
     );
     return response.data;
   },
@@ -43,6 +54,46 @@ export const referenceMaterialService = {
       `/nodes/${nodeId}/media`
     );
     return response.data;
+  },
+
+  async attachNodeMediaFile(
+    nodeId: string,
+    mediaType: "image" | "pdf",
+    file: File,
+    title?: string
+  ): Promise<NodeMediaOut> {
+    const formData = new FormData();
+    formData.append("media_type", mediaType);
+    formData.append("file", file);
+    if (title?.trim()) formData.append("title", title.trim());
+
+    const response = await studyAgentClient.post<NodeMediaOut>(
+      `/nodes/${nodeId}/media`,
+      formData
+    );
+    return response.data;
+  },
+
+  async attachNodeMediaLink(
+    nodeId: string,
+    mediaType: "video_url" | "article_link",
+    url: string,
+    title?: string
+  ): Promise<NodeMediaOut> {
+    const formData = new FormData();
+    formData.append("media_type", mediaType);
+    formData.append("url", url.trim());
+    if (title?.trim()) formData.append("title", title.trim());
+
+    const response = await studyAgentClient.post<NodeMediaOut>(
+      `/nodes/${nodeId}/media`,
+      formData
+    );
+    return response.data;
+  },
+
+  async deleteNodeMedia(nodeId: string, mediaId: string): Promise<void> {
+    await studyAgentClient.delete(`/nodes/${nodeId}/media/${mediaId}`);
   },
 
   async listReferenceImages(

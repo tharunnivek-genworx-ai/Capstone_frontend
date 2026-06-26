@@ -10,6 +10,8 @@ import type {
   QuizQuestionOut,
   QuizQuestionReorderRequest,
   QuizQuestionUpdateRequest,
+  QuizUnpublishPreviewOut,
+  QuizUnpublishRequest,
 } from "../types/quiz.types";
 
 export const quizService = {
@@ -38,15 +40,27 @@ export const quizService = {
       .then((r) => r.data);
   },
 
+  getQuiz(nodeId: string, quizId: string): Promise<QuizOut> {
+    return studyAgentClient
+      .get<QuizOut>(`/nodes/${nodeId}/quizzes/${quizId}`)
+      .then((r) => r.data);
+  },
+
   publish(nodeId: string, quizId: string): Promise<QuizOut> {
     return studyAgentClient
       .patch<QuizOut>(`/nodes/${nodeId}/quizzes/${quizId}/publish`, {})
       .then((r) => r.data);
   },
 
-  unpublish(nodeId: string, quizId: string): Promise<QuizOut> {
+  previewUnpublish(nodeId: string, quizId: string): Promise<QuizUnpublishPreviewOut> {
     return studyAgentClient
-      .patch<QuizOut>(`/nodes/${nodeId}/quizzes/${quizId}/unpublish`, {})
+      .get<QuizUnpublishPreviewOut>(`/nodes/${nodeId}/quizzes/${quizId}/unpublish-preview`)
+      .then((r) => r.data);
+  },
+
+  unpublish(nodeId: string, quizId: string, payload: QuizUnpublishRequest): Promise<QuizOut> {
+    return studyAgentClient
+      .patch<QuizOut>(`/nodes/${nodeId}/quizzes/${quizId}/unpublish`, payload)
       .then((r) => r.data);
   },
 

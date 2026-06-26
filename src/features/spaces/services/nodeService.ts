@@ -82,12 +82,11 @@ export const nodeService = {
   },
 
   /**
-   * PATCH /spaces/:spaceId/nodes/reorder
-   * Bulk-update order_index for sibling nodes under the same parent.
-   * All siblings must be included — partial sets are rejected by the backend.
+   * PATCH /nodes/:nodeId/reorder
+   * Reorder a sibling node by moving it up or down.
    */
-  async reorderNodes(spaceId: string, payload: NodeReorderRequest): Promise<void> {
-    await axiosClient.patch(`/spaces/${spaceId}/nodes/reorder`, payload);
+  async reorderNode(nodeId: string, payload: NodeReorderRequest): Promise<void> {
+    await axiosClient.patch(`/nodes/${nodeId}/reorder`, payload);
   },
 
   /**

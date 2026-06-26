@@ -9,6 +9,7 @@ import ProgressBar from "./ProgressBar";
 import MaterialPreviewCard from "./MaterialPreviewCard";
 import SubtopicList from "./SubtopicList";
 import OverallProgressFooter from "./OverallProgressFooter";
+import TraineeTopicResourcesPanel from "./TraineeTopicResourcesPanel";
 
 interface MixedParentPanelProps {
   panel: TraineeNodePanelOut;
@@ -108,6 +109,12 @@ const MixedParentPanel: React.FC<MixedParentPanelProps> = ({
           </div>
         </>
       )}
+
+      <TraineeTopicResourcesPanel
+        resources={panel.topic_resources}
+        sectionTitle={panel.topic_resources_section_title}
+        emptyMessage={panel.topic_resources_empty_message}
+      />
 
       {panel.overall_progress && <OverallProgressFooter progress={panel.overall_progress} />}
     </div>

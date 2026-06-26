@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
-import type { ReferenceImageOut } from "../types/studyMaterial.types";
-import { referenceMaterialService } from "../services/referenceMaterialService";
+import type { ReferenceImageOut } from "../../types/studyMaterial.types";
+import { referenceMaterialService } from "../../services/referenceMaterialService";
 
 interface ReferenceImagesPanelProps {
   nodeId: string;

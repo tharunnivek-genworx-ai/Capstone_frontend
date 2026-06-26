@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useMemo, useState } from "react";
 import toast from "react-hot-toast";
 import type { RepublishChecklistNode } from "../types/space.types";
 import { studyMaterialService } from "../../study_material/services/studyMaterialService";
@@ -8,6 +8,7 @@ interface EspaceRepublishChecklistModalProps {
   spaceName: string;
   nodes: RepublishChecklistNode[];
   onClose: () => void;
+  onContentPublished?: (nodeId: string, kind: "material" | "quiz") => void;
 }
 
 type ChecklistKey = string;
@@ -16,13 +17,30 @@ function checklistKey(nodeId: string, kind: "material" | "quiz", quizId?: string
   return kind === "material" ? `material:${nodeId}` : `quiz:${quizId ?? nodeId}`;
 }
 
+function getRepublishChecklistKeys(nodes: RepublishChecklistNode[]): ChecklistKey[] {
+  return nodes.flatMap((node) => {
+    const keys: ChecklistKey[] = [];
+    if (node.last_published_version_label && node.last_published_version_id) {
+      keys.push(checklistKey(node.node_id, "material"));
+    }
+    if (node.has_unpublished_quiz && node.quiz_id) {
+      keys.push(checklistKey(node.node_id, "quiz", node.quiz_id));
+    }
+    return keys;
+  });
+}
+
 const EspaceRepublishChecklistModal: React.FC<EspaceRepublishChecklistModalProps> = ({
   spaceName,
   nodes,
   onClose,
+  onContentPublished,
 }) => {
   const [completed, setCompleted] = useState<Set<ChecklistKey>>(new Set());
   const [publishingKey, setPublishingKey] = useState<ChecklistKey | null>(null);
+  const requiredKeys = useMemo(() => getRepublishChecklistKeys(nodes), [nodes]);
+  const allPublished =
+    requiredKeys.length === 0 || requiredKeys.every((key) => completed.has(key));
 
   const markDone = (key: ChecklistKey) => {
     setCompleted((prev) => new Set(prev).add(key));
@@ -37,6 +55,7 @@ const EspaceRepublishChecklistModal: React.FC<EspaceRepublishChecklistModalProps
         version_id: node.last_published_version_id,
       });
       markDone(key);
+      onContentPublished?.(node.node_id, "material");
       toast.success(`${node.node_title} study material published.`);
     } catch (err) {
       const e = err as { response?: { data?: { detail?: { message?: string } | string } } };
@@ -60,6 +79,7 @@ const EspaceRepublishChecklistModal: React.FC<EspaceRepublishChecklistModalProps
     try {
       await quizService.publish(node.node_id, node.quiz_id);
       markDone(key);
+      onContentPublished?.(node.node_id, "quiz");
       toast.success(`${node.quiz_title ?? "Quiz"} published.`);
     } catch (err) {
       const e = err as { response?: { data?: { detail?: { message?: string } | string } } };
@@ -211,11 +231,11 @@ const EspaceRepublishChecklistModal: React.FC<EspaceRepublishChecklistModalProps
             )}
             <button
               type="button"
-              className="btn-secondary"
+              className={allPublished ? "btn-primary" : "btn-secondary"}
               style={{ width: "100%", marginTop: "1.25rem" }}
               onClick={onClose}
             >
-              Done — I&apos;ll publish later
+              {allPublished ? "Okay" : "Publish it later"}
             </button>
           </div>
         </div>

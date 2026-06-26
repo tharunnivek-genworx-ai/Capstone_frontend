@@ -183,7 +183,7 @@ const TransferOwnershipModal: React.FC<TransferOwnershipModalProps> = ({
               Transfer Space Ownership
             </h2>
             <p style={{ margin: "0.35rem 0 0", fontSize: "0.8125rem", color: "var(--color-text-muted)" }}>
-              Reassign learning spaces from <strong>{mentor.fullname}</strong> to another active mentor (EC-27).
+              Reassign learning spaces from <strong>{mentor.fullname}</strong> to another active mentor.
             </p>
           </div>
 

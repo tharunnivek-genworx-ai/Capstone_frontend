@@ -8,6 +8,7 @@ import type {
   StudyMaterialImproveRequest,
   StudyMaterialManualEditRequest,
   StudyMaterialPublishRequest,
+  StudyMaterialUnpublishRequest,
   StudyMaterialRegenerateRequest,
   StudyMaterialVersionHistoryOut,
   StudyMaterialVersionOut,
@@ -95,7 +96,7 @@ export const studyMaterialService = {
 
   async unpublish(
     nodeId: string,
-    payload: StudyMaterialPublishRequest
+    payload: StudyMaterialUnpublishRequest
   ): Promise<StudyMaterialVersionOut> {
     const response = await studyAgentClient.patch<StudyMaterialVersionOut>(
       `/nodes/${nodeId}/study-material/unpublish`,

@@ -1,4 +1,11 @@
 // src/features/quiz/types/quiz.types.ts
+import type {
+  LlmErrorType,
+  ProviderMetaOut,
+  RetentionMode,
+} from "../../study_material/types/studyMaterial.types";
+
+export type { RetentionMode };
 
 export type QuizDifficulty = "easy" | "medium" | "hard" | "mixed";
 export type CorrectOption = "A" | "B" | "C" | "D";
@@ -40,6 +47,19 @@ export interface QuizQualityCheckFlaggedQuestionOut {
   flags: string[];
 }
 
+export interface HintQuestionErrorOut {
+  question_id: string;
+  errorType: LlmErrorType;
+  attempts: number;
+}
+
+export interface HintGenerationDiagnosticsOut {
+  errorType?: LlmErrorType | null;
+  questionErrors?: HintQuestionErrorOut[];
+  retryAfterSeconds?: number | null;
+  nextLlmRetryAt?: string | null;
+}
+
 export interface QuizQualityCheckResultOut {
   overall_status: "pass" | "warn" | "fail";
   wrong_answer_risk: "none" | "low" | "medium" | "high";
@@ -48,13 +68,20 @@ export interface QuizQualityCheckResultOut {
   issues?: string[];
   corrective_instructions?: string;
   summary?: string;
+  errorType?: LlmErrorType | null;
+  suggestion?: string | null;
+  providerMeta?: ProviderMetaOut | null;
+  qcInfraError?: boolean | null;
+  retryAfterSeconds?: number | null;
+  nextLlmRetryAt?: string | null;
+  hintGeneration?: HintGenerationDiagnosticsOut | null;
 }
 
 export interface QuizOut {
   quiz_id: string;
   node_id: string;
   space_id: string;
-  study_material_version_id: string;
+  study_material_version_id: string | null;
   title: string;
   total_questions: number;
   difficulty: QuizDifficulty;
@@ -67,12 +94,28 @@ export interface QuizOut {
   questions: QuizQuestionOut[];
   qc_failed_permanently?: boolean;
   qc_result?: QuizQualityCheckResultOut | null;
+  next_llm_retry_at?: string | null;
+}
+
+export interface QuizHistoryItemOut {
+  quiz_id: string;
+  title: string;
+  status_badge: string;
+  lifecycle_status: string;
+  study_material_version_id: string | null;
+  version_label: string;
+  total_questions: number;
+  difficulty: QuizDifficulty;
+  published_at: string | null;
+  can_view: boolean;
+  can_delete: boolean;
 }
 
 export interface QuizMentorUiStateOut {
   node_id: string;
   resolved_quiz_id: string | null;
   quiz_draft_exists: boolean;
+  quiz_history: QuizHistoryItemOut[];
   published_study_material_version_id: string | null;
   can_generate_quiz: boolean;
   generate_disabled_tooltip: string | null;
@@ -85,20 +128,16 @@ export interface QuizMentorUiStateOut {
   publish_disabled_tooltip: string | null;
   can_edit_questions: boolean;
   can_regenerate_quiz: boolean;
-  edit_question_disabled_tooltip: string | null;
-  regenerate_quiz_disabled_tooltip: string | null;
   quiz: QuizOut | null;
-  is_linked_version_published: boolean;
-  is_stale_version: boolean;
-  linked_version_label: string | null;
-  current_published_version_label: string | null;
-  stale_helper_text: string | null;
-  generate_new_quiz_cta_label: string | null;
-  quiz_title_with_version: string | null;
+  show_update_quiz_nudge: boolean;
+  quiz_sm_version_label: string | null;
+  publish_quiz_button_label: string;
+  unpublish_quiz_button_label: string;
+  has_other_live_quiz: boolean;
+  other_live_quiz_title: string | null;
 }
 
 export interface QuizGenerateRequest {
-  study_material_version_id?: string;
   difficulty?: QuizDifficulty;
   title?: string;
   question_count?: number;
@@ -146,4 +185,15 @@ export interface QuizDeleteOut {
   quiz_id: string;
   node_id: string;
   deleted: boolean;
+}
+
+export interface QuizUnpublishPreviewOut {
+  requires_confirmation: boolean;
+  quiz_title: string;
+  trainees_attempt_count: number;
+  version_label?: string | null;
+}
+
+export interface QuizUnpublishRequest {
+  retention_mode: RetentionMode;
 }

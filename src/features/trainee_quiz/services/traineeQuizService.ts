@@ -6,6 +6,8 @@ import type {
   QuizQuestionResponseRequest,
   TraineeQuizAttemptListOut,
   TraineeQuizOut,
+  TraineeArchivedQuizListOut,
+  ArchivedQuizReviewOut,
 } from "../types/traineeQuiz.types";
 
 export const traineeQuizService = {
@@ -45,6 +47,18 @@ export const traineeQuizService = {
   submitAttempt(attemptId: string): Promise<QuizAttemptOut> {
     return studyAgentClient
       .post<QuizAttemptOut>(`/trainee/attempts/${attemptId}/submit`, {})
+      .then((r) => r.data);
+  },
+
+  listArchivedQuizzes(nodeId: string): Promise<TraineeArchivedQuizListOut> {
+    return studyAgentClient
+      .get<TraineeArchivedQuizListOut>(`/trainee/nodes/${nodeId}/quizzes/archive`)
+      .then((r) => r.data);
+  },
+
+  reviewArchivedQuiz(nodeId: string, quizId: string): Promise<ArchivedQuizReviewOut> {
+    return studyAgentClient
+      .get<ArchivedQuizReviewOut>(`/trainee/nodes/${nodeId}/quizzes/${quizId}/review`)
       .then((r) => r.data);
   },
 };

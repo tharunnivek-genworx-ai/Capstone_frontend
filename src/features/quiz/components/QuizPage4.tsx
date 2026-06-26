@@ -5,6 +5,9 @@ import type { TopicContentPage } from "../../spaces/types/node.types";
 import HintCard from "./HintCard";
 import HintRegenerateModal from "./HintRegenerateModal";
 import HintDeleteDraftModal from "./HintDeleteDraftModal";
+import QuizPublishConfirmModal from "./QuizPublishConfirmModal";
+import QuizUnpublishConfirmModal from "./QuizUnpublishConfirmModal";
+import HintGenerationDiagnosticsPanel from "./HintGenerationDiagnosticsPanel";
 
 interface QuizPage4Props {
   qz: UseQuizReturn;
@@ -18,10 +21,19 @@ const QuizPage4: React.FC<QuizPage4Props> = ({ qz, onPageChange }) => {
     questionText: string;
   } | null>(null);
 
-  if (qz.isLoadingQuiz) {
+  if (qz.isLoadingQuiz || (qz.isViewingHistoryQuiz && qz.isLoadingHistoryQuiz)) {
     return (
       <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center" }}>
         <span className="spinner" style={{ width: "2rem", height: "2rem", borderTopColor: "var(--color-primary)" }} />
+      </div>
+    );
+  }
+
+  if (!qz.quiz && qz.isGeneratingHints) {
+    return (
+      <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "0.75rem" }}>
+        <span className="spinner" style={{ width: "2rem", height: "2rem", borderTopColor: "var(--color-primary)" }} />
+        <p style={{ margin: 0, fontSize: "0.875rem", color: "var(--color-text-muted)" }}>Generating hints…</p>
       </div>
     );
   }
@@ -43,6 +55,13 @@ const QuizPage4: React.FC<QuizPage4Props> = ({ qz, onPageChange }) => {
   const hintsNone = quiz.hints_status === "none";
   const hintsPartial = quiz.hints_status === "partial";
   const hintsLocked = qz.hintsLocked;
+  const hintGeneration = quiz.qc_result?.hintGeneration;
+  const questionsById = new Map(
+    activeQuestions.map((question, index) => [
+      question.question_id,
+      { index, text: question.question_text },
+    ]),
+  );
 
   const handleScrollToQuestion = (questionId: string) => {
     onPageChange(3);
@@ -58,16 +77,6 @@ const QuizPage4: React.FC<QuizPage4Props> = ({ qz, onPageChange }) => {
 
   return (
     <div style={{ flex: 1, borderTop: "1px solid var(--color-border)", paddingTop: "1.25rem", display: "flex", flexDirection: "column", minHeight: 0 }}>
-      {qz.showStaleTabPrompt && (
-        <div style={{ marginBottom: "0.75rem", padding: "0.625rem 0.875rem", borderRadius: "var(--radius-md)", background: "var(--color-bg-surface-alt)", border: "1px solid var(--color-border)", display: "flex", alignItems: "center", justifyContent: "space-between", gap: "0.75rem" }}>
-          <span style={{ fontSize: "0.8125rem", color: "var(--color-text-secondary)" }}>
-            This page is outdated — the study material was updated elsewhere.
-          </span>
-          <button type="button" className="btn-secondary" onClick={qz.refreshQuizPage} style={{ fontSize: "0.8125rem" }}>
-            Refresh Page
-          </button>
-        </div>
-      )}
       {/* Top toolbar */}
       <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", marginBottom: "1rem", flexWrap: "wrap", flexShrink: 0 }}>
         <div style={{ flex: 1, minWidth: 0 }}>
@@ -85,7 +94,7 @@ const QuizPage4: React.FC<QuizPage4Props> = ({ qz, onPageChange }) => {
             </span>
             {quiz.is_published && (
               <span style={{ fontSize: "0.6875rem", fontWeight: 700, padding: "0.2rem 0.5rem", borderRadius: "var(--radius-sm)", background: "rgba(22,163,74,0.1)", color: "#16a34a", border: "1px solid #16a34a" }}>
-                Published
+                Live for students
               </span>
             )}
           </div>
@@ -98,7 +107,7 @@ const QuizPage4: React.FC<QuizPage4Props> = ({ qz, onPageChange }) => {
             disabled={quiz.is_published || hintsNone || qz.isDeletingHintsDraft}
             title={
               quiz.is_published
-                ? "Unpublish the quiz before deleting hints"
+                ? "Remove the quiz from students before deleting hints"
                 : hintsNone
                   ? "No hints have been generated yet"
                   : undefined
@@ -120,22 +129,22 @@ const QuizPage4: React.FC<QuizPage4Props> = ({ qz, onPageChange }) => {
             Delete Draft
           </button>
 
-          {/* Generate / Regenerate all hints — disabled when published or version unpublished */}
+          {/* Generate / Regenerate all hints */}
           {hintsNone ? (
             <button
               type="button"
               className="btn-primary"
               onClick={qz.handleGenerateHints}
-              disabled={qz.isGeneratingHints || !qz.canGenerateHints || !qz.isLinkedVersionPublished}
-              title={!qz.canGenerateHints ? (qz.hintsLockedTooltip ?? qz.editQuestionDisabledTooltip ?? undefined) : undefined}
+              disabled={qz.isGeneratingHints || !qz.canGenerateHints}
+              title={!qz.canGenerateHints ? (qz.hintsLockedTooltip ?? undefined) : undefined}
               style={{
                 padding: "0.4rem 0.875rem",
                 fontSize: "0.8125rem",
                 display: "flex",
                 alignItems: "center",
                 gap: "0.375rem",
-                opacity: (hintsLocked || !qz.isLinkedVersionPublished) ? 0.45 : 1,
-                cursor: (hintsLocked || !qz.isLinkedVersionPublished) ? "not-allowed" : "pointer",
+                opacity: hintsLocked ? 0.45 : 1,
+                cursor: hintsLocked ? "not-allowed" : "pointer",
               }}
             >
               {qz.isGeneratingHints ? (
@@ -149,16 +158,16 @@ const QuizPage4: React.FC<QuizPage4Props> = ({ qz, onPageChange }) => {
               type="button"
               className="btn-secondary"
               onClick={qz.handleRegenerateAllHints}
-              disabled={qz.isGeneratingHints || !qz.canRegenerateHints || !qz.isLinkedVersionPublished}
-              title={!qz.canGenerateHints ? (qz.hintsLockedTooltip ?? qz.editQuestionDisabledTooltip ?? undefined) : undefined}
+              disabled={qz.isGeneratingHints || !qz.canRegenerateHints}
+              title={!qz.canRegenerateHints ? (qz.hintsLockedTooltip ?? undefined) : undefined}
               style={{
                 padding: "0.4rem 0.875rem",
                 fontSize: "0.8125rem",
                 display: "flex",
                 alignItems: "center",
                 gap: "0.375rem",
-                opacity: (hintsLocked || !qz.isLinkedVersionPublished) ? 0.45 : 1,
-                cursor: (hintsLocked || !qz.isLinkedVersionPublished) ? "not-allowed" : "pointer",
+                opacity: hintsLocked ? 0.45 : 1,
+                cursor: hintsLocked ? "not-allowed" : "pointer",
               }}
             >
               {qz.isGeneratingHints ? (
@@ -174,15 +183,15 @@ const QuizPage4: React.FC<QuizPage4Props> = ({ qz, onPageChange }) => {
               type="button"
               className="btn-primary"
               onClick={qz.handlePublishQuiz}
-              disabled={!qz.canPublishQuiz || qz.isPublishing || !qz.isLinkedVersionPublished}
+              disabled={!qz.canPublishQuiz || qz.isPublishing}
               style={{
                 padding: "0.4rem 0.875rem",
                 fontSize: "0.8125rem",
-                opacity: (!qz.canPublishQuiz || !qz.isLinkedVersionPublished) ? 0.5 : 1,
-                cursor: (!qz.canPublishQuiz || !qz.isLinkedVersionPublished) ? "not-allowed" : "pointer",
+                opacity: !qz.canPublishQuiz ? 0.5 : 1,
+                cursor: !qz.canPublishQuiz ? "not-allowed" : "pointer",
               }}
             >
-              {qz.isPublishing ? "Publishing…" : "Publish Quiz"}
+              {qz.isPublishing ? "Making live…" : qz.publishQuizButtonLabel}
             </button>
           )}
 
@@ -190,11 +199,11 @@ const QuizPage4: React.FC<QuizPage4Props> = ({ qz, onPageChange }) => {
             <button
               type="button"
               className="btn-secondary"
-              onClick={qz.handleUnpublishQuiz}
+              onClick={() => void qz.handleUnpublishQuiz()}
               disabled={qz.isUnpublishing}
               style={{ padding: "0.4rem 0.875rem", fontSize: "0.8125rem" }}
             >
-              {qz.isUnpublishing ? "Unpublishing…" : "Unpublish Quiz"}
+              {qz.isUnpublishing ? "Removing…" : qz.unpublishQuizButtonLabel}
             </button>
           )}
         </div>
@@ -206,6 +215,14 @@ const QuizPage4: React.FC<QuizPage4Props> = ({ qz, onPageChange }) => {
           <span className="spinner" style={{ width: "1rem", height: "1rem", borderTopColor: "var(--color-primary)" }} />
           Generating hints for all questions…
         </div>
+      )}
+
+      {hintGeneration && (
+        <HintGenerationDiagnosticsPanel
+          hintGeneration={hintGeneration}
+          entityNextLlmRetryAt={quiz.next_llm_retry_at}
+          questionsById={questionsById}
+        />
       )}
 
       {/* Hint cards — infinitely scrollable */}
@@ -224,7 +241,7 @@ const QuizPage4: React.FC<QuizPage4Props> = ({ qz, onPageChange }) => {
               question={q}
               questionIndex={idx}
               isPublished={quiz.is_published}
-              isLinkedVersionPublished={qz.isLinkedVersionPublished}
+              canEdit={qz.canEditQuestions}
               isRegeneratingHints={qz.isGeneratingHints}
               onRequestRegenerateHints={(questionId) => {
                 setHintRegenerateTarget({
@@ -249,6 +266,25 @@ const QuizPage4: React.FC<QuizPage4Props> = ({ qz, onPageChange }) => {
             await qz.handleRegenerateHints(hintRegenerateTarget.questionId, feedback);
             setHintRegenerateTarget(null);
           }}
+        />
+      )}
+
+      {qz.showPublishConfirmModal && (
+        <QuizPublishConfirmModal
+          quizTitle={quiz.title}
+          otherLiveQuizTitle={qz.otherLiveQuizTitle}
+          isSubmitting={qz.isPublishing}
+          onClose={() => !qz.isPublishing && qz.setShowPublishConfirmModal(false)}
+          onConfirm={() => void qz.confirmPublishQuiz()}
+        />
+      )}
+
+      {qz.quizUnpublishPreview && (
+        <QuizUnpublishConfirmModal
+          preview={qz.quizUnpublishPreview}
+          isSubmitting={qz.isUnpublishing}
+          onClose={qz.closeUnpublishQuizModal}
+          onConfirm={(mode) => void qz.confirmUnpublishQuiz(mode)}
         />
       )}
 

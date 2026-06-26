@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import type { StudyMaterialFeedbackMode } from "../types/studyMaterial.types";
+import type { StudyMaterialFeedbackMode } from "../../types/studyMaterial.types";
 
 // Re-export for backward compatibility
 export type { StudyMaterialFeedbackMode };

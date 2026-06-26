@@ -57,7 +57,7 @@ const CreateSpaceModal: React.FC<CreateSpaceModalProps> = ({
         description: description.trim() || null,
         department_id: departmentId,
       });
-      toast.success("Space created!");
+      toast.success("Space created and published!");
       onSuccess(space);
     } catch (err) {
       const e = err as { response?: { data?: { detail?: string } }; message?: string };

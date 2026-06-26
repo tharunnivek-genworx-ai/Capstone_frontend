@@ -48,13 +48,8 @@ export interface NodeReparentRequest {
   new_order_index?: number | null;
 }
 
-export interface NodeReorderItem {
-  node_id: string;
-  order_index: number;
-}
-
 export interface NodeReorderRequest {
-  nodes: NodeReorderItem[];
+  direction: "up" | "down";
 }
 
 export interface NodeArchiveRequest {

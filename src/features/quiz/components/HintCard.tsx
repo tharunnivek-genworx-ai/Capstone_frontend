@@ -6,7 +6,7 @@ interface HintCardProps {
   question: QuizQuestionOut;
   questionIndex: number;
   isPublished: boolean;
-  isLinkedVersionPublished?: boolean;
+  canEdit?: boolean;
   isRegeneratingHints: boolean;
   onRequestRegenerateHints: (questionId: string) => void;
   onScrollToQuestion: (questionId: string) => void;
@@ -16,14 +16,14 @@ const HintCard: React.FC<HintCardProps> = ({
   question,
   questionIndex,
   isPublished,
-  isLinkedVersionPublished = true,
+  canEdit = true,
   isRegeneratingHints,
   onRequestRegenerateHints,
   onScrollToQuestion,
 }) => {
   const hasHints = question.hint_1 && question.hint_2 && question.hint_3;
   const hasAnyHint = Boolean(question.hint_1 || question.hint_2 || question.hint_3);
-  const canRegenerate = hasAnyHint && !isPublished && !isRegeneratingHints && isLinkedVersionPublished;
+  const canRegenerate = hasAnyHint && !isPublished && !isRegeneratingHints && canEdit;
 
   return (
     <div style={{
@@ -58,10 +58,10 @@ const HintCard: React.FC<HintCardProps> = ({
           onClick={() => canRegenerate && onRequestRegenerateHints(question.question_id)}
           disabled={!canRegenerate}
           title={
-            !isLinkedVersionPublished
-              ? "To edit or publish this quiz, first re-publish the associated study material version."
+            !canEdit
+              ? "Editing is not available for this quiz"
               : isPublished
-                ? "Unpublish the quiz to regenerate hints"
+                ? "Remove the quiz from students to edit hints"
                 : !hasAnyHint
                   ? "Generate hints for this question first"
                   : undefined

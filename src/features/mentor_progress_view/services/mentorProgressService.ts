@@ -18,4 +18,8 @@ export const mentorProgressService = {
     );
     return response.data;
   },
+
+  async syncSpaceProgress(spaceId: string): Promise<void> {
+    await studyAgentClient.post(`/spaces/${spaceId}/progress/recompute`);
+  },
 };

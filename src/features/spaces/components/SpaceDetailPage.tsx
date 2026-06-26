@@ -10,7 +10,7 @@ import toast from "react-hot-toast";
 import { spaceService } from "../services/spaceService";
 import { useTopicTree } from "../hooks/useTopicTree";
 import type { SpaceResponse, SpaceUnpublishPreviewOut, RepublishChecklistNode } from "../types/space.types";
-import type { NodeTreeNode, NodeUpdateInstructionRequest } from "../types/node.types";
+import type { NodeTreeNode, NodeUpdateInstructionRequest, NodeArchiveRequest } from "../types/node.types";
 import type { NodeStudyState, NodeStudyStatePatch } from "../../study_material/types/studyMaterial.types";
 import type { TopicContentPage } from "../types/node.types";
 import TopicTree from "./TopicTree";
@@ -25,7 +25,7 @@ import EspaceUnpublishConfirmModal from "./EspaceUnpublishConfirmModal";
 import EspaceRepublishChecklistModal from "./EspaceRepublishChecklistModal";
 import { useTraineeSpaceProgress } from "../../trainee_space_progress/hooks/useTraineeSpaceProgress";
 import SpaceProgressPanel from "../../trainee_space_progress/components/SpaceProgressPanel";
-import { useMentorSpaceProgress, MentorSpaceProgressPanel } from "../../mentor_progress_view";
+import { useMentorSpaceProgress, MentorSpaceProgressPanel, mentorProgressService } from "../../mentor_progress_view";
 
 function findNodeInTree(nodes: NodeTreeNode[], id: string): NodeTreeNode | null {
   for (const n of nodes) {
@@ -57,6 +57,7 @@ const SpaceDetailPage: React.FC = () => {
   const [unpublishPreview, setUnpublishPreview] = useState<SpaceUnpublishPreviewOut | null>(null);
   const [isLoadingUnpublishPreview, setIsLoadingUnpublishPreview] = useState(false);
   const [republishChecklist, setRepublishChecklist] = useState<RepublishChecklistNode[] | null>(null);
+  const [nodeContentRefreshTokens, setNodeContentRefreshTokens] = useState<Record<string, number>>({});
   const [isMoveMode, setIsMoveMode] = useState(false);
   const [treePanelWidth, setTreePanelWidth] = useState(340);
   const [nodeStudyStates, setNodeStudyStates] = useState<Map<string, NodeStudyState>>(new Map());
@@ -92,6 +93,8 @@ const SpaceDetailPage: React.FC = () => {
           studyMaterialContent: null,
           activeVersion: null,
           isGenerating: false,
+          isGeneratingQuiz: false,
+          isGeneratingHints: false,
           referenceMaterial: null,
           currentQuizId: null,
         };
@@ -103,13 +106,11 @@ const SpaceDetailPage: React.FC = () => {
     []
   );
 
-  const selectedNodeId = selectedNode?.node_id ?? null;
   const handleStudyStateChange = useCallback(
-    (patch: NodeStudyStatePatch) => {
-      if (!selectedNodeId) return;
-      updateNodeStudyState(selectedNodeId, patch);
+    (nodeId: string, patch: NodeStudyStatePatch) => {
+      updateNodeStudyState(nodeId, patch);
     },
-    [selectedNodeId, updateNodeStudyState]
+    [updateNodeStudyState]
   );
   const bodyRef = useRef<HTMLDivElement>(null);
   const isResizingRef = useRef(false);
@@ -123,13 +124,66 @@ const SpaceDetailPage: React.FC = () => {
     renameNode,
     updateNodeInstruction,
     reparentNode,
-    reorderNodes,
+    reorderNode,
     archiveNode,
     clearError: clearTreeError,
   } = useTopicTree();
 
+  const handleArchiveNode = useCallback(
+    async (nodeId: string, payload: NodeArchiveRequest) => {
+      await archiveNode(nodeId, payload);
+      if (!spaceId) return;
+      try {
+        await mentorProgressService.syncSpaceProgress(spaceId);
+        if (showSpaceProgress) {
+          void refreshMentorSpaceProgress();
+        }
+      } catch {
+        // Best-effort cache sync; live GET progress remains correct.
+      }
+    },
+    [archiveNode, spaceId, showSpaceProgress, refreshMentorSpaceProgress]
+  );
+
+  const handleMentorProgressRefresh = useCallback(() => {
+    if (showSpaceProgress) {
+      void refreshMentorSpaceProgress();
+    }
+  }, [showSpaceProgress, refreshMentorSpaceProgress]);
+
+  const handleRepublishContentPublished = useCallback(
+    (nodeId: string) => {
+      setNodeContentRefreshTokens((prev) => ({
+        ...prev,
+        [nodeId]: (prev[nodeId] ?? 0) + 1,
+      }));
+      handleMentorProgressRefresh();
+    },
+    [handleMentorProgressRefresh],
+  );
+
   useEffect(() => {
     if (!spaceId) return;
+
+    // Reset space-specific UI state when switching spaces
+    setSelectedNode(null);
+    setShowInviteModal(false);
+    setIsPublishing(false);
+    setIsEditingName(false);
+    setEditName("");
+    setEditDesc("");
+    setIsSavingEdit(false);
+    setCopied(false);
+    setShowManageTrainees(false);
+    setUnpublishPreview(null);
+    setIsLoadingUnpublishPreview(false);
+    setRepublishChecklist(null);
+    setNodeContentRefreshTokens({});
+    setIsMoveMode(false);
+    setNodeStudyStates(new Map());
+    setShowSpaceProgress(false);
+    setCameFromSpaceProgress(false);
+
     const load = async () => {
       setIsLoadingSpace(true);
       try {
@@ -274,6 +328,10 @@ const SpaceDetailPage: React.FC = () => {
       const updated = await spaceService.publishSpace(spaceId, { is_published: false });
       setSpace(updated);
       setUnpublishPreview(null);
+      await mentorProgressService.syncSpaceProgress(spaceId);
+      if (showSpaceProgress) {
+        void refreshMentorSpaceProgress();
+      }
       toast.success("Space unpublished.");
     } catch (err) {
       const e = err as { response?: { data?: { detail?: string } }; message?: string };
@@ -806,8 +864,8 @@ const SpaceDetailPage: React.FC = () => {
               onCreate={createNode}
               onRename={(nodeId, payload) => renameNode(nodeId, payload)}
               onMove={reparentNode}
-              onReorder={reorderNodes}
-              onArchive={archiveNode}
+              onReorder={(nodeId, direction) => reorderNode(spaceId!, nodeId, direction)}
+              onArchive={handleArchiveNode}
               isMentor={isMentor}
               onMoveModeChange={setIsMoveMode}
             />
@@ -863,6 +921,7 @@ const SpaceDetailPage: React.FC = () => {
                   isMentor={isMentor}
                   studyState={undefined}
                   onStudyStateChange={undefined}
+                  onMentorProgressRefresh={handleMentorProgressRefresh}
                 />
               )
             ) : (
@@ -876,6 +935,10 @@ const SpaceDetailPage: React.FC = () => {
                 isMentor={isMentor}
                 studyState={selectedNode ? getNodeStudyState(selectedNode.node_id) : undefined}
                 onStudyStateChange={selectedNode ? handleStudyStateChange : undefined}
+                onMentorProgressRefresh={handleMentorProgressRefresh}
+                contentRefreshToken={
+                  selectedNode ? nodeContentRefreshTokens[selectedNode.node_id] ?? 0 : 0
+                }
               />
             )
           ) : (
@@ -940,6 +1003,7 @@ const SpaceDetailPage: React.FC = () => {
           spaceName={space.space_name}
           nodes={republishChecklist}
           onClose={() => setRepublishChecklist(null)}
+          onContentPublished={handleRepublishContentPublished}
         />
       )}
     </div>

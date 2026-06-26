@@ -72,7 +72,12 @@ const TopicDetailPanel: React.FC<TopicDetailPanelProps> = ({ node, spaceId, onNa
     case "leaf-locked":
       return (
         <div className="topic-detail-panel">
-          <LeafLockedPanel panel={panel} onNavigate={onNavigate} />
+          <LeafLockedPanel
+            panel={panel}
+            spaceId={spaceId}
+            nodeId={node.node_id}
+            onNavigate={onNavigate}
+          />
         </div>
       );
     default:

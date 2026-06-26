@@ -53,6 +53,7 @@ export interface SpaceResponse {
   created_at: string;
   updated_at: string;
   archived_at: string | null;
+  is_transferred_away: boolean;
 }
 
 export interface SpaceMemberSummary {
@@ -84,6 +85,7 @@ export interface AdminMentorTransferredSpaceIn extends AdminMentorSpaceOut {
 export interface AdminMentorSpaceOverviewResponse {
   owned_spaces: AdminMentorSpaceOut[];
   transferred_in_spaces: AdminMentorTransferredSpaceIn[];
+  has_pending_transfers: boolean;
 }
 
 export interface AdminMentorSpaceListResponse {

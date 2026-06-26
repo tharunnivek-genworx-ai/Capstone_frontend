@@ -25,28 +25,10 @@ interface TopicTreeProps {
   onCreate: (spaceId: string, payload: NodeCreateRequest) => Promise<unknown>;
   onRename: (nodeId: string, payload: NodeRenameRequest) => Promise<unknown>;
   onMove: (spaceId: string, nodeId: string, payload: { new_parent_id: string | null; new_order_index?: number }) => Promise<void>;
-  onReorder: (spaceId: string, parentId: string | null, items: Array<{ node_id: string; order_index: number }>) => Promise<void>;
+  onReorder: (nodeId: string, direction: "up" | "down") => Promise<void>;
   onArchive: (nodeId: string, payload: { archive_children: boolean }) => Promise<void>;
   isMentor?: boolean;
   onMoveModeChange?: (active: boolean) => void;
-}
-
-// Find all siblings with the same parent
-function getSiblings(roots: NodeTreeNode[], parentId: string | null): NodeTreeNode[] {
-  if (parentId === null) return roots;
-  const found: NodeTreeNode[] = [];
-  const search = (nodes: NodeTreeNode[]): boolean => {
-    for (const n of nodes) {
-      if (n.node_id === parentId) {
-        found.push(...n.children);
-        return true;
-      }
-      if (search(n.children)) return true;
-    }
-    return false;
-  };
-  search(roots);
-  return found;
 }
 
 const TopicTree: React.FC<TopicTreeProps> = ({
@@ -168,20 +150,8 @@ const TopicTree: React.FC<TopicTreeProps> = ({
   };
 
   const handleMoveSibling = async (node: NodeTreeNode, direction: "up" | "down") => {
-    const parentId = findParentId(roots, node.node_id);
-    const siblings = getSiblings(roots, parentId);
-    const idx = siblings.findIndex((s) => s.node_id === node.node_id);
-    if (idx < 0) return;
-    if (direction === "up" && idx <= 0) return;
-    if (direction === "down" && idx >= siblings.length - 1) return;
-
-    const newIdx = direction === "up" ? idx - 1 : idx + 1;
-    const reordered = [...siblings];
-    [reordered[idx], reordered[newIdx]] = [reordered[newIdx], reordered[idx]];
-
-    const items = reordered.map((n, i) => ({ node_id: n.node_id, order_index: i }));
     try {
-      await onReorder(spaceId, parentId, items);
+      await onReorder(node.node_id, direction);
     } catch (err) {
       const e = err as { response?: { data?: { detail?: string } }; message?: string };
       toast.error(e?.response?.data?.detail ?? e?.message ?? "Reorder failed.");
