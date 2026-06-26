@@ -3,6 +3,7 @@ import React, { useState } from "react";
 import toast from "react-hot-toast";
 import { useMentors } from "../hooks/useMentors";
 import type { MentorOut } from "../types/account.types";
+import { accountService } from "../services/accountService";
 import TransferOwnershipModal from "./TransferOwnershipModal";
 
 interface MentorListProps {
@@ -14,6 +15,7 @@ const MentorList: React.FC<MentorListProps> = ({ refreshTrigger, onViewProfile }
   const { data, isLoading, error, page, goToNextPage, goToPrevPage, refetch, deactivateMentor, reactivateMentor } = useMentors(10);
   const [transferMentor, setTransferMentor] = useState<MentorOut | null>(null);
   const [deactivateMentorTarget, setDeactivateMentorTarget] = useState<MentorOut | null>(null);
+  const [isCheckingDeactivate, setIsCheckingDeactivate] = useState<string | null>(null);
 
   React.useEffect(() => {
     if (refreshTrigger) refetch();
@@ -23,6 +25,31 @@ const MentorList: React.FC<MentorListProps> = ({ refreshTrigger, onViewProfile }
     const result = await reactivateMentor(mentor.mentorid);
     if (result) toast.success(`${mentor.fullname} reactivated.`);
     else toast.error("Failed to reactivate.");
+  };
+
+  const handleDeactivateClick = async (mentor: MentorOut) => {
+    setIsCheckingDeactivate(mentor.mentorid);
+    try {
+      const spaceRes = await accountService.listMentorSpaces(mentor.mentorid);
+      if (spaceRes.has_pending_transfers) {
+        setDeactivateMentorTarget(mentor);
+      } else {
+        const confirm = window.confirm(`Are you sure you want to deactivate ${mentor.fullname}?`);
+        if (confirm) {
+          const result = await deactivateMentor(mentor.mentorid);
+          if (result) {
+            toast.success(`${mentor.fullname} deactivated.`);
+            refetch();
+          } else {
+            toast.error("Failed to deactivate mentor.");
+          }
+        }
+      }
+    } catch (err) {
+      toast.error("Failed to check mentor spaces.");
+    } finally {
+      setIsCheckingDeactivate(null);
+    }
   };
 
   const handleDeactivateComplete = async (): Promise<boolean> => {
@@ -98,9 +125,10 @@ const MentorList: React.FC<MentorListProps> = ({ refreshTrigger, onViewProfile }
                           <button
                             className="btn-danger"
                             style={{ padding: "0.3rem 0.65rem", fontSize: "0.75rem" }}
-                            onClick={() => setDeactivateMentorTarget(m)}
+                            disabled={isCheckingDeactivate === m.mentorid}
+                            onClick={() => void handleDeactivateClick(m)}
                           >
-                            Deactivate
+                            {isCheckingDeactivate === m.mentorid ? "Checking…" : "Deactivate"}
                           </button>
                         </>
                       ) : (

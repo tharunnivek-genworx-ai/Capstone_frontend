@@ -79,7 +79,7 @@ const DeleteDraftConfirmModal: React.FC<DeleteDraftConfirmModalProps> = ({
           </div>
           <div>
             <h2 style={{ margin: 0, fontSize: "1rem", fontWeight: 700, color: "var(--color-text-primary)" }}>
-              Delete all drafts
+              Discard unpublished drafts
             </h2>
             <p
               style={{
@@ -99,12 +99,13 @@ const DeleteDraftConfirmModal: React.FC<DeleteDraftConfirmModalProps> = ({
 
         <div style={{ padding: "1.5rem" }}>
           <p style={{ fontSize: "0.875rem", color: "var(--color-text-secondary)", margin: "0 0 1rem", lineHeight: 1.6 }}>
-            This removes all {versionCount} study material draft{versionCount === 1 ? "" : "s"} for this topic,
-            including archived versions. You&apos;ll return to the teaching page to generate fresh content
-            (reference PDFs will be parsed again).
+            This discards {versionCount} unpublished draft study material version{versionCount === 1 ? "" : "s"} from
+            your workspace for this topic. Live content and the student archive are not affected. You&apos;ll return to
+            the teaching page to generate fresh content (reference PDFs will be parsed again).
           </p>
           <p style={{ fontSize: "0.8125rem", color: "var(--color-text-muted)", margin: "0 0 1.25rem", lineHeight: 1.5 }}>
-            This cannot be undone. If a quiz has been generated for this topic, delete the quiz first.
+            Older versions students can still read in Previous versions will stay in the student archive. Delete or
+            unpublish any linked quiz first.
           </p>
 
           <div style={{ display: "flex", gap: "0.75rem" }}>
@@ -118,7 +119,7 @@ const DeleteDraftConfirmModal: React.FC<DeleteDraftConfirmModalProps> = ({
               style={{ flex: 1, padding: "0.625rem 1rem" }}
               disabled={isSubmitting}
             >
-              {isSubmitting ? "Deleting…" : "Delete drafts"}
+              {isSubmitting ? "Discarding…" : "Discard unpublished drafts"}
             </button>
           </div>
         </div>

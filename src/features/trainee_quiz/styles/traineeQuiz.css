@@ -723,3 +723,66 @@
 .trainee-space-detail-body main {
   margin-left: 12px;
 }
+
+/* Archived quiz review */
+.trainee-quiz-archive-review__version {
+  margin: 4px 0 16px;
+  font-size: 13px;
+  color: #64748b;
+}
+
+.trainee-quiz-archive-review__questions {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  margin: 20px 0;
+  text-align: left;
+}
+
+.trainee-quiz-archive-review__question h3 {
+  margin: 0 0 8px;
+  font-size: 15px;
+}
+
+.trainee-quiz-archive-review__removed {
+  font-size: 12px;
+  font-weight: 400;
+  color: #94a3b8;
+}
+
+.trainee-quiz-archive-review__options {
+  margin: 10px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.trainee-quiz-archive-review__option {
+  margin-bottom: 8px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid #e5e7eb;
+  font-size: 14px;
+}
+
+.trainee-quiz-archive-review__option--correct {
+  border-color: #86efac;
+  background: #f0fdf4;
+}
+
+.trainee-quiz-archive-review__option--wrong {
+  border-color: #fecaca;
+  background: #fef2f2;
+}
+
+.trainee-quiz-archive-review__explanation {
+  margin-top: 10px;
+  padding: 10px;
+  border-radius: 8px;
+  background: #f8fafc;
+  font-size: 13px;
+}
+
+.trainee-quiz-archive-review__mark {
+  color: #16a34a;
+  font-weight: 700;
+}

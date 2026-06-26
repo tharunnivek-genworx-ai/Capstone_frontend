@@ -24,6 +24,20 @@ const TopicQuizActions: React.FC<TopicQuizActionsProps> = ({
   return (
     <div className="topic-detail-panel__actions">
       {readAction}
+      {quiz.review_notice && (
+        <p
+          className="topic-detail-panel__review-notice"
+          style={{
+            margin: "0 0 0.5rem",
+            width: "100%",
+            fontSize: "0.8125rem",
+            color: "var(--color-text-muted)",
+            lineHeight: 1.45,
+          }}
+        >
+          {quiz.review_notice}
+        </p>
+      )}
       {quiz.show_quiz_button && (
         <button
           type="button"

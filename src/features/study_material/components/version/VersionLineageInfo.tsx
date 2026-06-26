@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
-import type { VersionLineageItem } from "../types/studyMaterial.types";
+import type { VersionLineageItem } from "../../types/studyMaterial.types";
 
 interface VersionLineageInfoProps {
   lineageChain: VersionLineageItem[];

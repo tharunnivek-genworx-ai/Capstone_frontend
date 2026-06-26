@@ -2,7 +2,6 @@
 import React, { useState, useEffect, useCallback } from "react";
 import toast from "react-hot-toast";
 import type {
-  EffectiveInstructionPart,
   NodeTreeNode,
   NodeUpdateInstructionRequest,
   TopicContentPage,
@@ -16,17 +15,20 @@ import type {
   ReferenceMaterialOut,
   StudyMaterialVersionOut,
 } from "../../study_material/types/studyMaterial.types";
-import StudyMaterialViewer from "../../study_material/components/StudyMaterialViewer";
-import StudyMaterialFeedbackModal from "../../study_material/components/StudyMaterialFeedbackModal";
-import StudyMaterialVersionPanel from "../../study_material/components/StudyMaterialVersionPanel";
-import StudyMaterialManualEditor from "../../study_material/components/StudyMaterialManualEditor";
+import StudentVisibilityBanner from "../../study_material/components/material/StudentVisibilityBanner";
+import StudyMaterialFeedbackModal from "../../study_material/components/material/StudyMaterialFeedbackModal";
+import StudyMaterialManualEditor from "../../study_material/components/material/StudyMaterialManualEditor";
 import TopicPageNav from "./TopicPageNav";
-import ReferenceMaterialModal from "../../study_material/components/ReferenceMaterialModal";
-import DeleteDraftConfirmModal from "../../study_material/components/DeleteDraftConfirmModal";
-import RegenerateStudyMaterialConfirmModal from "../../study_material/components/RegenerateStudyMaterialConfirmModal";
-import StudyMaterialPublishConfirmModal from "../../study_material/components/StudyMaterialPublishConfirmModal";
-import StudyMaterialUnpublishConfirmModal from "../../study_material/components/StudyMaterialUnpublishConfirmModal";
-import EspaceNotPublishedModal from "../../study_material/components/EspaceNotPublishedModal";
+import ReferenceMaterialModal from "../../study_material/components/reference/ReferenceMaterialModal";
+import NodeMediaModal from "../../study_material/components/reference/NodeMediaModal";
+import GenerateStudyMaterialPanel from "../../study_material/components/generate/GenerateStudyMaterialPanel";
+import StudyMaterialFocusModal from "../../study_material/components/material/StudyMaterialFocusModal";
+import DeleteDraftConfirmModal from "../../study_material/components/version/DeleteDraftConfirmModal";
+import RegenerateStudyMaterialConfirmModal from "../../study_material/components/version/RegenerateStudyMaterialConfirmModal";
+import StudyMaterialPublishConfirmModal from "../../study_material/components/version/StudyMaterialPublishConfirmModal";
+import StudyMaterialUnpublishConfirmModal from "../../study_material/components/version/StudyMaterialUnpublishConfirmModal";
+import StudyMaterialMentorWorkspace from "../../study_material/components/material/StudyMaterialMentorWorkspace";
+import EspaceNotPublishedModal from "../../study_material/components/space/EspaceNotPublishedModal";
 import QuizPage3 from "../../quiz/components/QuizPage3";
 import QuizPage4 from "../../quiz/components/QuizPage4";
 
@@ -52,43 +54,6 @@ function getDepthLabel(level: number): string {
   return "Nested Topic";
 }
 
-const MODE_LABELS: Record<InstructionMode, string> = {
-  inherit: "Use Parent's Settings",
-  extend: "Prompt for This Topic",
-  replace: "Set My Own Instructions",
-};
-
-const MODE_DESCRIPTIONS: Record<InstructionMode, string> = {
-  inherit: "AI will use the instructions set by the parent section. Nothing extra is saved for this topic.",
-  extend: "Add a prompt that applies only when generating study material for this topic. It is not passed to subtopics.",
-  replace: "AI ignores the parent section's instructions entirely and uses only what you write below.",
-};
-
-const MODE_HINTS: Record<InstructionMode, string> = {
-  inherit: "Currently using the parent section's instructions — no custom text saved for this topic.",
-  extend: "This prompt affects only this topic. You can still set a branch instruction for future subtopics separately.",
-  replace: "Using only what you write below — parent instructions are ignored for this topic.",
-};
-
-const modeButtonBase: React.CSSProperties = {
-  flex: 1,
-  padding: "0.5rem 0.625rem",
-  fontSize: "0.8125rem",
-  fontWeight: 600,
-  border: "1px solid var(--color-border)",
-  borderRadius: "var(--radius-md)",
-  cursor: "pointer",
-  transition: "all 0.15s",
-  background: "var(--color-bg-surface)",
-  color: "var(--color-text-secondary)",
-};
-
-const modeButtonActive: React.CSSProperties = {
-  ...modeButtonBase,
-  background: "var(--color-primary)",
-  color: "#fff",
-  borderColor: "var(--color-primary)",
-};
 
 interface NodeDetailPanelProps {
   node: NodeTreeNode | null;
@@ -104,10 +69,14 @@ interface NodeDetailPanelProps {
     studyMaterialContent: string | null;
     activeVersion: StudyMaterialVersionOut | null;
     isGenerating: boolean;
+    isGeneratingQuiz: boolean;
+    isGeneratingHints: boolean;
     referenceMaterial: ReferenceMaterialOut | null;
     currentQuizId: string | null;
   };
-  onStudyStateChange?: (patch: NodeStudyStatePatch) => void;
+  onStudyStateChange?: (nodeId: string, patch: NodeStudyStatePatch) => void;
+  onMentorProgressRefresh?: () => void;
+  contentRefreshToken?: number;
 }
 
 const NodeDetailPanel: React.FC<NodeDetailPanelProps> = ({
@@ -120,6 +89,8 @@ const NodeDetailPanel: React.FC<NodeDetailPanelProps> = ({
   isMentor = true,
   studyState,
   onStudyStateChange,
+  onMentorProgressRefresh,
+  contentRefreshToken = 0,
 }) => {
   // ── Instruction editing state (stays local — not study material) ─────────
   const [isRenaming, setIsRenaming] = useState(false);
@@ -128,10 +99,10 @@ const NodeDetailPanel: React.FC<NodeDetailPanelProps> = ({
   const [mode, setMode] = useState<InstructionMode>("inherit");
   const [modeText, setModeText] = useState("");
   const [branchDefault, setBranchDefault] = useState("");
-  const [showBranchPanel, setShowBranchPanel] = useState(false);
   const [isSavingInstruction, setIsSavingInstruction] = useState(false);
   const [hasAcceptedFailedQcByNode, setHasAcceptedFailedQcByNode] = useState<Record<string, boolean>>({});
   const [showSavedConfirm, setShowSavedConfirm] = useState(false);
+  const [showFocusModal, setShowFocusModal] = useState(false);
 
   // ── Study material hook ─────────────────────────────────────────────────
   const sm = useStudyMaterial({
@@ -141,6 +112,8 @@ const NodeDetailPanel: React.FC<NodeDetailPanelProps> = ({
     isMentor,
     studyState,
     onStudyStateChange,
+    onMentorProgressRefresh,
+    contentRefreshToken,
   });
 
   // ── Quiz hook ─────────────────────────────────────────────────────────────
@@ -151,8 +124,12 @@ const NodeDetailPanel: React.FC<NodeDetailPanelProps> = ({
     currentPage: sm.currentPage,
     canAccessQuiz: sm.canAccessQuiz,
     currentQuizId: studyState?.currentQuizId ?? null,
-    onQuizIdChange: (quizId) => onStudyStateChange?.({ currentQuizId: quizId }),
+    isGeneratingQuiz: studyState?.isGeneratingQuiz ?? false,
+    isGeneratingHints: studyState?.isGeneratingHints ?? false,
+    onNodeStudyStateChange: onStudyStateChange,
     onPageChange: sm.setCurrentPage,
+    onMentorProgressRefresh,
+    contentRefreshToken,
   });
 
   // ── Sync local instruction UI when node changes ─────────────────────────
@@ -171,10 +148,42 @@ const NodeDetailPanel: React.FC<NodeDetailPanelProps> = ({
 
   const previewParts = node?.effective_instruction_parts ?? [];
 
-  const getPreviewBorderColor = (part: EffectiveInstructionPart): string =>
-    part.type === "extra" || part.type === "override"
-      ? "var(--color-success)"
-      : "var(--color-primary)";
+  const renderGenerationSourceButton = (extraClassName = "") => (
+    <button
+      type="button"
+      className={`btn-secondary reference-materials-trigger reference-materials-trigger--generation ${extraClassName}`.trim()}
+      onClick={() => sm.setShowRefModal(true)}
+      title="PDF or document used by the AI when generating study material"
+    >
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+        <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" />
+        <polyline points="14 2 14 8 20 8" />
+        {sm.referenceMaterial
+          ? <polyline points="20 6 9 17 4 12" />
+          : <><line x1="12" y1="11" x2="12" y2="17" /><line x1="9" y1="14" x2="15" y2="14" /></>
+        }
+      </svg>
+      {sm.referenceMaterial ? sm.referenceMaterial.title : "Source document"}
+    </button>
+  );
+
+  const renderTopicResourcesButton = (extraClassName = "") => (
+    <button
+      type="button"
+      className={`btn-secondary reference-materials-trigger reference-materials-trigger--resources ${extraClassName}`.trim()}
+      onClick={() => sm.setShowNodeMediaModal(true)}
+      title="Images, links, and videos for trainees — not used by the AI generator"
+    >
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+        <rect x="3" y="3" width="18" height="18" rx="2" />
+        <circle cx="8.5" cy="8.5" r="1.5" />
+        <polyline points="21 15 16 10 5 21" />
+      </svg>
+      {sm.nodeMedia.length > 0
+        ? `Topic resources (${sm.nodeMedia.length})`
+        : "Topic resources"}
+    </button>
+  );
 
   const handleRenameSubmit = async () => {
     if (!renameValue.trim() || renameValue.trim() === node!.title) {
@@ -224,6 +233,16 @@ const NodeDetailPanel: React.FC<NodeDetailPanelProps> = ({
     },
     [node]
   );
+
+  const resetFromNode = useCallback(() => {
+    if (!node) return;
+    const detected = detectMode(node);
+    setMode(detected);
+    if (detected === "replace") setModeText(node.node_specific_instruction ?? "");
+    else if (detected === "extend") setModeText(node.node_additive_instruction ?? "");
+    else setModeText("");
+    setBranchDefault(node.tree_default_instruction ?? "");
+  }, [node]);
 
   // ── Instruction change banner JSX ───────────────────────────────────────
   const instructionChangeBanner = sm.showInstructionChangeBanner ? (
@@ -313,50 +332,6 @@ const NodeDetailPanel: React.FC<NodeDetailPanelProps> = ({
                 <p style={{ margin: "0.375rem 0 0", fontSize: "13px", color: "var(--color-text-secondary)", lineHeight: 1.4 }}>
                   {metadataParts.join(" · ")}
                 </p>
-                {isMentor && sm.currentPage === 1 && (
-                  <div className="node-detail-branch" style={{ marginTop: "0.75rem", maxWidth: "min(360px, 100%)" }}>
-                    <button type="button" id="branch-default-toggle" onClick={() => setShowBranchPanel((v) => !v)}
-                      style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "space-between", gap: "0.5rem", padding: "0.5rem 0.75rem", background: "var(--color-bg-surface)", border: `1px solid ${branchDefault.trim() ? "var(--color-primary)" : "var(--color-border)"}`, borderRadius: "var(--radius-lg)", cursor: "pointer", fontSize: "0.75rem", fontWeight: 600, color: "var(--color-text-secondary)", boxShadow: "var(--shadow-subtle)" }}>
-                      <span style={{ textAlign: "left", lineHeight: 1.3 }}>
-                        Instruction for This Topic Branch{branchDefault.trim() ? " ●" : ""}
-                      </span>
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ transform: showBranchPanel ? "rotate(180deg)" : "rotate(0deg)", transition: "transform 0.2s", flexShrink: 0 }}>
-                        <polyline points="6 9 12 15 18 9" />
-                      </svg>
-                    </button>
-                    {showBranchPanel && (
-                      <div className="node-detail-branch__panel">
-                        <textarea id="branch-default-instruction" className="input-field"
-                          placeholder="Default instruction for all subtopics in this branch…"
-                          value={branchDefault} onChange={(e) => setBranchDefault(e.target.value)}
-                          rows={4} style={{ resize: "vertical", minHeight: "88px", fontSize: "0.8125rem" }} />
-                        <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between", gap: "0.75rem", marginTop: "0.5rem", flexWrap: "wrap" }}>
-                          <p style={{ fontSize: "0.6875rem", color: "var(--color-text-muted)", margin: 0, lineHeight: 1.4, flex: 1, minWidth: "140px" }}>
-                            Applies to subtopics in this branch. Topic-only prompts are never inherited.
-                          </p>
-                          <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", flexShrink: 0 }}>
-                            {showSavedConfirm && (
-                              <span className="save-confirm-fade" style={{ display: "inline-flex", alignItems: "center", gap: "0.25rem", fontSize: "0.75rem", fontWeight: 600, color: "var(--color-success)" }}>
-                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="20 6 9 17 4 12" /></svg>
-                                Saved
-                              </span>
-                            )}
-                            <button
-                              type="button"
-                              id="save-branch-instruction-btn"
-                              onClick={handleSaveInstruction}
-                              className="btn-primary"
-                              style={{ height: "32px", padding: "0 0.75rem", fontSize: "0.75rem", whiteSpace: "nowrap" }}
-                              disabled={isSavingInstruction}
-                            >
-                              {isSavingInstruction ? <><span className="spinner" />Saving…</> : "Save Instructions"}
-                            </button>
-                          </div>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                )}
               </>
             )}
           </div>
@@ -366,22 +341,22 @@ const NodeDetailPanel: React.FC<NodeDetailPanelProps> = ({
             // ── Compute accurate tab tooltips from backend state ─────────────
             // Quiz tab: three distinct locked states
             let quizDisabledTooltip: string;
-            if (!sm.mentorUiState?.has_versions) {
-              quizDisabledTooltip = "Generate study material first";
-            } else if (spaceIsPublished === false) {
-              quizDisabledTooltip = "Publish the space to access Quiz";
-            } else if (!sm.mentorUiState?.published_version_id) {
-              quizDisabledTooltip = "Publish study material to access Quiz";
+            if (!sm.canAccessQuiz) {
+              if (!sm.mentorUiState?.has_versions) {
+                quizDisabledTooltip = "Generate study material first";
+              } else if (spaceIsPublished === false) {
+                quizDisabledTooltip = "Publish the space to access Quiz";
+              } else {
+                quizDisabledTooltip = "Generate study material first";
+              }
             } else {
               quizDisabledTooltip = "Generate study material first";
             }
 
-            // Hints tab: locked until a quiz exists, or if version is stale
+            // Hints tab: locked until a quiz exists
             let hintsDisabledTooltip: string;
-            if (qz.isStaleVersion) {
-              hintsDisabledTooltip = "Study material was updated — generate a new quiz first";
-            } else if (!qz.canAccessHints && qz.quizDraftExists) {
-              hintsDisabledTooltip = "Quiz must be in an accessible state to view Hints";
+            if (!qz.canAccessHints && qz.quizDraftExists) {
+              hintsDisabledTooltip = qz.hintsLockedTooltip ?? "Quiz must be in an accessible state to view Hints";
             } else {
               hintsDisabledTooltip = "Generate a quiz first";
             }
@@ -409,170 +384,27 @@ const NodeDetailPanel: React.FC<NodeDetailPanelProps> = ({
         {/* Mentor pages */}
         {isMentor && (
           <>
-        {/* PAGE 1 — Teaching settings */}
+        {/* PAGE 1 — Generate / AI Draft */}
         {sm.currentPage === 1 && (
           <div style={{ borderTop: "1px solid var(--color-border)", paddingTop: "1.25rem", flex: 1, minHeight: 0, overflowY: "auto" }}>
-            {instructionChangeBanner}
-            <h3 style={{ fontSize: "15px", fontWeight: 600, color: "var(--color-text-primary)", margin: "0 0 0.375rem" }}>
-              How should AI teach this topic?
-            </h3>
-            <p style={{ fontSize: "0.8125rem", color: "var(--color-text-secondary)", margin: "0 0 1rem", lineHeight: 1.5 }}>
-              Control how the AI will approach this topic when generating study material.
-            </p>
-
-            <div style={{ display: "flex", gap: "0.375rem", marginBottom: "0.75rem" }}>
-              {(["inherit", "extend", "replace"] as InstructionMode[]).map((m) => (
-                <button key={m} id={`instruction-mode-${m}`} onClick={() => handleModeChange(m)}
-                  style={mode === m ? modeButtonActive : modeButtonBase}>
-                  {MODE_LABELS[m]}
-                </button>
-              ))}
-            </div>
-
-            <p style={{ fontSize: "0.8125rem", color: "var(--color-text-secondary)", margin: "0 0 0.5rem", lineHeight: 1.5 }}>
-              {MODE_DESCRIPTIONS[mode]}
-            </p>
-            <p style={{ fontSize: "12px", color: "var(--color-text-muted)", fontStyle: "italic", margin: "0 0 0.875rem", lineHeight: 1.5 }}>
-              {MODE_HINTS[mode]}
-            </p>
-
-            <div className={`instruction-editor-collapse ${mode !== "inherit" ? "instruction-editor-collapse--visible" : "instruction-editor-collapse--hidden"}`} style={{ marginBottom: "1rem" }}>
-              <label htmlFor="instruction-text" className="label">
-                {mode === "extend" ? "Prompt for this topic" : "Your custom instructions for this topic"}
-              </label>
-              <textarea id="instruction-text" className="input-field instruction-textarea"
-                placeholder={mode === "extend" ? "e.g. Include one short code snippet. Keep it practical." : "e.g. Explain this only for experienced Python developers. Skip beginner context."}
-                value={modeText} onChange={(e) => setModeText(e.target.value)} rows={4} />
-            </div>
-
-            {/* AI Instruction Preview header row */}
-            <div style={{ marginBottom: "0.5rem" }}>
-              <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: "1rem", marginBottom: "0.5rem" }}>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <span style={{ fontSize: "0.8125rem", fontWeight: 600, color: "var(--color-text-primary)" }}>
-                    AI Instruction Preview
-                  </span>
-                  <p style={{ fontSize: "11px", color: "var(--color-text-muted)", margin: "0.25rem 0 0", lineHeight: 1.4 }}>
-                    This is exactly how AI will be guided when generating content for this topic.
-                  </p>
-                </div>
-                <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", flexShrink: 0 }}>
-                  {showSavedConfirm && (
-                    <span className="save-confirm-fade" style={{ display: "inline-flex", alignItems: "center", gap: "0.375rem", fontSize: "0.8125rem", fontWeight: 600, color: "var(--color-success)" }}>
-                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="20 6 9 17 4 12" /></svg>
-                      Saved
-                    </span>
-                  )}
-                  <button id="save-instruction-btn" onClick={handleSaveInstruction} className="btn-primary"
-                    style={{ height: "36px", minWidth: "160px", padding: "0 0.875rem", whiteSpace: "nowrap" }}
-                    disabled={isSavingInstruction}>
-                    {isSavingInstruction ? <><span className="spinner" />Saving…</> : "Save Teaching Settings"}
-                  </button>
-                </div>
-              </div>
-
-              {/* Preview box */}
-              <div style={{ background: "var(--color-bg-surface-alt)", border: "1px solid var(--color-border)", borderRadius: "var(--radius-lg)", padding: "0.75rem", minHeight: "56px" }}>
-                {previewParts.length > 0 ? (
-                  <div style={{ display: "flex", flexDirection: "column", gap: "0.875rem" }}>
-                    {previewParts.map((part, idx) => (
-                      <div key={idx}>
-                        <div style={{ fontSize: "0.75rem", fontWeight: 500, color: "var(--color-text-muted)", marginBottom: "0.25rem" }}>
-                          {part.type === "inherited" ? (
-                            <span style={{ cursor: "pointer", textDecoration: "underline" }} onClick={() => onNavigateToNode(part.source_node_id)} title={`Go to: ${part.source_node_title}`}>
-                              {part.label}
-                            </span>
-                          ) : part.label}
-                        </div>
-                        <pre style={{ margin: 0, fontSize: "0.8125rem", color: "var(--color-text-secondary)", whiteSpace: "pre-wrap", wordBreak: "break-word", fontFamily: "inherit", lineHeight: 1.6, borderLeft: `2px solid ${getPreviewBorderColor(part)}`, paddingLeft: "0.75rem" }}>
-                          {part.text}
-                        </pre>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <p style={{ margin: 0, fontSize: "0.8125rem", color: "var(--color-text-muted)", fontStyle: "italic" }}>
-                    No instructions set yet. AI will use its default teaching style.
-                  </p>
-                )}
-              </div>
-
-              {/* Reference material + Generate row */}
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: "0.875rem", gap: "0.75rem", flexWrap: "wrap" }}>
-                {/* Reference material button */}
-                <button
-                  type="button"
-                  className="btn-secondary"
-                  onClick={() => sm.setShowRefModal(true)}
-                  style={{
-                    display: "inline-flex",
-                    alignItems: "center",
-                    gap: "0.4rem",
-                    fontSize: "0.8125rem",
-                    fontWeight: 600,
-                    padding: "0 0.875rem",
-                    height: "36px",
-                    borderColor: sm.referenceMaterial ? "var(--color-success)" : "var(--color-border)",
-                    color: sm.referenceMaterial ? "var(--color-success)" : "var(--color-text-secondary)",
-                  }}
-                >
-                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" />
-                    <polyline points="14 2 14 8 20 8" />
-                    {sm.referenceMaterial
-                      ? <polyline points="20 6 9 17 4 12" />
-                      : <line x1="12" y1="9" x2="12" y2="15" />
-                    }
-                    {!sm.referenceMaterial && <line x1="9" y1="12" x2="15" y2="12" />}
-                  </svg>
-                  {sm.referenceMaterial ? sm.referenceMaterial.title : "Add Reference Material"}
-                </button>
-
-                {sm.hasTriggeredGeneration ? (
-                  <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap", justifyContent: "flex-end" }}>
-                    <button
-                      type="button"
-                      className="btn-secondary"
-                      onClick={() => sm.setCurrentPage(2)}
-                      style={{ fontWeight: 600, borderColor: "var(--color-primary)", color: "var(--color-primary)", minWidth: "190px", height: "36px" }}
-                    >
-                      Open Study Material →
-                    </button>
-                    <button
-                      type="button"
-                      className="btn-secondary"
-                      onClick={() => sm.setShowRegenerateConfirmModal(true)}
-                      disabled={!sm.canClearAllDrafts || sm.isGenerating || sm.isDeletingDrafts}
-                      title={
-                        sm.canClearAllDrafts
-                          ? "Delete all drafts and generate fresh study material"
-                          : sm.clearDraftsBlockReason
-                      }
-                      style={{
-                        fontWeight: 600,
-                        borderColor: "var(--color-primary)",
-                        color: "var(--color-primary)",
-                        minWidth: "190px",
-                        height: "36px",
-                      }}
-                    >
-                      {sm.isDeletingDrafts || sm.isGenerating ? "Working…" : "Regenerate Study Materials"}
-                    </button>
-                  </div>
-                ) : (
-                  <button
-                    id="generate-study-material-btn"
-                    type="button"
-                    className="btn-secondary"
-                    onClick={sm.handleGenerateStudyMaterial}
-                    disabled={sm.isGenerating}
-                    style={{ fontWeight: 600, borderColor: "var(--color-primary)", color: "var(--color-primary)", minWidth: "190px", height: "36px" }}
-                  >
-                    {sm.isGenerating ? "Generating…" : "Generate Study Materials"}
-                  </button>
-                )}
-              </div>
-            </div>
+            <GenerateStudyMaterialPanel
+              node={node}
+              mode={mode}
+              onModeChange={handleModeChange}
+              modeText={modeText}
+              onModeTextChange={setModeText}
+              branchDefault={branchDefault}
+              onBranchDefaultChange={setBranchDefault}
+              previewParts={previewParts}
+              isSaving={isSavingInstruction}
+              showSavedConfirm={showSavedConfirm}
+              onSave={handleSaveInstruction}
+              onDiscard={resetFromNode}
+              onNavigateToNode={onNavigateToNode}
+              sm={sm}
+              onOpenRefModal={() => sm.setShowRefModal(true)}
+              onOpenMediaModal={() => sm.setShowNodeMediaModal(true)}
+            />
           </div>
         )}
 
@@ -590,426 +422,63 @@ const NodeDetailPanel: React.FC<NodeDetailPanelProps> = ({
                   The AI is updating study content for &ldquo;{node.title}&rdquo;. This may take a minute.
                 </p>
               </div>
-            ) : sm.studyMaterialContent ? (
+            ) : sm.studyMaterialContent?.trim() ? (
               <>
-                {isMentor && !sm.isManualEditMode && (
-                  <div className="study-material-page__toolbar">
-                    <div className="study-material-page__actions">
-                      <button
-                        type="button"
-                        className="btn-secondary study-material-page__action-btn"
-                        onClick={() => sm.setFeedbackModalMode("regenerate")}
-                        disabled={!sm.canEditActiveDraft}
-                        title={
-                          sm.canEditActiveDraft
-                            ? undefined
-                            : sm.isViewingNonActiveVersion
-                              ? "Return to the active draft to regenerate"
-                              : "Set this version as your working draft to regenerate it"
-                        }
-                      >
-                        Regenerate
-                      </button>
-                      <button
-                        type="button"
-                        className="btn-secondary study-material-page__action-btn"
-                        onClick={() => sm.setFeedbackModalMode("improve")}
-                        disabled={!sm.canEditActiveDraft}
-                        title={
-                          sm.canEditActiveDraft ? undefined : "Return to the active draft to improve it"
-                        }
-                      >
-                        Improve
-                      </button>
-                      <button
-                        type="button"
-                        className="btn-secondary study-material-page__action-btn"
-                        onClick={() => sm.setIsManualEditMode(true)}
-                        disabled={!sm.canEditActiveDraft}
-                        title={
-                          sm.canEditActiveDraft ? undefined : "Return to the active draft to edit it"
-                        }
-                      >
-                        Manual edit
-                      </button>
-                      <button
-                        type="button"
-                        className={`btn-secondary study-material-page__action-btn study-material-page__archive-toggle${
-                          sm.showArchivedPanel ? " study-material-page__archive-toggle--active" : ""
-                        }`}
-                        onClick={() => sm.setShowArchivedPanel((v) => !v)}
-                        title="View archived drafts"
-                      >
-                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                          <polyline points="21 8 21 21 3 21 3 8" />
-                          <rect x="1" y="3" width="22" height="5" />
-                          <line x1="10" y1="12" x2="14" y2="12" />
-                        </svg>
-                        Archived
-                        {sm.archivedVersionHistory.length > 0 && (
-                          <span className="study-material-page__archive-count">
-                            {sm.archivedVersionHistory.length}
-                          </span>
-                        )}
-                      </button>
-                      <button
-                        type="button"
-                        className="btn-secondary study-material-page__action-btn study-material-page__delete-draft-btn"
-                        onClick={() => sm.setShowDeleteDraftModal(true)}
-                        disabled={!sm.canClearAllDrafts || sm.isDeletingDrafts}
-                        title={
-                          sm.canClearAllDrafts
-                            ? "Remove all drafts and start fresh on the teaching page"
-                            : sm.clearDraftsBlockReason
-                        }
-                      >
-                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                          <polyline points="3 6 5 6 21 6" />
-                          <path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6" />
-                          <path d="M10 11v6M14 11v6" />
-                          <path d="M9 6V4a1 1 0 011-1h4a1 1 0 011 1v2" />
-                        </svg>
-                        Delete draft
-                      </button>
-                    </div>
-                    {sm.isViewingArchivedVersion && (
-                      <div className="study-material-page__viewing-notice">
-                        <div className="study-material-page__viewing-banner study-material-page__viewing-banner--archived">
-                          <span>Viewing an archived draft — not in your working history.</span>
-                        </div>
-                        {sm.displayedVersionId && (
-                          <button
-                            type="button"
-                            className="btn-primary study-material-page__activate-btn"
-                            onClick={sm.handleUnarchiveCurrentVersion}
-                            disabled={sm.isUnarchivingVersion}
-                          >
-                            {sm.isUnarchivingVersion ? "Restoring…" : "Unarchive"}
-                          </button>
-                        )}
-                      </div>
-                    )}
-                    {!sm.isViewingArchivedVersion && sm.isViewingNonActiveVersion && (
-                      <div className="study-material-page__viewing-notice">
-                        <div className="study-material-page__viewing-banner">
-                          <span>
-                            This is not the active draft you are working on. Want to set it?
-                          </span>
-                          <button
-                            type="button"
-                            className="study-material-page__banner-link"
-                            onClick={sm.handleReturnToActiveDraft}
-                          >
-                            Back to active draft
-                          </button>
-                        </div>
-                        <button
-                          type="button"
-                          className="btn-primary study-material-page__activate-btn"
-                          onClick={() => sm.handleActivateVersion(sm.viewingVersionId!)}
-                          disabled={sm.isActivatingVersion}
-                        >
-                          {sm.isActivatingVersion ? "Setting…" : "Set as active draft"}
-                        </button>
-                      </div>
-                    )}
-                  </div>
+                {isMentor && !sm.isManualEditMode && sm.mentorUiState?.student_visibility && (
+                  <StudentVisibilityBanner
+                    visibility={sm.mentorUiState.student_visibility}
+                    onShowStudentArchive={sm.expandStudentArchive}
+                  />
                 )}
-
-                <div className="study-material-page__workspace">
-                  <div className="study-material-page__main">
-                    {isMentor && sm.isManualEditMode ? (
-                      <StudyMaterialManualEditor
-                        initialContent={sm.studyMaterialContent}
-                        title={node.title}
-                        versionLabel={sm.activeVersion?.display_label ?? null}
-                        isSaving={sm.isSavingManualEdit}
-                        onCancel={() => sm.setIsManualEditMode(false)}
-                        onSave={sm.handleManualEditSave}
-                      />
-                    ) : (
-                      <StudyMaterialViewer
-                        nodeId={node.node_id}
-                        content={sm.studyMaterialContent}
-                        title={node.title}
-                        versionLabel={sm.displayedVersionSummary?.display_label ?? sm.activeVersion?.display_label ?? null}
-                        referenceMaterialId={
-                          sm.activeVersion?.reference_material_id ??
-                          sm.referenceMaterial?.material_id ??
-                          null
-                        }
-                        referenceImagesRefreshKey={
-                          sm.viewingVersionId ?? sm.activeVersion?.version_id ?? sm.studyMaterialContent
-                        }
-                        canArchive={sm.canArchiveDisplayedVersion}
-                        isArchiving={sm.isArchivingVersion}
-                        onArchive={sm.handleArchiveCurrentVersion}
-                        lineageChain={sm.displayedVersionSummary?.lineage_chain ?? []}
-                        onSelectLineageVersion={sm.handleSelectVersion}
-                        canPublish={sm.canPublishDisplayedVersion}
-                        canUnpublish={sm.canUnpublishDisplayedVersion}
-                        publishButtonLabel={sm.publishButtonLabel}
-                        publishDisabledTooltip={sm.publishDisabledTooltip}
-                        unpublishDisabledTooltip={sm.unpublishDisabledTooltip}
-                        isPublishing={sm.isPublishingVersion}
-                        isUnpublishing={sm.isUnpublishingVersion}
-                        onPublish={sm.handlePublishCurrentVersion}
-                        onUnpublish={sm.handleUnpublishCurrentVersion}
-                      />
-                    )}
-                  </div>
-
-                  {isMentor && !sm.isManualEditMode && (() => {
-                    const hasAcceptedFailedQc = node ? !!hasAcceptedFailedQcByNode[node.node_id] : false;
-                    const showQcWarning = !!(sm.activeVersion?.qc_failed_permanently && !hasAcceptedFailedQc);
-
-                    if (showQcWarning) {
-                      return (
-                        <div
-                          className="study-material-qc-warning-panel animate-fade-in"
-                          style={{
-                            width: "360px",
-                            flexShrink: 0,
-                            display: "flex",
-                            flexDirection: "column",
-                            borderLeft: "1px solid var(--color-border)",
-                            background: "var(--color-bg-surface-alt)",
-                            padding: "1rem",
-                            overflowY: "auto",
-                            gap: "1rem",
-                          }}
-                        >
-                          {/* Warning Header */}
-                          <div
-                            style={{
-                              border: "1px solid #d97706",
-                              backgroundColor: "#fffbeb",
-                              borderRadius: "var(--radius-lg)",
-                              padding: "0.875rem",
-                              display: "flex",
-                              flexDirection: "column",
-                              gap: "0.5rem",
-                            }}
-                          >
-                            <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
-                              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#d97706" strokeWidth="2.5">
-                                <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
-                                <line x1="12" y1="9" x2="12" y2="13" />
-                                <line x1="12" y1="17" x2="12.01" y2="17" />
-                              </svg>
-                              <span style={{ fontSize: "0.9375rem", fontWeight: 700, color: "#92400e" }}>
-                                Quality Check Failed
-                              </span>
-                            </div>
-                            <p style={{ margin: 0, fontSize: "0.8125rem", color: "#b45309", lineHeight: 1.45 }}>
-                              This generated study material did not meet quality standards after 3 attempts. Please inspect the draft on the left before deciding how to proceed.
-                            </p>
-                          </div>
-
-                          {/* Choices Box */}
-                          <div
-                            style={{
-                              background: "var(--color-bg-surface)",
-                              border: "1px solid var(--color-border)",
-                              borderRadius: "var(--radius-lg)",
-                              padding: "1rem",
-                              boxShadow: "var(--shadow-subtle)",
-                              display: "flex",
-                              flexDirection: "column",
-                              gap: "0.75rem",
-                            }}
-                          >
-                            <span style={{ fontSize: "0.8125rem", fontWeight: 600, color: "var(--color-text-primary)" }}>
-                              How do you want to proceed?
-                            </span>
-                            <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
-                              <button
-                                type="button"
-                                className="btn-primary"
-                                onClick={() => {
-                                  if (node) {
-                                    setHasAcceptedFailedQcByNode((prev) => ({
-                                      ...prev,
-                                      [node.node_id]: true,
-                                    }));
-                                  }
-                                }}
-                                style={{
-                                  width: "100%",
-                                  height: "36px",
-                                  fontSize: "0.8125rem",
-                                  fontWeight: 600,
-                                }}
-                              >
-                                Continue with this draft
-                              </button>
-                              <button
-                                type="button"
-                                className="btn-secondary"
-                                onClick={() => {
-                                  sm.setShowDeleteDraftModal(true);
-                                }}
-                                style={{
-                                  width: "100%",
-                                  height: "36px",
-                                  fontSize: "0.8125rem",
-                                  fontWeight: 600,
-                                  borderColor: "var(--color-danger)",
-                                  color: "var(--color-danger)",
-                                }}
-                              >
-                                Delete draft & start over
-                              </button>
-                            </div>
-                          </div>
-
-                          {/* QC Report Details */}
-                          {sm.activeVersion?.qc_result && (
-                            <div
-                              style={{
-                                display: "flex",
-                                flexDirection: "column",
-                                gap: "0.875rem",
-                                background: "var(--color-bg-surface)",
-                                border: "1px solid var(--color-border)",
-                                borderRadius: "var(--radius-lg)",
-                                padding: "1rem",
-                                boxShadow: "var(--shadow-subtle)",
-                              }}
-                            >
-                              <span style={{ fontSize: "0.875rem", fontWeight: 700, color: "var(--color-text-primary)" }}>
-                                QC Evaluation Report
-                              </span>
-
-                              {/* Scores */}
-                              <div style={{ display: "flex", flexDirection: "column", gap: "0.375rem" }}>
-                                <span style={{ fontSize: "0.75rem", fontWeight: 600, color: "var(--color-text-secondary)" }}>
-                                  Scores:
-                                </span>
-                                <div
-                                  style={{
-                                    display: "grid",
-                                    gridTemplateColumns: "1fr 1fr",
-                                    gap: "0.5rem 0.75rem",
-                                    fontSize: "0.75rem",
-                                    color: "var(--color-text-secondary)",
-                                  }}
-                                >
-                                  <div>Structure: <strong>{sm.activeVersion.qc_result.scores.structure ?? 0}/10</strong></div>
-                                  <div>Accuracy: <strong>{sm.activeVersion.qc_result.scores.content_accuracy ?? 0}/10</strong></div>
-                                  <div>Code Quality: <strong>{sm.activeVersion.qc_result.scores.code_quality ?? 0}/10</strong></div>
-                                  <div>Readability: <strong>{sm.activeVersion.qc_result.scores.readability ?? 0}/10</strong></div>
-                                  <div>Section Depth: <strong>{sm.activeVersion.qc_result.scores.section_depth ?? 0}/10</strong></div>
-                                  <div>Alignment: <strong>{sm.activeVersion.qc_result.scores.teaching_alignment ?? 0}/10</strong></div>
-                                </div>
-                              </div>
-
-                              <div style={{ borderTop: "1px solid var(--color-border)", margin: "0.25rem 0" }} />
-
-                              {/* Hallucination Risk */}
-                              <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.8125rem" }}>
-                                <span style={{ color: "var(--color-text-secondary)" }}>Hallucination Risk:</span>
-                                <span
-                                  style={{
-                                    fontWeight: 700,
-                                    color: sm.activeVersion.qc_result.hallucination_risk === "none"
-                                      ? "var(--color-success)"
-                                      : sm.activeVersion.qc_result.hallucination_risk === "low"
-                                      ? "#84cc16"
-                                      : "#d97706",
-                                  }}
-                                >
-                                  {sm.activeVersion.qc_result.hallucination_risk.toUpperCase()}
-                                </span>
-                              </div>
-
-                              {/* Issues */}
-                              {sm.activeVersion.qc_result.issues.length > 0 && (
-                                <div style={{ display: "flex", flexDirection: "column", gap: "0.375rem" }}>
-                                  <span style={{ fontSize: "0.75rem", fontWeight: 600, color: "var(--color-text-secondary)" }}>
-                                    Issues Found:
-                                  </span>
-                                  <ul style={{ margin: 0, paddingLeft: "1rem", fontSize: "0.75rem", color: "var(--color-text-secondary)", lineHeight: 1.5 }}>
-                                    {sm.activeVersion.qc_result.issues.map((issue, idx) => (
-                                      <li key={idx}>{issue}</li>
-                                    ))}
-                                  </ul>
-                                </div>
-                              )}
-
-                              {/* Corrective instructions */}
-                              {sm.activeVersion.qc_result.corrective_instructions && (
-                                <div style={{ display: "flex", flexDirection: "column", gap: "0.375rem" }}>
-                                  <span style={{ fontSize: "0.75rem", fontWeight: 600, color: "var(--color-text-secondary)" }}>
-                                    Corrective Action:
-                                  </span>
-                                  <p style={{ margin: 0, fontSize: "0.75rem", color: "var(--color-text-secondary)", lineHeight: 1.5, fontStyle: "italic" }}>
-                                    {sm.activeVersion.qc_result.corrective_instructions}
-                                  </p>
-                                </div>
-                              )}
-                            </div>
-                          )}
-                        </div>
-                      );
-                    }
-
-                    return (
-                      <StudyMaterialVersionPanel
-                        versions={sm.showArchivedPanel ? sm.archivedVersionHistory : sm.versionHistory}
-                        activeVersionId={sm.mentorUiState?.active_version_id ?? sm.activeVersion?.version_id ?? null}
-                        viewingVersionId={sm.viewingVersionId}
-                        isLoading={sm.isLoadingVersions}
-                        isUnarchiving={sm.isUnarchivingVersion}
-                        mode={sm.showArchivedPanel ? "archived" : "active"}
-                        onSelectVersion={sm.handleSelectVersion}
-                        onUnarchiveVersion={sm.handleUnarchiveVersion}
-                        onBackToActiveHistory={() => sm.setShowArchivedPanel(false)}
-                      >
-                        {/* Proceed to Quiz Generation button — above version history */}
-                        <div style={{ padding: "0.625rem 0.875rem", borderBottom: "1px solid var(--color-border)", marginBottom: "0.5rem" }}>
-                          <button
-                            type="button"
-                            disabled={!sm.canAccessQuiz}
-                            title={!sm.canAccessQuiz ? "Publish study material to enable quiz generation" : undefined}
-                            onClick={() => {
-                              if (sm.canAccessQuiz) {
-                                sm.setCurrentPage(3);
-                              }
-                            }}
-                            style={{
-                              width: "100%", padding: "0.5rem 0.875rem",
-                              borderRadius: "var(--radius-md)",
-                              border: `1px solid ${!sm.canAccessQuiz ? "var(--color-border)" : qz.quizDraftExists ? "var(--color-border)" : "var(--color-primary)"}`,
-                              background: !sm.canAccessQuiz ? "transparent" : qz.quizDraftExists ? "var(--color-bg-surface-alt)" : "var(--color-primary-subtle)",
-                              color: !sm.canAccessQuiz ? "var(--color-text-muted)" : qz.quizDraftExists ? "var(--color-text-secondary)" : "var(--color-primary)",
-                              cursor: !sm.canAccessQuiz ? "not-allowed" : "pointer", 
-                              fontSize: "0.8125rem", fontWeight: 600,
-                              display: "flex", alignItems: "center", justifyContent: "center", gap: "0.5rem",
-                              transition: "all 0.15s",
-                              opacity: !sm.canAccessQuiz ? 0.5 : 1,
-                            }}
-                          >
-                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                              {qz.quizDraftExists ? (
-                                <><rect x="3" y="3" width="18" height="18" rx="2" /><path d="M9 9h6M9 12h6M9 15h4" /></>
-                              ) : (
-                                <><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" /></>
-                              )}
-                            </svg>
-                            {qz.quizDraftExists ? "View Quiz Draft" : "Proceed to Quiz Generation"}
-                          </button>
-                        </div>
-                      </StudyMaterialVersionPanel>
-                    );
-                  })()}
-                </div>
+                {isMentor && sm.isManualEditMode ? (
+                  <StudyMaterialManualEditor
+                    initialContent={sm.studyMaterialContent}
+                    title={node.title}
+                    versionLabel={sm.activeVersion?.display_label ?? null}
+                    isSaving={sm.isSavingManualEdit}
+                    onCancel={() => sm.setIsManualEditMode(false)}
+                    onSave={sm.handleManualEditSave}
+                  />
+                ) : (
+                  <StudyMaterialMentorWorkspace
+                    node={node}
+                    sm={sm}
+                    qz={qz}
+                    spaceIsPublished={spaceIsPublished}
+                    hasAcceptedFailedQc={!!hasAcceptedFailedQcByNode[node.node_id]}
+                    onAcceptFailedQc={() => {
+                      setHasAcceptedFailedQcByNode((prev) => ({
+                        ...prev,
+                        [node.node_id]: true,
+                      }));
+                    }}
+                    onOpenFocusView={() => setShowFocusModal(true)}
+                    renderGenerationSourceButton={renderGenerationSourceButton}
+                    renderTopicResourcesButton={renderTopicResourcesButton}
+                  />
+                )}
               </>
+            ) : sm.archivedVersionHistory.length > 0 ? (
+              <div className="study-material-loading">
+                <span className="spinner study-material-loading__spinner" />
+                <p className="study-material-loading__title">Loading archived draft</p>
+                <p className="study-material-loading__subtitle">
+                  Your working drafts are in the archive. Restoring or generating a new draft in a moment…
+                </p>
+              </div>
+            ) : sm.isLoadingVersions || sm.versionHistory.length > 0 ? (
+              <div className="study-material-loading">
+                <span className="spinner study-material-loading__spinner" />
+                <p className="study-material-loading__title">Loading study material</p>
+                <p className="study-material-loading__subtitle">
+                  Fetching the latest version for this topic…
+                </p>
+              </div>
             ) : (
               <div className="study-material-loading">
                 <p className="study-material-loading__title">No study material yet</p>
                 <p className="study-material-loading__subtitle">
-                  Go back to page 1 and click Generate Study Materials to create content for this topic.
+                  Go to Generate and click Generate draft to create content for this topic.
                 </p>
               </div>
             )}
@@ -1050,7 +519,7 @@ const NodeDetailPanel: React.FC<NodeDetailPanelProps> = ({
         <StudyMaterialPublishConfirmModal
           preview={sm.publishPreview}
           onClose={sm.closePublishModal}
-          onConfirm={() => void sm.confirmPublish()}
+          onConfirm={(mode) => void sm.confirmPublish(mode)}
           isSubmitting={sm.isPublishingVersion}
           transactionError={sm.publishTransactionError}
         />
@@ -1060,7 +529,7 @@ const NodeDetailPanel: React.FC<NodeDetailPanelProps> = ({
         <StudyMaterialUnpublishConfirmModal
           preview={sm.unpublishPreview}
           onClose={sm.closeUnpublishModal}
-          onConfirm={() => void sm.confirmUnpublish()}
+          onConfirm={(mode) => void sm.confirmUnpublish(mode)}
           isSubmitting={sm.isUnpublishingVersion}
           transactionError={sm.unpublishTransactionError}
         />
@@ -1101,11 +570,43 @@ const NodeDetailPanel: React.FC<NodeDetailPanelProps> = ({
           onUploaded={(mat) => {
             sm.setReferenceMaterial(mat);
             sm.setShowRefModal(false);
+            void sm.refreshGenerationSource();
           }}
           onDeleted={() => {
             sm.setReferenceMaterial(null);
             sm.setShowRefModal(false);
+            void sm.refreshGenerationSource();
           }}
+        />
+      )}
+
+      {isMentor && sm.showNodeMediaModal && (
+        <NodeMediaModal
+          nodeId={node.node_id}
+          nodeTitle={node.title}
+          nodeMedia={sm.nodeMedia}
+          onClose={() => sm.setShowNodeMediaModal(false)}
+          onRefresh={sm.refreshTopicResources}
+        />
+      )}
+
+      {isMentor && showFocusModal && sm.studyMaterialContent && (
+        <StudyMaterialFocusModal
+          nodeId={node.node_id}
+          title={node.title}
+          content={sm.studyMaterialContent}
+          versionLabel={sm.displayedVersionSummary?.display_label ?? sm.activeVersion?.display_label ?? null}
+          referenceMaterialId={
+            sm.activeVersion?.reference_material_id ??
+            sm.referenceMaterial?.material_id ??
+            null
+          }
+          referenceImagesRefreshKey={
+            sm.viewingVersionId ?? sm.activeVersion?.version_id ?? sm.studyMaterialContent
+          }
+          lineageChain={sm.displayedVersionSummary?.lineage_chain ?? []}
+          onSelectLineageVersion={sm.handleSelectVersion}
+          onClose={() => setShowFocusModal(false)}
         />
       )}
     </div>

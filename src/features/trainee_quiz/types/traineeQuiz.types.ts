@@ -15,6 +15,8 @@ export interface PublishedQuizDiscoveryOut {
   submitted_attempt_count: number;
   can_start_new_attempt: boolean;
   can_view_previous_attempts: boolean;
+  is_review_only?: boolean;
+  review_notice?: string | null;
 }
 
 export interface TraineeQuizQuestionOut {
@@ -128,4 +130,45 @@ export interface QuestionState {
   orderIndex: number;
   canAnswer: boolean;
   canSkip: boolean;
+}
+
+export interface TraineeArchivedQuizItem {
+  quiz_id: string;
+  study_material_version_id: string;
+  title: string;
+  difficulty: QuizDifficulty;
+  total_questions: number;
+  published_at: string | null;
+  has_trainee_attempt: boolean;
+  best_score_percent: number | null;
+}
+
+export interface TraineeArchivedQuizGroup {
+  study_material_version_id: string;
+  version_number: number;
+  version_label: string;
+  quizzes: TraineeArchivedQuizItem[];
+}
+
+export interface TraineeArchivedQuizListOut {
+  node_id: string;
+  groups: TraineeArchivedQuizGroup[];
+}
+
+export interface ArchivedQuizReviewOut {
+  quiz_id: string;
+  node_id: string;
+  title: string;
+  difficulty: QuizDifficulty;
+  total_questions: number;
+  study_material_version_id: string;
+  version_label: string;
+  is_archived_reference: boolean;
+  attempt_id: string | null;
+  attempt_status: QuizAttemptStatus | null;
+  is_partial_attempt: boolean;
+  score_percent: number | null;
+  total_correct: number | null;
+  total_skipped: number | null;
+  questions: TraineeQuizQuestionOut[];
 }

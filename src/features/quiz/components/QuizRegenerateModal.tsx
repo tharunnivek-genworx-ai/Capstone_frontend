@@ -1,12 +1,24 @@
 // src/features/quiz/components/QuizRegenerateModal.tsx
 import React, { useState } from "react";
 import ModalPortal from "../../../components/ModalPortal";
+import type { QuizDifficulty } from "../types/quiz.types";
+
+const DIFFICULTY_OPTIONS: { value: QuizDifficulty; label: string }[] = [
+  { value: "mixed", label: "Mixed" },
+  { value: "easy", label: "Easy" },
+  { value: "medium", label: "Medium" },
+  { value: "hard", label: "Hard" },
+];
 
 interface QuizRegenerateModalProps {
   nodeTitle: string;
   quizTitle: string;
   hasGeneratedHints: boolean;
   isSubmitting: boolean;
+  questionCount: number;
+  setQuestionCount: (n: number) => void;
+  difficulty: QuizDifficulty;
+  setDifficulty: (d: QuizDifficulty) => void;
   onClose: () => void;
   onConfirm: (feedback: string) => void;
 }
@@ -16,6 +28,10 @@ const QuizRegenerateModal: React.FC<QuizRegenerateModalProps> = ({
   quizTitle,
   hasGeneratedHints,
   isSubmitting,
+  questionCount,
+  setQuestionCount,
+  difficulty,
+  setDifficulty,
   onClose,
   onConfirm,
 }) => {
@@ -72,10 +88,54 @@ const QuizRegenerateModal: React.FC<QuizRegenerateModalProps> = ({
           borderRadius: "var(--radius-md)", padding: "0.75rem 1rem", marginBottom: "1rem",
         }}>
           <p style={{ margin: 0, fontSize: "0.8125rem", color: "var(--color-danger, #dc2626)", lineHeight: 1.55 }}>
-            <strong>Warning:</strong> This will generate a new quiz draft using the existing one as context.
-            Your current draft questions will still be accessible but a new draft will be created.
+            <strong>Warning:</strong> This will replace your current draft questions using the existing quiz as context.
             Reference PDF parsing will not run again.
           </p>
+        </div>
+
+        <div style={{ marginBottom: "1.25rem" }}>
+          <label style={{ display: "block", fontSize: "0.8125rem", fontWeight: 600, color: "var(--color-text-secondary)", marginBottom: "0.5rem" }}>
+            Number of questions
+          </label>
+          <input
+            type="number"
+            className="input-field"
+            value={questionCount}
+            min={5}
+            max={20}
+            onChange={(e) => setQuestionCount(Math.max(5, Math.min(20, parseInt(e.target.value) || 10)))}
+            disabled={isSubmitting}
+            style={{ width: "140px", fontSize: "0.9375rem" }}
+          />
+          <span style={{ marginLeft: "0.625rem", fontSize: "0.8125rem", color: "var(--color-text-muted)" }}>
+            (5 – 20)
+          </span>
+        </div>
+
+        <div style={{ marginBottom: "1.25rem" }}>
+          <label style={{ display: "block", fontSize: "0.8125rem", fontWeight: 600, color: "var(--color-text-secondary)", marginBottom: "0.5rem" }}>
+            Difficulty
+          </label>
+          <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
+            {DIFFICULTY_OPTIONS.map(({ value, label }) => (
+              <button
+                key={value}
+                type="button"
+                onClick={() => setDifficulty(value)}
+                disabled={isSubmitting}
+                style={{
+                  padding: "0.4rem 1rem", borderRadius: "var(--radius-md)",
+                  border: `1px solid ${difficulty === value ? "var(--color-primary)" : "var(--color-border)"}`,
+                  background: difficulty === value ? "var(--color-primary-subtle)" : "var(--color-bg-surface)",
+                  color: difficulty === value ? "var(--color-primary)" : "var(--color-text-secondary)",
+                  cursor: isSubmitting ? "not-allowed" : "pointer", fontWeight: 600, fontSize: "0.8125rem",
+                  opacity: isSubmitting ? 0.6 : 1,
+                }}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
         </div>
 
         <p style={{ margin: "0 0 0.75rem", fontSize: "0.875rem", color: "var(--color-text-secondary)", fontWeight: 500 }}>

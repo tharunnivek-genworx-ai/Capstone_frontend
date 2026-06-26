@@ -81,16 +81,7 @@ const TopicPageNav: React.FC<TopicPageNavProps> = ({
   return (
     <div
       role="tablist"
-      style={{
-        display: "flex",
-        width: "100%",
-        minWidth: "480px", // Ensures it takes enough space for 4 tabs
-        background: "var(--color-bg-surface-alt, #f9fafb)",
-        border: "1px solid var(--color-border)",
-        borderRadius: "9999px",
-        padding: "0.25rem",
-        gap: "0.25rem",
-      }}
+      className="topic-page-nav"
     >
       {tabs.map((tab) => {
         const { enabled, active } = getTabProps(tab.page);
@@ -106,30 +97,16 @@ const TopicPageNav: React.FC<TopicPageNavProps> = ({
             title={!enabled ? tab.tooltip : undefined}
             disabled={!enabled}
             onClick={() => enabled && onPageChange(tab.page)}
+            className={`topic-page-nav__tab${active ? " topic-page-nav__tab--active" : ""}${!enabled ? " topic-page-nav__tab--disabled" : ""}`}
             style={{
-              flex: 1,
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              gap: "0.5rem",
-              padding: "0.375rem 0.75rem",
-              borderRadius: "9999px",
-              border: "none",
-              background: active ? tab.bgActive : "transparent",
-              color: active ? tab.color : (enabled ? "var(--color-text-secondary)" : "var(--color-text-muted)"),
-              cursor: enabled ? "pointer" : "not-allowed",
-              opacity: enabled ? 1 : 0.5,
-              transition: "all 0.2s ease-in-out",
-            }}
+              "--tab-color": tab.color,
+              "--tab-bg": tab.bgActive,
+            } as React.CSSProperties}
           >
-            <Icon size={18} strokeWidth={active ? 2.5 : 2} style={{ flexShrink: 0 }} />
-            <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-start", textAlign: "left" }}>
-              <span style={{ fontSize: "0.8125rem", fontWeight: active ? 700 : 600, lineHeight: 1.2 }}>
-                {tab.label}
-              </span>
-              <span style={{ fontSize: "0.625rem", fontWeight: 500, lineHeight: 1.2, color: active ? tab.color : "var(--color-text-muted)", opacity: active ? 0.8 : 1 }}>
-                {tab.sublabel}
-              </span>
+            <Icon size={15} strokeWidth={active ? 2.5 : 2} className="topic-page-nav__icon" aria-hidden />
+            <div className="topic-page-nav__labels">
+              <span className="topic-page-nav__label">{tab.label}</span>
+              <span className="topic-page-nav__sublabel">{tab.sublabel}</span>
             </div>
           </button>
         );

@@ -40,6 +40,7 @@ export interface QuizPanelActions {
   quiz_button_variant: QuizButtonVariant;
   show_attempts_button: boolean;
   attempts_button_label: string;
+  review_notice?: string | null;
 }
 
 export interface StudyMaterialSummary {
@@ -64,6 +65,30 @@ export interface OverallProgress {
   label: string;
 }
 
+export interface ArchiveSummary {
+  has_previous_versions: boolean;
+  archived_version_count: number;
+  show_upgrade_banner: boolean;
+}
+
+export interface TraineeTopicResource {
+  media_id: string;
+  media_type: "image" | "pdf" | "video_url" | "article_link";
+  type_label: string;
+  display_title: string;
+  subtitle: string | null;
+  view_action_label: string;
+  download_action_label: string | null;
+  view_url: string;
+  download_url: string | null;
+  download_filename: string | null;
+  mime_type: string | null;
+  is_downloadable: boolean;
+  order_index: number;
+}
+
+export type MaterialTab = "current" | "previous";
+
 export interface TraineeNodePanelOut {
   panel_type: NodePanelType;
   title: string;
@@ -80,4 +105,8 @@ export interface TraineeNodePanelOut {
   default_tab: MixedParentTab | null;
   all_subtopics_locked: boolean;
   is_fully_complete: boolean;
+  archive_summary: ArchiveSummary | null;
+  topic_resources: TraineeTopicResource[];
+  topic_resources_section_title: string;
+  topic_resources_empty_message: string;
 }

@@ -45,24 +45,33 @@ export interface StudyMaterialManualEditRequest {
 
 export interface StudyMaterialPublishRequest {
   version_id: string;
+  superseded_retention_mode?: RetentionMode;
+}
+
+export type RetentionMode = "remove_completely" | "keep_for_review";
+
+export interface StudyMaterialUnpublishRequest {
+  version_id: string;
+  retention_mode: RetentionMode;
 }
 
 export interface StudyMaterialPublishPreviewOut {
   requires_confirmation: boolean;
-  has_draft_quizzes: boolean;
-  has_published_quizzes: boolean;
-  draft_quiz_count: number;
   previous_version_label: string | null;
   new_version_label: string;
   is_republishing_older: boolean;
   current_published_version_label: string | null;
+  will_reset_trainee_read_progress: boolean;
+  is_replacing_live_version: boolean;
 }
 
 export interface StudyMaterialUnpublishPreviewOut {
   requires_confirmation: boolean;
-  has_draft_quizzes: boolean;
-  has_published_quizzes: boolean;
   version_label: string;
+  trainees_read_count: number;
+  trainees_quiz_attempt_count: number;
+  has_live_quiz: boolean;
+  live_quiz_title: string | null;
 }
 
 export interface StudyMaterialActivateRequest {
@@ -85,14 +94,36 @@ export interface QualityCheckScoresOut {
   teaching_alignment?: number | null;
 }
 
+export interface ProviderMetaOut {
+  apiKeyAlias?: string | null;
+  attemptIndex?: number | null;
+  graphNode?: string | null;
+  retryAfterSeconds?: number | null;
+  nextLlmRetryAt?: string | null;
+}
+
+export type LlmErrorType =
+  | "rate_limited"
+  | "token_limit"
+  | "llm_infra_error"
+  | "llm_key_pool_exhausted"
+  | "hint_quality_error";
+
 export interface QualityCheckResultOut {
   overall_status: "pass" | "warn" | "fail";
   is_refusal: boolean;
   hallucination_risk: "none" | "low" | "medium" | "high";
   scores: QualityCheckScoresOut;
+  verification_mode?: "full" | "targeted" | null;
   issues: string[];
   corrective_instructions: string;
   summary: string;
+  errorType?: LlmErrorType | null;
+  suggestion?: string | null;
+  providerMeta?: ProviderMetaOut | null;
+  qcInfraError?: boolean | null;
+  retryAfterSeconds?: number | null;
+  nextLlmRetryAt?: string | null;
 }
 
 export interface StudyMaterialVersionOut {
@@ -113,6 +144,7 @@ export interface StudyMaterialVersionOut {
   display_label: string;
   qc_failed_permanently?: boolean;
   qc_result?: QualityCheckResultOut | null;
+  next_llm_retry_at?: string | null;
 }
 
 export interface StudyMaterialVersionSummary {
@@ -128,6 +160,10 @@ export interface StudyMaterialVersionSummary {
   is_published: boolean;
   is_archived: boolean;
   archived_at: string | null;
+  published_at: string | null;
+  lifecycle_status: string;
+  mentor_display_badge: string;
+  student_visibility_hint: string | null;
   created_at: string;
   display_label: string;
 }
@@ -147,7 +183,7 @@ export interface StudyMaterialClearDraftsEligibilityOut {
 
 export interface StudyMaterialClearDraftsOut {
   node_id: string;
-  deleted_count: number;
+  discarded_count: number;
 }
 
 export interface VersionAllowedActionsOut {
@@ -160,12 +196,23 @@ export interface VersionAllowedActionsOut {
   is_viewing_archived: boolean;
   publish_button_label?: string;
   publish_disabled_tooltip?: string | null;
+  unpublish_button_label?: string;
+  unpublish_tooltip?: string | null;
   unpublish_disabled_tooltip?: string | null;
+}
+
+export interface MentorStudentVisibilityOut {
+  live_material_label: string | null;
+  live_material_version_id: string | null;
+  previous_version_count: number;
+  previous_version_labels: string[];
+  live_quiz_title: string | null;
 }
 
 export interface StudyMaterialMentorUiStateOut {
   node_id: string;
   has_versions: boolean;
+  has_workspace_versions?: boolean;
   active_version_id: string | null;
   published_version_id?: string | null;
   can_access_study_material: boolean;
@@ -174,6 +221,7 @@ export interface StudyMaterialMentorUiStateOut {
   current_effective_instruction: string;
   generation_instruction_snapshot: string | null;
   displayed_version_actions: VersionAllowedActionsOut | null;
+  student_visibility: MentorStudentVisibilityOut;
 }
 
 
@@ -181,7 +229,7 @@ export interface NodeMediaOut {
   media_id: string;
   node_id: string;
   space_id: string;
-  media_type: "image" | "video_url" | "article_link";
+  media_type: "image" | "pdf" | "video_url" | "article_link";
   title: string | null;
   url: string | null;
   file_url: string | null;
@@ -219,6 +267,7 @@ export interface StudyMaterialFeedbackResponse {
   new_version: StudyMaterialVersionOut | null;
   qc_failed_permanently?: boolean;
   qc_result?: QualityCheckResultOut | null;
+  next_llm_retry_at?: string | null;
 }
 
 // ── UI-level types ────────────────────────────────────────────────────────────
@@ -235,6 +284,8 @@ export interface NodeStudyStatePatch {
   studyMaterialContent?: string | null;
   activeVersion?: StudyMaterialVersionOut | null;
   isGenerating?: boolean;
+  isGeneratingQuiz?: boolean;
+  isGeneratingHints?: boolean;
   referenceMaterial?: ReferenceMaterialOut | null;
   currentQuizId?: string | null;
 }
@@ -246,6 +297,8 @@ export interface NodeStudyState {
   studyMaterialContent: string | null;
   activeVersion: StudyMaterialVersionOut | null;
   isGenerating: boolean;
+  isGeneratingQuiz: boolean;
+  isGeneratingHints: boolean;
   referenceMaterial: ReferenceMaterialOut | null;
   currentQuizId: string | null;
 }

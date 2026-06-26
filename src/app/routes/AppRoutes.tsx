@@ -10,6 +10,7 @@ import SpaceDetailPage from "../../features/spaces/components/SpaceDetailPage";
 import QuizAttemptPage from "../../features/trainee_quiz/components/QuizAttemptPage";
 import QuizAttemptResultsPage from "../../features/trainee_quiz/components/QuizAttemptResultsPage";
 import QuizAttemptHistoryPage from "../../features/trainee_quiz/components/QuizAttemptHistoryPage";
+import ArchivedQuizReviewPage from "../../features/trainee_quiz/components/ArchivedQuizReviewPage";
 import ProtectedRoute from "./ProtectedRoute";
 import Sidebar from "../../components/layout/Sidebar";
 import LearningSpacesSidebar from "../../components/layout/LearningSpacesSidebar";
@@ -163,6 +164,19 @@ const AppRoutes: React.FC = () => {
               <LearningSpacesSidebar />
               <div style={{ flex: 1, marginLeft: "240px", minHeight: "100vh", background: "#f5f5f7", overflow: "auto" }}>
                 <QuizAttemptHistoryPage />
+              </div>
+            </div>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/trainee/spaces/:spaceId/nodes/:nodeId/quiz/:quizId/archive-review"
+        element={
+          <ProtectedRoute requiredRole="trainee">
+            <div style={{ display: "flex", minHeight: "100vh" }}>
+              <LearningSpacesSidebar />
+              <div style={{ flex: 1, marginLeft: "240px", minHeight: "100vh", background: "#f5f5f7", overflow: "auto" }}>
+                <ArchivedQuizReviewPage />
               </div>
             </div>
           </ProtectedRoute>
