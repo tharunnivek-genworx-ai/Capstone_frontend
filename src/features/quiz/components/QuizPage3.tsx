@@ -25,11 +25,7 @@ import QuizPublishConfirmModal from "./QuizPublishConfirmModal";
 import QuizUnpublishConfirmModal from "./QuizUnpublishConfirmModal";
 import QuizQuestionModal from "./QuizQuestionModal";
 import QuizHistoryPanel from "./QuizHistoryPanel";
-import LlmDiagnosticsNotice from "../../study_material/components/shared/LlmDiagnosticsNotice";
-import {
-  hasContentQcReport,
-  isLlmGenerationFailure,
-} from "../../study_material/utils/llmDiagnostics";
+import QuizQcWarningPanel from "./QuizQcWarningPanel";
 
 interface QuizPage3Props {
   nodeTitle: string;
@@ -288,7 +284,6 @@ const QuizPage3: React.FC<QuizPage3Props> = ({ nodeTitle, qz }) => {
   const displayTitle = quiz.title || `${nodeTitle} — Quiz`;
 
   const showQcWarning = !!(quiz.qc_failed_permanently && quiz.qc_result && acceptedQuizId !== quiz.quiz_id);
-  const llmFailure = isLlmGenerationFailure(quiz.qc_result);
 
   return (
     <div className="quiz-page">
@@ -500,162 +495,11 @@ const QuizPage3: React.FC<QuizPage3Props> = ({ nodeTitle, qz }) => {
 
         {/* Right Column: QC Warning Panel */}
         {showQcWarning && (
-          <div className="study-material-qc-warning-panel animate-fade-in">
-            <div className="study-material-qc-warning-panel__sticky">
-              <div className="study-material-qc-warning-panel__alert">
-                <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
-                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#d97706" strokeWidth="2.5">
-                    <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
-                    <line x1="12" y1="9" x2="12" y2="13" />
-                    <line x1="12" y1="17" x2="12.01" y2="17" />
-                  </svg>
-                  <span style={{ fontSize: "0.9375rem", fontWeight: 700, color: "#92400e" }}>
-                    {llmFailure ? "Generation Unavailable" : "Quality Check Failed"}
-                  </span>
-                </div>
-                <p style={{ margin: 0, fontSize: "0.8125rem", color: "#b45309", lineHeight: 1.45 }}>
-                  {llmFailure
-                    ? "The quiz could not be generated because the AI service is temporarily unavailable. Inspect any saved draft on the left before deciding how to proceed."
-                    : "This generated quiz did not meet quality standards after 3 attempts. Please inspect the questions on the left before deciding how to proceed."}
-                </p>
-                <LlmDiagnosticsNotice
-                  diagnostics={quiz.qc_result}
-                  entityNextLlmRetryAt={quiz.next_llm_retry_at}
-                />
-              </div>
-
-              <div className="study-material-qc-warning-panel__choices">
-                <span style={{ fontSize: "0.8125rem", fontWeight: 600, color: "var(--color-text-primary)" }}>
-                  How do you want to proceed?
-                </span>
-                <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
-                  <button
-                    type="button"
-                    className="btn-primary"
-                    onClick={() => setAcceptedQuizId(quiz.quiz_id)}
-                    style={{
-                      width: "100%",
-                      height: "36px",
-                      fontSize: "0.8125rem",
-                      fontWeight: 600,
-                    }}
-                  >
-                    Continue with this draft
-                  </button>
-                  <button
-                    type="button"
-                    className="btn-secondary"
-                    onClick={() => qz.setShowDeleteDraftModal(true)}
-                    style={{
-                      width: "100%",
-                      height: "36px",
-                      fontSize: "0.8125rem",
-                      fontWeight: 600,
-                      borderColor: "var(--color-danger)",
-                      color: "var(--color-danger)",
-                    }}
-                  >
-                    Delete draft & start over
-                  </button>
-                </div>
-              </div>
-            </div>
-
-            {quiz.qc_result && hasContentQcReport(quiz.qc_result) && (
-              <div className="study-material-qc-warning-panel__report">
-                <span style={{ fontSize: "0.875rem", fontWeight: 700, color: "var(--color-text-primary)" }}>
-                  QC Evaluation Report
-                </span>
-
-                {/* Scores */}
-                <div style={{ display: "flex", flexDirection: "column", gap: "0.375rem" }}>
-                  <span style={{ fontSize: "0.75rem", fontWeight: 600, color: "var(--color-text-secondary)" }}>
-                    Scores:
-                  </span>
-                  <div
-                    style={{
-                      display: "grid",
-                      gridTemplateColumns: "1fr 1fr",
-                      gap: "0.5rem 0.75rem",
-                      fontSize: "0.75rem",
-                      color: "var(--color-text-secondary)",
-                    }}
-                  >
-                    <div>Answer Correctness: <strong>{quiz.qc_result.scores?.answer_correctness ?? 0}/10</strong></div>
-                    <div>Relevance: <strong>{quiz.qc_result.scores?.topic_relevance ?? 0}/10</strong></div>
-                    <div>Option Quality: <strong>{quiz.qc_result.scores?.option_quality ?? 0}/10</strong></div>
-                    <div>Clarity: <strong>{quiz.qc_result.scores?.question_clarity ?? 0}/10</strong></div>
-                    <div>Difficulty Alignment: <strong>{quiz.qc_result.scores?.difficulty_alignment ?? 0}/10</strong></div>
-                    <div>Explanation Quality: <strong>{quiz.qc_result.scores?.explanation_quality ?? 0}/10</strong></div>
-                    <div style={{ gridColumn: "span 2" }}>Duplicate/Overlap: <strong>{quiz.qc_result.scores?.duplicate_overlap ?? 0}/10</strong></div>
-                  </div>
-                </div>
-
-                <div style={{ borderTop: "1px solid var(--color-border)", margin: "0.25rem 0" }} />
-
-                {/* Wrong Answer Risk */}
-                <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.8125rem" }}>
-                  <span style={{ color: "var(--color-text-secondary)" }}>Wrong Answer Risk:</span>
-                  <span
-                    style={{
-                      fontWeight: 700,
-                      color: quiz.qc_result.wrong_answer_risk === "none"
-                        ? "var(--color-success)"
-                        : quiz.qc_result.wrong_answer_risk === "low"
-                        ? "#84cc16"
-                        : quiz.qc_result.wrong_answer_risk === "medium"
-                        ? "#d97706"
-                        : "var(--color-danger)",
-                    }}
-                  >
-                    {quiz.qc_result.wrong_answer_risk?.toUpperCase() ?? "UNKNOWN"}
-                  </span>
-                </div>
-
-                {/* Flagged questions */}
-                {quiz.qc_result.flagged_questions && quiz.qc_result.flagged_questions.length > 0 && (
-                  <div style={{ display: "flex", flexDirection: "column", gap: "0.375rem" }}>
-                    <span style={{ fontSize: "0.75rem", fontWeight: 600, color: "var(--color-text-secondary)" }}>
-                      Flagged Questions:
-                    </span>
-                    <ul style={{ margin: 0, paddingLeft: "1rem", fontSize: "0.75rem", color: "var(--color-text-secondary)", lineHeight: 1.5 }}>
-                      {quiz.qc_result.flagged_questions.map((flaggedQ, idx) => (
-                        <li key={idx}>
-                          Question {flaggedQ.question_number}: {flaggedQ.flags.join(", ")}
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                )}
-
-                {/* Issues */}
-                {quiz.qc_result.issues && quiz.qc_result.issues.length > 0 && (
-                  <div style={{ display: "flex", flexDirection: "column", gap: "0.375rem" }}>
-                    <span style={{ fontSize: "0.75rem", fontWeight: 600, color: "var(--color-text-secondary)" }}>
-                      General Issues:
-                    </span>
-                    <ul style={{ margin: 0, paddingLeft: "1rem", fontSize: "0.75rem", color: "var(--color-text-secondary)", lineHeight: 1.5 }}>
-                      {quiz.qc_result.issues.map((issue, idx) => (
-                        <li key={idx}>{issue}</li>
-                      ))}
-                    </ul>
-                  </div>
-                )}
-
-                {/* Corrective instructions */}
-                {quiz.qc_result.corrective_instructions && (
-                  <div style={{ display: "flex", flexDirection: "column", gap: "0.375rem" }}>
-                    <span style={{ fontSize: "0.75rem", fontWeight: 600, color: "var(--color-text-secondary)" }}>
-                      Corrective Action:
-                    </span>
-                    <p style={{ margin: 0, fontSize: "0.75rem", color: "var(--color-text-secondary)", lineHeight: 1.5, fontStyle: "italic" }}>
-                      {quiz.qc_result.corrective_instructions}
-                    </p>
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
+          <QuizQcWarningPanel
+            quiz={quiz}
+            onAcceptDraft={() => setAcceptedQuizId(quiz.quiz_id)}
+            onDeleteDraft={() => qz.setShowDeleteDraftModal(true)}
+          />
         )}
       </div>
 
