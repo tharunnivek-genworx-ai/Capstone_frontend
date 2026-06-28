@@ -594,7 +594,7 @@ const MentorSpaceProgressPanel: React.FC<MentorSpaceProgressPanelProps> = ({
                             {node.node_title}
                             {!node.is_active && (
                               <span style={{ fontSize: "0.6875rem", color: "#ef4444", marginLeft: "0.5rem" }}>
-                                (Archived)
+                                (Deleted)
                               </span>
                             )}
                           </td>

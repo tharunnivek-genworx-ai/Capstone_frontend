@@ -6,6 +6,7 @@ import type { UseQuizReturn } from "../../../quiz/hooks/useQuiz";
 import StudyMaterialViewer from "./StudyMaterialViewer";
 import StudyMaterialVersionPanel from "../version/StudyMaterialVersionPanel";
 import StudyMaterialQcWarningPanel from "../shared/StudyMaterialQcWarningPanel";
+import { isLlmRateLimited } from "../../utils/llmDiagnostics";
 import VersionLineageInfo from "../version/VersionLineageInfo";
 import "../../styles/studyMaterialMentor.css";
 
@@ -56,7 +57,10 @@ const StudyMaterialMentorWorkspace: React.FC<StudyMaterialMentorWorkspaceProps> 
   renderTopicResourcesButton,
 }) => {
   const showDraftNotice = sm.isViewingArchivedVersion || sm.isViewingNonActiveVersion;
-  const showQcWarning = Boolean(sm.activeVersion?.qc_failed_permanently && !hasAcceptedFailedQc);
+  const rateLimited = isLlmRateLimited(sm.activeVersion?.qc_result);
+  const showQcWarning = Boolean(
+    sm.activeVersion?.qc_failed_permanently && (rateLimited || !hasAcceptedFailedQc),
+  );
   const versionTag = versionBarTag(sm);
 
   return (

@@ -29,14 +29,17 @@ export interface ReferenceMaterialListOut {
 /** First-time generate — backend no longer accepts generation_type on this endpoint. */
 export interface StudyMaterialGenerateRequest {
   reference_material_id?: string | null;
+  progress_session_id?: string | null;
 }
 
 export interface StudyMaterialRegenerateRequest {
   mentor_regeneration_goal: string;
+  progress_session_id?: string | null;
 }
 
 export interface StudyMaterialImproveRequest {
   mentor_feedback: string;
+  progress_session_id?: string | null;
 }
 
 export interface StudyMaterialManualEditRequest {
@@ -286,6 +289,7 @@ export interface NodeStudyStatePatch {
   isGenerating?: boolean;
   isGeneratingQuiz?: boolean;
   isGeneratingHints?: boolean;
+  generationProgressSessionId?: string | null;
   referenceMaterial?: ReferenceMaterialOut | null;
   currentQuizId?: string | null;
 }
@@ -299,6 +303,7 @@ export interface NodeStudyState {
   isGenerating: boolean;
   isGeneratingQuiz: boolean;
   isGeneratingHints: boolean;
+  generationProgressSessionId: string | null;
   referenceMaterial: ReferenceMaterialOut | null;
   currentQuizId: string | null;
 }

@@ -5,6 +5,7 @@ import {
   formatQcScore,
   hasContentQcReport,
   isLlmGenerationFailure,
+  isLlmRateLimited,
 } from "../../study_material/utils/llmDiagnostics";
 
 interface QuizQcWarningPanelProps {
@@ -29,6 +30,7 @@ const QuizQcWarningPanel: React.FC<QuizQcWarningPanelProps> = ({
   const [reportOpen, setReportOpen] = useState(false);
   const qcResult = quiz.qc_result;
   const llmFailure = isLlmGenerationFailure(qcResult);
+  const rateLimited = isLlmRateLimited(qcResult);
   const showReport = !!(qcResult && hasContentQcReport(qcResult));
 
   return (
@@ -41,27 +43,31 @@ const QuizQcWarningPanel: React.FC<QuizQcWarningPanelProps> = ({
           </span>
         </div>
         <p className="qc-warning__body">
-          {llmFailure
-            ? "The quiz could not be generated because the AI service is temporarily unavailable. Review the draft on the left, then choose how to proceed."
-            : "This quiz did not meet quality standards after 3 attempts. Review the questions on the left, then choose how to proceed."}
+          {rateLimited
+            ? "The quiz could not be generated because the AI service is temporarily unavailable. Review the placeholder on the left, then try again after the rate limit clears."
+            : llmFailure
+              ? "The quiz could not be generated because the AI service is temporarily unavailable. Review the draft on the left, then choose how to proceed."
+              : "This quiz did not meet quality standards after 3 attempts. Review the questions on the left, then choose how to proceed."}
         </p>
         <LlmDiagnosticsNotice
           diagnostics={qcResult}
           entityNextLlmRetryAt={quiz.next_llm_retry_at}
         />
 
-        <div className="qc-warning__actions">
-          <button type="button" className="btn-primary qc-warning__choice-btn" onClick={onAcceptDraft}>
-            Continue with this draft
-          </button>
-          <button
-            type="button"
-            className="btn-secondary qc-warning__choice-btn qc-warning__choice-btn--danger"
-            onClick={onDeleteDraft}
-          >
-            Delete draft & start over
-          </button>
-        </div>
+        {!rateLimited && (
+          <div className="qc-warning__actions">
+            <button type="button" className="btn-primary qc-warning__choice-btn" onClick={onAcceptDraft}>
+              Continue with this draft
+            </button>
+            <button
+              type="button"
+              className="btn-secondary qc-warning__choice-btn qc-warning__choice-btn--danger"
+              onClick={onDeleteDraft}
+            >
+              Delete draft & start over
+            </button>
+          </div>
+        )}
 
         {showReport && (
           <button

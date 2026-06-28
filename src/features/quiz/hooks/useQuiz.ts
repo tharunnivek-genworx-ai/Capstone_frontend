@@ -15,6 +15,7 @@ import type {
   RetentionMode,
 } from "../types/quiz.types";
 import { quizService } from "../services/quizService";
+import { createGenerationProgressSessionId } from "../../generation/services/generationProgressService";
 
 /** Nodes with an in-flight quiz generate/regenerate request (survives node switches). */
 const generatingQuizNodeIds = new Set<string>();
@@ -30,6 +31,7 @@ interface UseQuizParams {
   currentQuizId: string | null;
   isGeneratingQuiz: boolean;
   isGeneratingHints: boolean;
+  generationProgressSessionId: string | null;
   onNodeStudyStateChange?: (nodeId: string, patch: NodeStudyStatePatch) => void;
   onPageChange: (page: TopicContentPage) => void;
   onMentorProgressRefresh?: () => void;
@@ -41,6 +43,7 @@ export interface UseQuizReturn {
   isLoadingQuiz: boolean;
   isGenerating: boolean;
   isGeneratingHints: boolean;
+  generationProgressSessionId: string | null;
   isPublishing: boolean;
   isUnpublishing: boolean;
   isDeletingDraft: boolean;
@@ -183,6 +186,7 @@ export function useQuiz({
   currentQuizId,
   isGeneratingQuiz,
   isGeneratingHints,
+  generationProgressSessionId,
   onNodeStudyStateChange,
   onPageChange,
   onMentorProgressRefresh,
@@ -485,23 +489,34 @@ export function useQuiz({
   const handleGenerate = useCallback(async () => {
     if (!node || isGeneratingQuiz || !canGenerateQuiz) return;
     const nodeId = node.node_id;
+    const progressSessionId = createGenerationProgressSessionId();
     generatingQuizNodeIds.add(nodeId);
-    patchNodeStudyState(nodeId, { isGeneratingQuiz: true });
+    patchNodeStudyState(nodeId, {
+      isGeneratingQuiz: true,
+      generationProgressSessionId: progressSessionId,
+    });
     try {
       const generated = await quizService.generate(nodeId, {
         difficulty,
         question_count: questionCount,
         mode: "generate",
+        progress_session_id: progressSessionId,
       });
       setResolvedQuizIdForNode(nodeId, generated.quiz_id);
-      patchNodeStudyState(nodeId, { isGeneratingQuiz: false });
+      patchNodeStudyState(nodeId, {
+        isGeneratingQuiz: false,
+        generationProgressSessionId: null,
+      });
       if (isViewingNode(nodeId)) {
         setQuiz(generated);
         await refreshQuiz(nodeId, generated.quiz_id);
       }
       toast.success("Quiz draft generated successfully.");
     } catch (err) {
-      patchNodeStudyState(nodeId, { isGeneratingQuiz: false });
+      patchNodeStudyState(nodeId, {
+        isGeneratingQuiz: false,
+        generationProgressSessionId: null,
+      });
       handleMutationError(err);
     } finally {
       generatingQuizNodeIds.delete(nodeId);
@@ -512,8 +527,12 @@ export function useQuiz({
     if (!node || !quiz || isGeneratingQuiz || !canGenerateQuiz) return;
     const nodeId = node.node_id;
     const quizId = quiz.quiz_id;
+    const progressSessionId = createGenerationProgressSessionId();
     generatingQuizNodeIds.add(nodeId);
-    patchNodeStudyState(nodeId, { isGeneratingQuiz: true });
+    patchNodeStudyState(nodeId, {
+      isGeneratingQuiz: true,
+      generationProgressSessionId: progressSessionId,
+    });
     if (isViewingNode(nodeId)) {
       setShowRegenerateModal(false);
     }
@@ -524,16 +543,23 @@ export function useQuiz({
         mode: "regenerate",
         quiz_id: quizId,
         mentor_feedback: feedback || undefined,
+        progress_session_id: progressSessionId,
       });
       setResolvedQuizIdForNode(nodeId, generated.quiz_id);
-      patchNodeStudyState(nodeId, { isGeneratingQuiz: false });
+      patchNodeStudyState(nodeId, {
+        isGeneratingQuiz: false,
+        generationProgressSessionId: null,
+      });
       if (isViewingNode(nodeId)) {
         setQuiz(generated);
         await refreshQuiz(nodeId, generated.quiz_id);
       }
       toast.success("Quiz regenerated successfully.");
     } catch (err) {
-      patchNodeStudyState(nodeId, { isGeneratingQuiz: false });
+      patchNodeStudyState(nodeId, {
+        isGeneratingQuiz: false,
+        generationProgressSessionId: null,
+      });
       handleMutationError(err);
     } finally {
       generatingQuizNodeIds.delete(nodeId);
@@ -860,6 +886,7 @@ export function useQuiz({
     isLoadingQuiz,
     isGenerating: isGeneratingQuiz,
     isGeneratingHints,
+    generationProgressSessionId,
     isPublishing,
     isUnpublishing,
     isDeletingDraft,

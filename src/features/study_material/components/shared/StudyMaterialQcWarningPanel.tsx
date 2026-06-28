@@ -5,6 +5,7 @@ import {
   formatQcScore,
   hasContentQcReport,
   isLlmGenerationFailure,
+  isLlmRateLimited,
 } from "../../utils/llmDiagnostics";
 
 interface StudyMaterialQcWarningPanelProps {
@@ -20,6 +21,7 @@ const StudyMaterialQcWarningPanel: React.FC<StudyMaterialQcWarningPanelProps> = 
 }) => {
   const qcResult = activeVersion.qc_result;
   const llmFailure = isLlmGenerationFailure(qcResult);
+  const rateLimited = isLlmRateLimited(qcResult);
 
   return (
     <div className="study-material-qc-warning-panel animate-fade-in">
@@ -36,9 +38,11 @@ const StudyMaterialQcWarningPanel: React.FC<StudyMaterialQcWarningPanelProps> = 
             </span>
           </div>
           <p className="sm-qc-warning__body">
-            {llmFailure
-              ? "Study material could not be generated because the AI service is temporarily unavailable. Inspect the placeholder draft on the left before deciding how to proceed."
-              : "This generated study material did not meet quality standards after 3 attempts. Please inspect the draft on the left before deciding how to proceed."}
+            {rateLimited
+              ? "Study material could not be generated because the AI service is temporarily unavailable. Inspect the placeholder draft on the left, then try again after the rate limit clears."
+              : llmFailure
+                ? "Study material could not be generated because the AI service is temporarily unavailable. Inspect the placeholder draft on the left before deciding how to proceed."
+                : "This generated study material did not meet quality standards after 3 attempts. Please inspect the draft on the left before deciding how to proceed."}
           </p>
           <LlmDiagnosticsNotice
             diagnostics={qcResult}
@@ -46,21 +50,23 @@ const StudyMaterialQcWarningPanel: React.FC<StudyMaterialQcWarningPanelProps> = 
           />
         </div>
 
-        <div className="study-material-qc-warning-panel__choices">
-          <span className="sm-qc-warning__choices-label">How do you want to proceed?</span>
-          <div className="sm-qc-warning__choices">
-            <button type="button" className="btn-primary sm-qc-warning__choice-btn" onClick={onAcceptDraft}>
-              Continue with this draft
-            </button>
-            <button
-              type="button"
-              className="btn-secondary sm-qc-warning__choice-btn sm-qc-warning__choice-btn--danger"
-              onClick={onDiscardDrafts}
-            >
-              Discard unpublished drafts
-            </button>
+        {!rateLimited && (
+          <div className="study-material-qc-warning-panel__choices">
+            <span className="sm-qc-warning__choices-label">How do you want to proceed?</span>
+            <div className="sm-qc-warning__choices">
+              <button type="button" className="btn-primary sm-qc-warning__choice-btn" onClick={onAcceptDraft}>
+                Continue with this draft
+              </button>
+              <button
+                type="button"
+                className="btn-secondary sm-qc-warning__choice-btn sm-qc-warning__choice-btn--danger"
+                onClick={onDiscardDrafts}
+              >
+                Discard unpublished drafts
+              </button>
+            </div>
           </div>
-        </div>
+        )}
       </div>
 
       {qcResult && hasContentQcReport(qcResult) && (

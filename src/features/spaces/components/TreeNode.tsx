@@ -48,7 +48,6 @@ const TreeNode: React.FC<TreeNodeProps> = ({
 }) => {
   const [isExpanded, setIsExpanded] = useState(true);
   const [showActions, setShowActions] = useState(false);
-  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
   const isSelected = selectedNodeId === node.node_id;
   const hasChildren = node.children.length > 0;
@@ -71,10 +70,9 @@ const TreeNode: React.FC<TreeNodeProps> = ({
     }
   };
 
-  const handleConfirmRemove = (e: React.MouseEvent) => {
+  const handleDeleteClick = (e: React.MouseEvent) => {
     e.stopPropagation();
     onArchive(node);
-    setShowDeleteConfirm(false);
     setShowActions(false);
   };
 
@@ -100,7 +98,6 @@ const TreeNode: React.FC<TreeNodeProps> = ({
         onMouseEnter={() => !movePickMode && setShowActions(true)}
         onMouseLeave={() => {
           setShowActions(false);
-          setShowDeleteConfirm(false);
         }}
         style={{
           display: "flex",
@@ -249,37 +246,11 @@ const TreeNode: React.FC<TreeNodeProps> = ({
 
             <div className="tree-action-divider" />
 
-            {showDeleteConfirm ? (
-              <div
-                style={{
-                  position: "absolute",
-                  right: 0,
-                  top: "100%",
-                  marginTop: "0.375rem",
-                  zIndex: 30,
-                  background: "var(--color-bg-surface)",
-                  border: "1px solid var(--color-border)",
-                  borderRadius: "var(--radius-lg)",
-                  padding: "0.625rem 0.75rem",
-                  boxShadow: "var(--shadow-subtle)",
-                  minWidth: "220px",
-                }}
-              >
-                <p style={{ margin: "0 0 0.5rem", fontSize: "0.75rem", color: "var(--color-text-secondary)", lineHeight: 1.4 }}>
-                  Remove {node.title}? This will also remove all its subtopics.
-                </p>
-                <div style={{ display: "flex", gap: "0.375rem", justifyContent: "flex-end" }}>
-                  <button type="button" className="btn-secondary" style={{ padding: "0.25rem 0.5rem", fontSize: "0.75rem" }} onClick={(e) => { e.stopPropagation(); setShowDeleteConfirm(false); }}>Cancel</button>
-                  <button type="button" className="btn-danger" style={{ padding: "0.25rem 0.5rem", fontSize: "0.75rem", background: "var(--color-danger)", color: "#fff", border: "none" }} onClick={handleConfirmRemove}>Confirm</button>
-                </div>
-              </div>
-            ) : (
-              <button className="tree-action-btn tree-action-btn--danger" title="Remove this topic" onClick={(e) => { e.stopPropagation(); setShowDeleteConfirm(true); }}>
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <polyline points="3 6 5 6 21 6" /><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6" /><path d="M10 11v6M14 11v6" />
-                </svg>
-              </button>
-            )}
+            <button className="tree-action-btn tree-action-btn--danger" title="Delete this topic" onClick={handleDeleteClick}>
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <polyline points="3 6 5 6 21 6" /><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6" /><path d="M10 11v6M14 11v6" />
+              </svg>
+            </button>
           </div>
         )}
       </div>

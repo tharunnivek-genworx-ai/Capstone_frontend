@@ -12,6 +12,7 @@ import type {
   NodeReparentRequest,
   NodeReorderRequest,
   NodeArchiveRequest,
+  NodeArchiveOut,
   NodeResponse,
   NodeTreeResponse,
 } from "../types/node.types";
@@ -91,10 +92,14 @@ export const nodeService = {
 
   /**
    * PATCH /nodes/:nodeId/archive
-   * Soft-archive a node (is_active = false).
+   * Soft-delete a topic node (is_active = false). UI presents this as delete.
    * If archive_children = true, all descendants are archived recursively.
    */
-  async archiveNode(nodeId: string, payload: NodeArchiveRequest): Promise<void> {
-    await axiosClient.patch(`/nodes/${nodeId}/archive`, payload);
+  async archiveNode(nodeId: string, payload: NodeArchiveRequest): Promise<NodeArchiveOut> {
+    const response = await axiosClient.patch<NodeArchiveOut>(
+      `/nodes/${nodeId}/archive`,
+      payload
+    );
+    return response.data;
   },
 };

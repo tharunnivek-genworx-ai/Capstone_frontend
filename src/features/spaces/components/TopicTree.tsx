@@ -10,7 +10,14 @@ import toast from "react-hot-toast";
 import type { NodeTreeNode, NodeCreateRequest, NodeRenameRequest } from "../types/node.types";
 import TreeNode from "./TreeNode";
 import MoveTopicOverlay from "./MoveTopicOverlay";
+import NodeDeleteConfirmModal from "./NodeDeleteConfirmModal";
 import { getExcludedMoveTargetIds, findParentId, type MoveParentSelection } from "./moveTopicUtils";
+import { mentorProgressService } from "../../mentor_progress_view";
+import type { NodeDeletePreviewOut } from "../../mentor_progress_view/types/mentorProgress.types";
+
+function collectSubtreeNodeIds(node: NodeTreeNode): string[] {
+  return [node.node_id, ...node.children.flatMap(collectSubtreeNodeIds)];
+}
 
 interface CreateNodeState {
   parentId: string | null; // null = root
@@ -58,6 +65,11 @@ const TopicTree: React.FC<TopicTreeProps> = ({
   const [moveTarget, setMoveTarget] = useState<NodeTreeNode | null>(null);
   const [moveParentId, setMoveParentId] = useState<MoveParentSelection>("__ROOT__");
   const [isMoving, setIsMoving] = useState(false);
+
+  const [deleteTarget, setDeleteTarget] = useState<NodeTreeNode | null>(null);
+  const [deletePreview, setDeletePreview] = useState<NodeDeletePreviewOut | null>(null);
+  const [isLoadingDeletePreview, setIsLoadingDeletePreview] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   useEffect(() => {
     onMoveModeChange?.(!!moveTarget);
@@ -108,13 +120,42 @@ const TopicTree: React.FC<TopicTreeProps> = ({
     }
   };
 
-  const handleArchiveFromTree = async (node: NodeTreeNode) => {
+  const handleRequestDelete = async (node: NodeTreeNode) => {
+    setDeleteTarget(node);
+    setDeletePreview(null);
+    setIsLoadingDeletePreview(true);
     try {
-      await onArchive(node.node_id, { archive_children: node.children.length > 0 });
-      toast.success("Topic removed.");
+      const nodeIds = collectSubtreeNodeIds(node);
+      const preview = await mentorProgressService.previewDeletedNodeContent(spaceId, nodeIds);
+      setDeletePreview(preview);
+    } catch (err) {
+      const e = err as { response?: { data?: { detail?: string } }; message?: string };
+      toast.error(e?.response?.data?.detail ?? e?.message ?? "Could not load delete preview.");
+      setDeleteTarget(null);
+    } finally {
+      setIsLoadingDeletePreview(false);
+    }
+  };
+
+  const closeDeleteModal = () => {
+    if (isDeleting) return;
+    setDeleteTarget(null);
+    setDeletePreview(null);
+  };
+
+  const handleConfirmDelete = async () => {
+    if (!deleteTarget) return;
+    setIsDeleting(true);
+    try {
+      await onArchive(deleteTarget.node_id, { archive_children: deleteTarget.children.length > 0 });
+      toast.success("Topic deleted.");
+      setDeleteTarget(null);
+      setDeletePreview(null);
     } catch (err) {
       const e = err as { response?: { data?: { detail?: string } }; message?: string };
       toast.error(e?.response?.data?.detail ?? e?.message ?? "Remove failed.");
+    } finally {
+      setIsDeleting(false);
     }
   };
 
@@ -424,7 +465,7 @@ const TopicTree: React.FC<TopicTreeProps> = ({
             onMove={startMove}
             onMoveUp={(n) => handleMoveSibling(n, "up")}
             onMoveDown={(n) => handleMoveSibling(n, "down")}
-            onArchive={handleArchiveFromTree}
+            onArchive={handleRequestDelete}
             siblings={roots}
             isMentor={isMentor}
             movePickMode={!!moveTarget}
@@ -435,6 +476,55 @@ const TopicTree: React.FC<TopicTreeProps> = ({
           />
         ))}
       </div>
+
+      {deleteTarget && deletePreview && (
+        <NodeDeleteConfirmModal
+          nodeTitle={deleteTarget.title}
+          preview={deletePreview}
+          onClose={closeDeleteModal}
+          onConfirm={() => void handleConfirmDelete()}
+          isSubmitting={isDeleting}
+        />
+      )}
+
+      {deleteTarget && isLoadingDeletePreview && (
+        <>
+          <div
+            style={{
+              position: "fixed",
+              inset: 0,
+              background: "rgba(0,0,0,0.65)",
+              zIndex: 50,
+              backdropFilter: "blur(4px)",
+            }}
+          />
+          <div
+            style={{
+              position: "fixed",
+              inset: 0,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              zIndex: 60,
+              pointerEvents: "none",
+            }}
+          >
+            <div
+              style={{
+                pointerEvents: "auto",
+                padding: "1.5rem 2rem",
+                background: "var(--color-surface-2)",
+                border: "1px solid var(--color-border)",
+                borderRadius: "var(--radius-xl)",
+                fontSize: "0.875rem",
+                color: "var(--color-text-secondary)",
+              }}
+            >
+              Loading delete preview…
+            </div>
+          </div>
+        </>
+      )}
 
     </div>
   );

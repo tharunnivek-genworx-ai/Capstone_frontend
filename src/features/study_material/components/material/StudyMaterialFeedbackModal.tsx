@@ -20,7 +20,7 @@ const COPY: Record<
   regenerate: {
     title: "Regenerate study material",
     description:
-      "Describe what is wrong with the current draft and what should change. The AI will rewrite the material using your active version as context — reference PDF parsing will not run again.",
+      "Describe what is wrong with the current draft and what should change. The AI will rewrite the material using your active version as context.",
     placeholder:
       "e.g. Section 3 is too shallow. Add more step-by-step detail for the deployment workflow and keep the existing diagram explanations.",
     submit: "Regenerate",

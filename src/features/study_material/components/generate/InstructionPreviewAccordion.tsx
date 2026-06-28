@@ -14,6 +14,8 @@ interface InstructionPreviewAccordionProps {
   branchDefault: string;
   /** Node's effective_instruction_parts from the backend */
   previewParts: EffectiveInstructionPart[];
+  /** Root topics have no parent section style — hide that row to avoid confusion */
+  isRootTopic?: boolean;
 }
 
 export default function InstructionPreviewAccordion({
@@ -21,6 +23,7 @@ export default function InstructionPreviewAccordion({
   modeText,
   branchDefault,
   previewParts,
+  isRootTopic = false,
 }: InstructionPreviewAccordionProps) {
   const [isOpen, setIsOpen] = useState(false);
 
@@ -51,7 +54,7 @@ export default function InstructionPreviewAccordion({
       <span>&ldquo;{modeText}&rdquo;</span>
     ) : (
       <span className="gsm-preview__val--empty">
-        Not set — section style applies
+        {isRootTopic ? "Not set" : "Not set — section style applies"}
       </span>
     );
   } else {
@@ -71,7 +74,7 @@ export default function InstructionPreviewAccordion({
 
     overrideContent = (
       <span className="gsm-preview__val--empty">
-        Not set — section style applies
+        {isRootTopic ? "Not set" : "Not set — section style applies"}
       </span>
     );
   }
@@ -99,10 +102,12 @@ export default function InstructionPreviewAccordion({
 
       {isOpen && (
         <div id="gsm-preview-body" className="gsm-preview__body" role="region">
-          <div className="gsm-preview__row">
-            <strong>Section style</strong>
-            {sectionStyleContent}
-          </div>
+          {!isRootTopic && (
+            <div className="gsm-preview__row">
+              <strong>Section style</strong>
+              {sectionStyleContent}
+            </div>
+          )}
           <div className="gsm-preview__row">
             <strong>Default for subtopics</strong>
             {branchDefaultContent}

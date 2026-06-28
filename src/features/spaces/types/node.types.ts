@@ -56,6 +56,12 @@ export interface NodeArchiveRequest {
   archive_children: boolean;
 }
 
+export interface NodeArchiveOut {
+  detail: string;
+  archived_count: number;
+  archived_node_ids: string[];
+}
+
 // ── Response shapes ───────────────────────────────────────────────────────────
 
 export type EffectiveInstructionPartType = "inherited" | "branch-default" | "extra" | "override";
