@@ -4,17 +4,13 @@ import toast from "react-hot-toast";
 import type {
   NodeTreeNode,
   NodeUpdateInstructionRequest,
-  TopicContentPage,
 } from "../types/node.types";
 import {
   useStudyMaterial,
   type NodeStudyStatePatch,
 } from "../../study_material/hooks/useStudyMaterial";
 import { useQuiz } from "../../quiz/hooks/useQuiz";
-import type {
-  ReferenceMaterialOut,
-  StudyMaterialVersionOut,
-} from "../../study_material/types/studyMaterial.types";
+import type { NodeStudyState } from "../../study_material/types/studyMaterial.types";
 import StudentVisibilityBanner from "../../study_material/components/material/StudentVisibilityBanner";
 import StudyMaterialFeedbackModal from "../../study_material/components/material/StudyMaterialFeedbackModal";
 import StudyMaterialManualEditor from "../../study_material/components/material/StudyMaterialManualEditor";
@@ -65,17 +61,7 @@ interface NodeDetailPanelProps {
   onUpdateInstruction: (nodeId: string, payload: NodeUpdateInstructionRequest) => Promise<void>;
   onNavigateToNode: (nodeId: string) => void;
   isMentor?: boolean;
-  studyState?: {
-    currentPage: TopicContentPage;
-    hasTriggeredGeneration: boolean;
-    studyMaterialContent: string | null;
-    activeVersion: StudyMaterialVersionOut | null;
-    isGenerating: boolean;
-    isGeneratingQuiz: boolean;
-    isGeneratingHints: boolean;
-    referenceMaterial: ReferenceMaterialOut | null;
-    currentQuizId: string | null;
-  };
+  studyState?: NodeStudyState;
   onStudyStateChange?: (nodeId: string, patch: NodeStudyStatePatch) => void;
   onMentorProgressRefresh?: () => void;
   contentRefreshToken?: number;
