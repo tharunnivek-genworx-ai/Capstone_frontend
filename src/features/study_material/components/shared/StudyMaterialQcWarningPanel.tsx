@@ -1,5 +1,9 @@
 import React from "react";
-import type { StudyMaterialVersionOut } from "../../types/studyMaterial.types";
+import type {
+  DetFailureDisplayOut,
+  QcWarningPresentationOut,
+  StudyMaterialVersionOut,
+} from "../../types/studyMaterial.types";
 import LlmDiagnosticsNotice from "./LlmDiagnosticsNotice";
 import {
   formatQcScore,
@@ -7,11 +11,68 @@ import {
   isLlmGenerationFailure,
   isLlmRateLimited,
 } from "../../utils/llmDiagnostics";
+import {
+  QC_LLM_FAILED_BODY,
+  QC_LLM_FAILED_TITLE,
+  shouldShowCodeQualityScore,
+} from "../../utils/qcDisplayUtils";
 
 interface StudyMaterialQcWarningPanelProps {
   activeVersion: StudyMaterialVersionOut;
   onAcceptDraft: () => void;
   onDiscardDrafts: () => void;
+}
+
+function DetFailureList({
+  label,
+  items,
+}: {
+  label: string;
+  items: DetFailureDisplayOut[];
+}) {
+  if (items.length === 0) return null;
+  return (
+    <div className="sm-qc-warning__issues sm-qc-warning__issues--det">
+      <span className="sm-qc-warning__issues-label">{label}</span>
+      <ul>
+        {items.map((item) => (
+          <li key={`${item.check_id}-${item.section_label}-${item.subsection_label ?? ""}`}>
+            {item.user_message}
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+function DetFailureReportSections({
+  presentation,
+}: {
+  presentation: QcWarningPresentationOut;
+}) {
+  const {
+    kind,
+    formatting_items,
+    structure_items,
+    evidence_items,
+    formatting_list_label,
+    structure_list_label,
+    evidence_list_label,
+    det_only_list_label,
+  } = presentation;
+
+  if (kind === "mixed") {
+    return (
+      <>
+        <DetFailureList label={formatting_list_label} items={formatting_items} />
+        <DetFailureList label={structure_list_label} items={structure_items} />
+        <DetFailureList label={evidence_list_label} items={evidence_items} />
+      </>
+    );
+  }
+
+  const allItems = [...structure_items, ...evidence_items, ...formatting_items];
+  return <DetFailureList label={det_only_list_label} items={allItems} />;
 }
 
 const StudyMaterialQcWarningPanel: React.FC<StudyMaterialQcWarningPanelProps> = ({
@@ -22,28 +83,46 @@ const StudyMaterialQcWarningPanel: React.FC<StudyMaterialQcWarningPanelProps> = 
   const qcResult = activeVersion.qc_result;
   const llmFailure = isLlmGenerationFailure(qcResult);
   const rateLimited = isLlmRateLimited(qcResult);
+  const showCodeQuality = shouldShowCodeQualityScore(activeVersion.concept_plan?.domain);
+  const warningPresentation = qcResult?.warning_presentation ?? null;
+  const displayIssues = qcResult?.humanized_issues ?? qcResult?.issues ?? [];
+  const displayCorrective =
+    qcResult?.humanized_corrective_instructions ?? qcResult?.corrective_instructions ?? "";
+
+  const alertTitle = rateLimited
+    ? "Generation Unavailable"
+    : llmFailure
+      ? "Generation Unavailable"
+      : warningPresentation?.alert_title ?? QC_LLM_FAILED_TITLE;
+
+  const alertBody = rateLimited
+    ? "Study material could not be generated because the AI service is temporarily unavailable. Inspect the placeholder draft on the left, then try again after the rate limit clears."
+    : llmFailure
+      ? "Study material could not be generated because the AI service is temporarily unavailable. Inspect the placeholder draft on the left before deciding how to proceed."
+      : warningPresentation?.alert_body ?? QC_LLM_FAILED_BODY;
+
+  const isDetFormattingOnly = warningPresentation?.is_formatting_only ?? false;
 
   return (
     <div className="study-material-qc-warning-panel animate-fade-in">
       <div className="study-material-qc-warning-panel__sticky">
-        <div className="study-material-qc-warning-panel__alert">
+        <div
+          className={`study-material-qc-warning-panel__alert${
+            isDetFormattingOnly ? " study-material-qc-warning-panel__alert--formatting" : ""
+          }`}
+        >
           <div className="sm-qc-warning__title-row">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#d97706" strokeWidth="2.5" aria-hidden>
               <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
               <line x1="12" y1="9" x2="12" y2="13" />
               <line x1="12" y1="17" x2="12.01" y2="17" />
             </svg>
-            <span className="sm-qc-warning__title">
-              {llmFailure ? "Generation Unavailable" : "Quality Check Failed"}
-            </span>
+            <span className="sm-qc-warning__title">{alertTitle}</span>
           </div>
-          <p className="sm-qc-warning__body">
-            {rateLimited
-              ? "Study material could not be generated because the AI service is temporarily unavailable. Inspect the placeholder draft on the left, then try again after the rate limit clears."
-              : llmFailure
-                ? "Study material could not be generated because the AI service is temporarily unavailable. Inspect the placeholder draft on the left before deciding how to proceed."
-                : "This generated study material did not meet quality standards after 3 attempts. Please inspect the draft on the left before deciding how to proceed."}
-          </p>
+          <p className="sm-qc-warning__body">{alertBody}</p>
+          {warningPresentation?.det_summary && !rateLimited && !llmFailure && (
+            <p className="sm-qc-warning__det-summary">{warningPresentation.det_summary}</p>
+          )}
           <LlmDiagnosticsNotice
             diagnostics={qcResult}
             entityNextLlmRetryAt={activeVersion.next_llm_retry_at}
@@ -77,7 +156,9 @@ const StudyMaterialQcWarningPanel: React.FC<StudyMaterialQcWarningPanelProps> = 
             <span className="sm-qc-warning__scores-label">Scores:</span>
             <div className="sm-qc-warning__scores-grid">
               <div>Accuracy: <strong>{formatQcScore(qcResult.scores?.content_accuracy)}</strong></div>
-              <div>Code Quality: <strong>{formatQcScore(qcResult.scores?.code_quality)}</strong></div>
+              {showCodeQuality && (
+                <div>Code Quality: <strong>{formatQcScore(qcResult.scores?.code_quality)}</strong></div>
+              )}
               <div>Section Depth: <strong>{formatQcScore(qcResult.scores?.section_depth)}</strong></div>
               <div>Alignment: <strong>{formatQcScore(qcResult.scores?.teaching_alignment)}</strong></div>
             </div>
@@ -87,6 +168,10 @@ const StudyMaterialQcWarningPanel: React.FC<StudyMaterialQcWarningPanelProps> = 
               </p>
             )}
           </div>
+
+          {warningPresentation?.reassurance && (
+            <p className="sm-qc-warning__reassurance">{warningPresentation.reassurance}</p>
+          )}
 
           <div className="sm-qc-warning__divider" />
 
@@ -99,21 +184,27 @@ const StudyMaterialQcWarningPanel: React.FC<StudyMaterialQcWarningPanelProps> = 
             </span>
           </div>
 
-          {(qcResult.issues?.length ?? 0) > 0 && (
+          {warningPresentation && (
+            <DetFailureReportSections presentation={warningPresentation} />
+          )}
+
+          {displayIssues.length > 0 && (
             <div className="sm-qc-warning__issues">
-              <span className="sm-qc-warning__issues-label">Issues Found:</span>
+              <span className="sm-qc-warning__issues-label">
+                {warningPresentation?.content_issues_label ?? "Issues Found"}
+              </span>
               <ul>
-                {qcResult.issues?.map((issue, idx) => (
+                {displayIssues.map((issue, idx) => (
                   <li key={idx}>{issue}</li>
                 ))}
               </ul>
             </div>
           )}
 
-          {qcResult.corrective_instructions && (
+          {displayCorrective && (
             <div className="sm-qc-warning__corrective">
               <span className="sm-qc-warning__corrective-label">Corrective Action:</span>
-              <p>{qcResult.corrective_instructions}</p>
+              <p>{displayCorrective}</p>
             </div>
           )}
         </div>

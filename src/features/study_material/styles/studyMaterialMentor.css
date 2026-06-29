@@ -633,6 +633,29 @@
   font-style: italic;
 }
 
+.study-material-qc-warning-panel__alert--formatting {
+  border-color: color-mix(in srgb, var(--color-warning, #d97706) 35%, transparent);
+}
+
+.sm-qc-warning__det-summary {
+  margin: 0.5rem 0 0;
+  font-size: 0.8125rem;
+  color: var(--color-text-secondary);
+  line-height: 1.45;
+}
+
+.sm-qc-warning__reassurance {
+  margin: 0.75rem 0 0;
+  font-size: 0.75rem;
+  color: var(--color-text-secondary);
+  line-height: 1.5;
+  font-style: italic;
+}
+
+.sm-qc-warning__issues--det {
+  margin-top: 0.75rem;
+}
+
 @media (max-width: 1080px) {
   .sm-mentor-workspace {
     grid-template-columns: 1fr;

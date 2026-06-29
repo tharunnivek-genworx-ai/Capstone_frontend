@@ -373,7 +373,7 @@ const NodeDetailPanel: React.FC<NodeDetailPanelProps> = ({
               <div className="node-detail-panel__nav">
                 <TopicPageNav
                   currentPage={sm.currentPage}
-                  canAccessStudyMaterial={sm.canAccessStudyMaterial}
+                  canAccessStudyMaterial={sm.canAccessStudyMaterial || sm.isGenerating}
                   canAccessQuiz={sm.canAccessQuiz}
                   canAccessHints={sm.canAccessQuiz && qz.canAccessHints}
                   onPageChange={sm.setCurrentPage}

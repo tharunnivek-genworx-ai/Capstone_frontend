@@ -952,8 +952,13 @@ export function useStudyMaterial({
     generatingNodeIds.add(nodeId);
     patchNodeStudyState(nodeId, {
       isGenerating: true,
+      currentPage: 2,
       generationProgressSessionId: progressSessionId,
     });
+    // Close the modal immediately so the user sees the full progress panel on page 2
+    if (isViewingNode(nodeId)) {
+      setFeedbackModalMode(null);
+    }
     setProcessingLabel(mode === "regenerate" ? "Regenerating study material" : "Improving study material");
     try {
       const res =
