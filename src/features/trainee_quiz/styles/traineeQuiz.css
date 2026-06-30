@@ -466,11 +466,13 @@
   font-family: "Courier New", Courier, monospace;
   font-size: 13px;
   line-height: 1.45;
+  white-space: pre;
 }
 
 .trainee-quiz-rich-text__code {
   font-family: "Courier New", Courier, monospace;
   font-size: 13px;
+  white-space: pre;
 }
 
 .trainee-quiz-rich-text__inline-code {

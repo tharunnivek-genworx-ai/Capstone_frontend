@@ -146,7 +146,13 @@ const NodeDetailPanel: React.FC<NodeDetailPanelProps> = ({
     <button
       type="button"
       className={`btn-secondary reference-materials-trigger reference-materials-trigger--generation ${extraClassName}`.trim()}
-      onClick={() => sm.setShowRefModal(true)}
+      onClick={() => {
+        if (sm.currentPage === 2) {
+          sm.openRefModalView();
+        } else {
+          sm.openRefModalManage();
+        }
+      }}
       title="PDF or document used by the AI when generating study material"
     >
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -396,7 +402,7 @@ const NodeDetailPanel: React.FC<NodeDetailPanelProps> = ({
               onDiscard={resetFromNode}
               onNavigateToNode={onNavigateToNode}
               sm={sm}
-              onOpenRefModal={() => sm.setShowRefModal(true)}
+              onOpenRefModal={() => sm.openRefModalManage()}
               onOpenMediaModal={() => sm.setShowNodeMediaModal(true)}
             />
           </div>
@@ -533,6 +539,7 @@ const NodeDetailPanel: React.FC<NodeDetailPanelProps> = ({
         <RegenerateStudyMaterialConfirmModal
           nodeTitle={node.title}
           hasReferenceMaterial={Boolean(sm.referenceMaterial)}
+          sourceDocMismatch={sm.sourceDocMismatch}
           onClose={() => !sm.isDeletingDrafts && !sm.isGenerating && sm.setShowRegenerateConfirmModal(false)}
           onConfirm={() => void sm.handleRegenerateStudyMaterialFresh()}
           isSubmitting={sm.isDeletingDrafts || sm.isGenerating}
@@ -555,17 +562,24 @@ const NodeDetailPanel: React.FC<NodeDetailPanelProps> = ({
           spaceId={spaceId}
           nodeId={node.node_id}
           nodeTitle={node.title}
+          mode={sm.refModalMode}
+          versionReferenceMaterialId={sm.activeVersion?.reference_material_id ?? null}
           existing={sm.referenceMaterial}
-          onClose={() => sm.setShowRefModal(false)}
-          onUploaded={(mat) => {
-            sm.setReferenceMaterial(mat);
+          focusDropzone={sm.refModalFocusDropzone}
+          onClose={() => {
             sm.setShowRefModal(false);
-            void sm.refreshGenerationSource();
+            sm.setRefModalFocusDropzone(false);
+          }}
+          onRequestReplace={sm.handleRequestReplaceSource}
+          onUploaded={(mat) => {
+            sm.setReferenceMaterialForNode(node.node_id, mat);
+            sm.setShowRefModal(false);
+            sm.setRefModalFocusDropzone(false);
           }}
           onDeleted={() => {
-            sm.setReferenceMaterial(null);
+            sm.setReferenceMaterialForNode(node.node_id, null);
             sm.setShowRefModal(false);
-            void sm.refreshGenerationSource();
+            sm.setRefModalFocusDropzone(false);
           }}
         />
       )}

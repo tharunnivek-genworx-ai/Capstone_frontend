@@ -231,6 +231,21 @@ h1, h2, h3, h4, h5, h6 {
   animation: saveConfirmFade 2s ease-out forwards;
 }
 
+/* ─── Topic tree rows ────────────────────────────────────────────── */
+.tree-node {
+  overflow: hidden;
+}
+
+.tree-node--compact .tree-action-btn__label {
+  display: none;
+}
+
+.tree-node--compact .tree-action-btn {
+  min-width: 26px;
+  min-height: 26px;
+  padding: 0 0.25rem;
+}
+
 /* ─── Topic tree action buttons ──────────────────────────────────── */
 .tree-action-btn {
   display: inline-flex;
@@ -3057,4 +3072,93 @@ select.input-field option {
   display: flex;
   justify-content: flex-end;
   gap: 0.625rem;
+}
+
+.reference-material-modal__visibility {
+  margin-top: 0.25rem;
+}
+
+.reference-material-modal__visibility-label {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  cursor: pointer;
+}
+
+.reference-material-modal__visibility-input {
+  position: absolute;
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.reference-material-modal__visibility-switch {
+  flex: 0 0 auto;
+  width: 2.5rem;
+  height: 1.375rem;
+  margin-top: 0.125rem;
+  border-radius: 999px;
+  background: var(--color-border);
+  position: relative;
+  transition: background 0.15s ease;
+}
+
+.reference-material-modal__visibility-switch::after {
+  content: "";
+  position: absolute;
+  top: 0.125rem;
+  left: 0.125rem;
+  width: 1.125rem;
+  height: 1.125rem;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.15);
+  transition: transform 0.15s ease;
+}
+
+.reference-material-modal__visibility-input:checked + .reference-material-modal__visibility-switch {
+  background: var(--color-primary);
+}
+
+.reference-material-modal__visibility-input:checked + .reference-material-modal__visibility-switch::after {
+  transform: translateX(1.125rem);
+}
+
+.reference-material-modal__visibility-input:disabled + .reference-material-modal__visibility-switch {
+  opacity: 0.6;
+}
+
+.reference-material-modal__visibility-text {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  font-size: 0.875rem;
+  color: var(--color-text-secondary);
+  line-height: 1.45;
+}
+
+.reference-material-modal__visibility-text strong {
+  color: var(--color-text);
+  font-size: 0.9rem;
+}
+
+.reference-material-modal__existing--unavailable {
+  border-color: var(--color-warning);
+  background: var(--color-warning-subtle, #fffbeb);
+}
+
+.reference-material-modal__replace-link {
+  margin-left: auto;
+  background: none;
+  border: none;
+  color: var(--color-primary);
+  font-size: 0.875rem;
+  font-weight: 600;
+  cursor: pointer;
+  text-decoration: underline;
+  padding: 0.5rem 0.25rem;
+}
+
+.reference-material-modal__replace-link:hover {
+  color: var(--color-primary-hover, var(--color-primary));
 }

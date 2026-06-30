@@ -872,6 +872,7 @@ const SpaceDetailPage: React.FC = () => {
               onArchive={handleArchiveNode}
               isMentor={isMentor}
               onMoveModeChange={setIsMoveMode}
+              isCompact={treePanelWidth < 300}
             />
           ) : (
             <TraineeTopicTree

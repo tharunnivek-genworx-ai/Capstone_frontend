@@ -91,6 +91,7 @@ export interface QuizOut {
   created_at: string;
   updated_at: string;
   hints_status: HintsStatus;
+  hints_stale_question_ids?: string[];
   questions: QuizQuestionOut[];
   qc_failed_permanently?: boolean;
   qc_result?: QuizQualityCheckResultOut | null;
@@ -177,8 +178,14 @@ export interface QuizQuestionReorderRequest {
   question_ids: string[];
 }
 
-export interface HintRegenerateRequest {
+export interface QuizQuestionRegenerateRequest {
   question_ids: string[];
+  mentor_feedback: string;
+}
+
+export interface HintRegenerateRequest {
+  scope?: "all" | "selective";
+  question_ids?: string[];
   mentor_feedback?: string;
 }
 

@@ -28,6 +28,8 @@ export interface TraineeArchivedSmItem {
   version_label: string;
   published_at: string | null;
   superseded_at: string | null;
+  removed_at: string | null;
+  can_read_material: boolean;
   you_read_this: boolean;
   has_archived_quiz: boolean;
   archived_quiz_id: string | null;

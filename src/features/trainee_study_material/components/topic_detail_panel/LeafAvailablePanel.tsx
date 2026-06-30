@@ -31,7 +31,7 @@ const LeafAvailablePanel: React.FC<LeafAvailablePanelProps> = ({
   const [materialTab, setMaterialTab] = useState<MaterialTab>("current");
   const [archivedRead, setArchivedRead] = useState<{
     versionId: string;
-    versionLabel: string;
+    isCurrentVersion: boolean;
   } | null>(null);
 
   const material = panel.study_material;
@@ -54,7 +54,7 @@ const LeafAvailablePanel: React.FC<LeafAvailablePanelProps> = ({
         nodeId={nodeId}
         versionId={archivedRead.versionId}
         nodeTitle={panel.title}
-        versionLabel={archivedRead.versionLabel}
+        isCurrentVersion={archivedRead.isCurrentVersion}
         onBack={() => setArchivedRead(null)}
       />
     );
@@ -97,8 +97,11 @@ const LeafAvailablePanel: React.FC<LeafAvailablePanelProps> = ({
           nodeId={nodeId}
           spaceId={spaceId}
           nodeTitle={panel.title}
-          onReadVersion={(versionId, versionLabel) =>
-            setArchivedRead({ versionId, versionLabel })
+          onReadVersion={(version) =>
+            setArchivedRead({
+              versionId: version.version_id,
+              isCurrentVersion: version.is_current_version ?? false,
+            })
           }
         />
       ) : (

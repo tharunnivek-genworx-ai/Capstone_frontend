@@ -8,6 +8,7 @@ import type {
   QuizOut,
   QuizQuestionCreateRequest,
   QuizQuestionOut,
+  QuizQuestionRegenerateRequest,
   QuizQuestionReorderRequest,
   QuizQuestionUpdateRequest,
   QuizUnpublishPreviewOut,
@@ -102,6 +103,16 @@ export const quizService = {
   reorderQuestions(nodeId: string, quizId: string, payload: QuizQuestionReorderRequest): Promise<{ detail: string }> {
     return studyAgentClient
       .patch<{ detail: string }>(`/nodes/${nodeId}/quizzes/${quizId}/questions/reorder`, payload)
+      .then((r) => r.data);
+  },
+
+  regenerateQuestions(
+    nodeId: string,
+    quizId: string,
+    payload: QuizQuestionRegenerateRequest,
+  ): Promise<QuizOut> {
+    return studyAgentClient
+      .post<QuizOut>(`/nodes/${nodeId}/quizzes/${quizId}/questions/regenerate`, payload)
       .then((r) => r.data);
   },
 

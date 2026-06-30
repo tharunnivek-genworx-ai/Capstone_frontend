@@ -4,6 +4,7 @@ import type { UseQuizReturn } from "../hooks/useQuiz";
 import type { TopicContentPage } from "../../spaces/types/node.types";
 import HintCard from "./HintCard";
 import HintRegenerateModal from "./HintRegenerateModal";
+import HintRegenerateAllModal from "./HintRegenerateAllModal";
 import HintDeleteDraftModal from "./HintDeleteDraftModal";
 import QuizPublishConfirmModal from "./QuizPublishConfirmModal";
 import QuizUnpublishConfirmModal from "./QuizUnpublishConfirmModal";
@@ -20,6 +21,7 @@ const QuizPage4: React.FC<QuizPage4Props> = ({ qz, onPageChange }) => {
     questionIndex: number;
     questionText: string;
   } | null>(null);
+  const [showRegenerateAllHintsModal, setShowRegenerateAllHintsModal] = useState(false);
 
   if (qz.isLoadingQuiz || (qz.isViewingHistoryQuiz && qz.isLoadingHistoryQuiz)) {
     return (
@@ -157,7 +159,7 @@ const QuizPage4: React.FC<QuizPage4Props> = ({ qz, onPageChange }) => {
             <button
               type="button"
               className="btn-secondary"
-              onClick={qz.handleRegenerateAllHints}
+              onClick={() => setShowRegenerateAllHintsModal(true)}
               disabled={qz.isGeneratingHints || !qz.canRegenerateHints}
               title={!qz.canRegenerateHints ? (qz.hintsLockedTooltip ?? undefined) : undefined}
               style={{
@@ -255,6 +257,18 @@ const QuizPage4: React.FC<QuizPage4Props> = ({ qz, onPageChange }) => {
           ))
         )}
       </div>
+
+      {showRegenerateAllHintsModal && (
+        <HintRegenerateAllModal
+          questionCount={activeQuestions.length}
+          isSubmitting={qz.isGeneratingHints}
+          onClose={() => !qz.isGeneratingHints && setShowRegenerateAllHintsModal(false)}
+          onConfirm={async (feedback) => {
+            await qz.handleRegenerateAllHints(feedback);
+            setShowRegenerateAllHintsModal(false);
+          }}
+        />
+      )}
 
       {hintRegenerateTarget && (
         <HintRegenerateModal

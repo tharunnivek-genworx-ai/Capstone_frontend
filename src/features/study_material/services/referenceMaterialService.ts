@@ -22,18 +22,30 @@ export const referenceMaterialService = {
     spaceId: string,
     nodeId: string,
     file: File,
-    title: string
+    title: string,
+    isVisibleToTrainees = false
   ): Promise<ReferenceMaterialOut> {
     const formData = new FormData();
     formData.append("file", file);
     formData.append("title", title);
     formData.append("scope", "node");
     formData.append("node_id", nodeId);
-    formData.append("is_visible_to_trainees", "true");
+    formData.append("is_visible_to_trainees", String(isVisibleToTrainees));
 
     const response = await studyAgentClient.post<ReferenceMaterialOut>(
       `/spaces/${spaceId}/reference-materials`,
       formData
+    );
+    return response.data;
+  },
+
+  async updateVisibility(
+    materialId: string,
+    isVisibleToTrainees: boolean
+  ): Promise<ReferenceMaterialOut> {
+    const response = await studyAgentClient.patch<ReferenceMaterialOut>(
+      `/reference-materials/${materialId}/visibility`,
+      { is_visible_to_trainees: isVisibleToTrainees }
     );
     return response.data;
   },

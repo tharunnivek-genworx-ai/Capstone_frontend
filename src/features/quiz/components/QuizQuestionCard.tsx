@@ -4,6 +4,7 @@ import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import type { QuizQuestionOut, QuizQuestionUpdateRequest } from "../types/quiz.types";
 import QuizQuestionModal from "./QuizQuestionModal";
+import QuizQuestionRegenerateModal from "./QuizQuestionRegenerateModal";
 
 interface QuizQuestionCardProps {
   question: QuizQuestionOut;
@@ -12,8 +13,10 @@ interface QuizQuestionCardProps {
   canEdit?: boolean;
   isSaving: boolean;
   isDeleting: boolean;
+  isRegenerating: boolean;
   onUpdate: (questionId: string, data: QuizQuestionUpdateRequest) => Promise<void>;
   onDelete: (questionId: string) => Promise<void>;
+  onRegenerate: (questionId: string, feedback: string) => Promise<void>;
 }
 
 const OPTION_LABELS: Record<string, string> = { A: "A", B: "B", C: "C", D: "D" };
@@ -25,10 +28,13 @@ const QuizQuestionCard: React.FC<QuizQuestionCardProps> = ({
   canEdit = true,
   isSaving,
   isDeleting,
+  isRegenerating,
   onUpdate,
   onDelete,
+  onRegenerate,
 }) => {
   const [showEditModal, setShowEditModal] = useState(false);
+  const [showRegenerateModal, setShowRegenerateModal] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
   const {
@@ -52,6 +58,9 @@ const QuizQuestionCard: React.FC<QuizQuestionCardProps> = ({
     { letter: "C", text: question.option_c },
     { letter: "D", text: question.option_d },
   ].filter((o) => o.text !== null) as Array<{ letter: string; text: string }>;
+
+  const hasHints = Boolean(question.hint_1 || question.hint_2 || question.hint_3);
+  const actionsDisabled = isSaving || isRegenerating || !canEdit;
 
   return (
     <>
@@ -120,12 +129,36 @@ const QuizQuestionCard: React.FC<QuizQuestionCardProps> = ({
 
           {/* Actions */}
           {question.is_active && !isPublished && (
-            <div style={{ display: "flex", gap: "0.375rem", flexShrink: 0 }}>
+            <div style={{ display: "flex", gap: "0.375rem", flexShrink: 0, flexWrap: "wrap", justifyContent: "flex-end" }}>
+              <button
+                type="button"
+                className="btn-secondary"
+                onClick={() => setShowRegenerateModal(true)}
+                disabled={actionsDisabled}
+                style={{
+                  padding: "0.375rem 0.625rem",
+                  fontSize: "0.75rem",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "0.25rem",
+                  opacity: !canEdit ? 0.5 : 1,
+                  cursor: !canEdit ? "not-allowed" : "pointer",
+                }}
+                title={!canEdit ? "Editing is not available for this quiz" : "Regenerate question with AI"}
+              >
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M21 2v6h-6" />
+                  <path d="M3 12a9 9 0 0115.5-6.7L21 8" />
+                  <path d="M3 22v-6h6" />
+                  <path d="M21 12a9 9 0 01-15.5 6.7L3 16" />
+                </svg>
+                Regenerate
+              </button>
               <button
                 type="button"
                 className="btn-secondary"
                 onClick={() => setShowEditModal(true)}
-                disabled={isSaving || !canEdit}
+                disabled={actionsDisabled}
                 style={{
                   padding: "0.375rem 0.625rem",
                   fontSize: "0.75rem",
@@ -146,7 +179,7 @@ const QuizQuestionCard: React.FC<QuizQuestionCardProps> = ({
               <button
                 type="button"
                 onClick={() => setShowDeleteConfirm(true)}
-                disabled={isDeleting || !canEdit}
+                disabled={isDeleting || isRegenerating || !canEdit}
                 style={{
                   padding: "0.375rem 0.625rem", fontSize: "0.75rem",
                   display: "flex", alignItems: "center", gap: "0.25rem",
@@ -250,6 +283,20 @@ const QuizQuestionCard: React.FC<QuizQuestionCardProps> = ({
           </div>
         )}
       </div>
+
+      {showRegenerateModal && (
+        <QuizQuestionRegenerateModal
+          questionIndex={index}
+          questionText={question.question_text}
+          hasHints={hasHints}
+          isSubmitting={isRegenerating}
+          onClose={() => !isRegenerating && setShowRegenerateModal(false)}
+          onConfirm={async (feedback) => {
+            await onRegenerate(question.question_id, feedback);
+            setShowRegenerateModal(false);
+          }}
+        />
+      )}
 
       {showEditModal && (
         <QuizQuestionModal

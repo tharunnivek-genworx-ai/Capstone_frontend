@@ -26,6 +26,7 @@ interface TreeNodeProps {
   excludedMoveTargetIds?: Set<string>;
   moveSelectedParentId?: MoveParentSelection;
   onPickMoveParent?: (parentId: string) => void;
+  isCompact?: boolean;
 }
 
 const TreeNode: React.FC<TreeNodeProps> = ({
@@ -45,6 +46,7 @@ const TreeNode: React.FC<TreeNodeProps> = ({
   excludedMoveTargetIds,
   moveSelectedParentId,
   onPickMoveParent,
+  isCompact = false,
 }) => {
   const [isExpanded, setIsExpanded] = useState(true);
   const [showActions, setShowActions] = useState(false);
@@ -95,6 +97,7 @@ const TreeNode: React.FC<TreeNodeProps> = ({
   return (
     <div style={{ opacity: isMoveTargetExcluded && movePickMode ? 0.35 : 1 }}>
       <div
+        className={`tree-node${isCompact ? " tree-node--compact" : ""}`}
         onMouseEnter={() => !movePickMode && setShowActions(true)}
         onMouseLeave={() => {
           setShowActions(false);
@@ -277,6 +280,7 @@ const TreeNode: React.FC<TreeNodeProps> = ({
               excludedMoveTargetIds={excludedMoveTargetIds}
               moveSelectedParentId={moveSelectedParentId}
               onPickMoveParent={onPickMoveParent}
+              isCompact={isCompact}
             />
           ))}
         </div>

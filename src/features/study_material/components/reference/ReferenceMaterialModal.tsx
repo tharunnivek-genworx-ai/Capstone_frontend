@@ -1,16 +1,23 @@
-import React, { useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import toast from "react-hot-toast";
 import type { ReferenceMaterialOut } from "../../types/studyMaterial.types";
 import { referenceMaterialService } from "../../services/referenceMaterialService";
+
+export type ReferenceMaterialModalMode = "manage" | "view";
 
 interface ReferenceMaterialModalProps {
   spaceId: string;
   nodeId: string;
   nodeTitle: string;
+  mode?: ReferenceMaterialModalMode;
+  /** Reference material id stored on the active draft version (for unavailable state). */
+  versionReferenceMaterialId?: string | null;
   existing: ReferenceMaterialOut | null;
+  focusDropzone?: boolean;
   onClose: () => void;
   onUploaded: (material: ReferenceMaterialOut) => void;
   onDeleted: () => void;
+  onRequestReplace?: () => void;
 }
 
 /** PDF/document uploaded as the AI generation source (reference_materials). */
@@ -18,17 +25,37 @@ const ReferenceMaterialModal: React.FC<ReferenceMaterialModalProps> = ({
   spaceId,
   nodeId,
   nodeTitle,
+  mode = "manage",
+  versionReferenceMaterialId = null,
   existing,
+  focusDropzone = false,
   onClose,
   onUploaded,
   onDeleted,
+  onRequestReplace,
 }) => {
   const inputRef = useRef<HTMLInputElement>(null);
+  const dropzoneRef = useRef<HTMLDivElement>(null);
   const [dragging, setDragging] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [title, setTitle] = useState(existing?.title ?? "");
+  const [isVisibleToTrainees, setIsVisibleToTrainees] = useState(
+    existing?.is_visible_to_trainees ?? false
+  );
   const [isUploading, setIsUploading] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [isUpdatingVisibility, setIsUpdatingVisibility] = useState(false);
+
+  const isViewMode = mode === "view";
+  const sourceUnavailable =
+    isViewMode && !existing && Boolean(versionReferenceMaterialId);
+
+  useEffect(() => {
+    if (!focusDropzone || isViewMode) return;
+    dropzoneRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+    const timer = window.setTimeout(() => inputRef.current?.focus(), 200);
+    return () => window.clearTimeout(timer);
+  }, [focusDropzone, isViewMode]);
 
   const handleFile = (f: File) => {
     setSelectedFile(f);
@@ -50,7 +77,8 @@ const ReferenceMaterialModal: React.FC<ReferenceMaterialModalProps> = ({
         spaceId,
         nodeId,
         selectedFile,
-        title.trim()
+        title.trim(),
+        isVisibleToTrainees
       );
       toast.success("Source document uploaded.");
       onUploaded(material);
@@ -59,6 +87,32 @@ const ReferenceMaterialModal: React.FC<ReferenceMaterialModalProps> = ({
       toast.error(e?.response?.data?.detail ?? e?.message ?? "Upload failed.");
     } finally {
       setIsUploading(false);
+    }
+  };
+
+  const handleVisibilityChange = async (next: boolean) => {
+    if (!existing) {
+      setIsVisibleToTrainees(next);
+      return;
+    }
+    setIsUpdatingVisibility(true);
+    try {
+      const material = await referenceMaterialService.updateVisibility(
+        existing.material_id,
+        next
+      );
+      setIsVisibleToTrainees(material.is_visible_to_trainees);
+      onUploaded(material);
+      toast.success(
+        next
+          ? "Source document is now visible to students in topic resources."
+          : "Source document hidden from students."
+      );
+    } catch (err) {
+      const e = err as { response?: { data?: { detail?: string } }; message?: string };
+      toast.error(e?.response?.data?.detail ?? e?.message ?? "Could not update visibility.");
+    } finally {
+      setIsUpdatingVisibility(false);
     }
   };
 
@@ -100,10 +154,33 @@ const ReferenceMaterialModal: React.FC<ReferenceMaterialModalProps> = ({
         </div>
 
         <div className="reference-material-modal__body">
-          <p className="reference-material-modal__hint">
-            Upload a PDF or document that the AI will read when generating study material for this topic.
-            This is separate from topic resources shown to trainees.
-          </p>
+          {!isViewMode && (
+            <p className="reference-material-modal__hint">
+              Upload a PDF or document that the AI will read when generating study material for this topic.
+              Optionally share the same file with students in topic resources.
+            </p>
+          )}
+
+          {isViewMode && (
+            <p className="reference-material-modal__hint">
+              This is the source document tied to this topic. You can share it with students or replace it
+              from the Generate page.
+            </p>
+          )}
+
+          {sourceUnavailable && (
+            <div className="reference-material-modal__existing reference-material-modal__existing--unavailable">
+              <div className="reference-material-modal__list-main">
+                <span className="reference-material-modal__list-badge">Source document</span>
+                <div>
+                  <p className="reference-material-modal__list-title">Source document unavailable</p>
+                  <p className="reference-material-modal__list-meta">
+                    The PDF used to generate this draft may have been removed.
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
 
           {existing && !selectedFile && (
             <div className="reference-material-modal__existing">
@@ -125,60 +202,65 @@ const ReferenceMaterialModal: React.FC<ReferenceMaterialModalProps> = ({
                     View
                   </a>
                 )}
-                <button
-                  type="button"
-                  className="reference-material-modal__danger-btn"
-                  disabled={isDeleting}
-                  onClick={() => void handleDelete()}
-                >
-                  {isDeleting ? "Removing…" : "Remove"}
-                </button>
+                {!isViewMode && (
+                  <button
+                    type="button"
+                    className="reference-material-modal__danger-btn"
+                    disabled={isDeleting}
+                    onClick={() => void handleDelete()}
+                  >
+                    {isDeleting ? "Removing…" : "Remove"}
+                  </button>
+                )}
               </div>
             </div>
           )}
 
-          <div>
-            <label className="label">
-              {existing ? "Replace with a new source document" : "Upload source document"}
-            </label>
-            <div
-              className={`reference-material-modal__dropzone${
-                dragging ? " reference-material-modal__dropzone--dragging" : ""
-              }${selectedFile ? " reference-material-modal__dropzone--selected" : ""}`}
-              onDragOver={(e) => { e.preventDefault(); setDragging(true); }}
-              onDragLeave={() => setDragging(false)}
-              onDrop={handleDrop}
-              onClick={() => inputRef.current?.click()}
-            >
-              {selectedFile ? (
-                <>
-                  <p className="reference-material-modal__dropzone-name">{selectedFile.name}</p>
-                  <p className="reference-material-modal__dropzone-hint">
-                    {(selectedFile.size / 1024).toFixed(0)} KB · click to change
-                  </p>
-                </>
-              ) : (
-                <>
-                  <p className="reference-material-modal__dropzone-name">
-                    Drag & drop or <span>browse</span>
-                  </p>
-                  <p className="reference-material-modal__dropzone-hint">PDF, DOCX, PPTX up to 50 MB</p>
-                </>
-              )}
+          {!isViewMode && (
+            <div>
+              <label className="label">
+                {existing ? "Replace with a new source document" : "Upload source document"}
+              </label>
+              <div
+                ref={dropzoneRef}
+                className={`reference-material-modal__dropzone${
+                  dragging ? " reference-material-modal__dropzone--dragging" : ""
+                }${selectedFile ? " reference-material-modal__dropzone--selected" : ""}`}
+                onDragOver={(e) => { e.preventDefault(); setDragging(true); }}
+                onDragLeave={() => setDragging(false)}
+                onDrop={handleDrop}
+                onClick={() => inputRef.current?.click()}
+              >
+                {selectedFile ? (
+                  <>
+                    <p className="reference-material-modal__dropzone-name">{selectedFile.name}</p>
+                    <p className="reference-material-modal__dropzone-hint">
+                      {(selectedFile.size / 1024).toFixed(0)} KB · click to change
+                    </p>
+                  </>
+                ) : (
+                  <>
+                    <p className="reference-material-modal__dropzone-name">
+                      Drag & drop or <span>browse</span>
+                    </p>
+                    <p className="reference-material-modal__dropzone-hint">PDF, DOCX, PPTX up to 50 MB</p>
+                  </>
+                )}
+              </div>
+              <input
+                ref={inputRef}
+                type="file"
+                accept=".pdf,.doc,.docx,.ppt,.pptx"
+                className="reference-material-modal__file-input"
+                onChange={(e) => {
+                  const f = e.target.files?.[0];
+                  if (f) handleFile(f);
+                }}
+              />
             </div>
-            <input
-              ref={inputRef}
-              type="file"
-              accept=".pdf,.doc,.docx,.ppt,.pptx"
-              className="reference-material-modal__file-input"
-              onChange={(e) => {
-                const f = e.target.files?.[0];
-                if (f) handleFile(f);
-              }}
-            />
-          </div>
+          )}
 
-          {selectedFile && (
+          {!isViewMode && selectedFile && (
             <div>
               <label className="label" htmlFor="gen-source-title">Title</label>
               <input
@@ -191,19 +273,59 @@ const ReferenceMaterialModal: React.FC<ReferenceMaterialModalProps> = ({
               />
             </div>
           )}
+
+          {(isViewMode ? existing : selectedFile || existing) && (
+            <div className="reference-material-modal__visibility">
+              <label className="reference-material-modal__visibility-label">
+                <input
+                  type="checkbox"
+                  className="reference-material-modal__visibility-input"
+                  checked={isVisibleToTrainees}
+                  disabled={isUpdatingVisibility || sourceUnavailable}
+                  onChange={(e) => void handleVisibilityChange(e.target.checked)}
+                />
+                <span className="reference-material-modal__visibility-switch" aria-hidden="true" />
+                <span className="reference-material-modal__visibility-text">
+                  <strong>Share with students</strong>
+                  <span>
+                    Show this source document in topic resources for trainees. Extracted
+                    figures from the PDF are shared automatically when study material is
+                    generated — you do not need to upload images separately.
+                  </span>
+                </span>
+              </label>
+            </div>
+          )}
         </div>
 
         <div className="reference-material-modal__footer">
-          <button type="button" onClick={onClose} className="btn-secondary">Cancel</button>
-          {selectedFile && (
-            <button
-              type="button"
-              onClick={() => void handleUpload()}
-              disabled={isUploading || !title.trim()}
-              className="btn-primary"
-            >
-              {isUploading ? <><span className="spinner" />Uploading…</> : "Upload source"}
-            </button>
+          {isViewMode ? (
+            <>
+              <button type="button" onClick={onClose} className="btn-secondary">Close</button>
+              {onRequestReplace && (
+                <button
+                  type="button"
+                  className="reference-material-modal__replace-link"
+                  onClick={onRequestReplace}
+                >
+                  Replace with a new PDF →
+                </button>
+              )}
+            </>
+          ) : (
+            <>
+              <button type="button" onClick={onClose} className="btn-secondary">Cancel</button>
+              {selectedFile && (
+                <button
+                  type="button"
+                  onClick={() => void handleUpload()}
+                  disabled={isUploading || !title.trim()}
+                  className="btn-primary"
+                >
+                  {isUploading ? <><span className="spinner" />Uploading…</> : "Upload source"}
+                </button>
+              )}
+            </>
           )}
         </div>
       </div>
