@@ -4,17 +4,13 @@ import toast from "react-hot-toast";
 import type {
   NodeTreeNode,
   NodeUpdateInstructionRequest,
-  TopicContentPage,
 } from "../types/node.types";
 import {
   useStudyMaterial,
   type NodeStudyStatePatch,
 } from "../../study_material/hooks/useStudyMaterial";
 import { useQuiz } from "../../quiz/hooks/useQuiz";
-import type {
-  ReferenceMaterialOut,
-  StudyMaterialVersionOut,
-} from "../../study_material/types/studyMaterial.types";
+import type { NodeStudyState } from "../../study_material/types/studyMaterial.types";
 import StudentVisibilityBanner from "../../study_material/components/material/StudentVisibilityBanner";
 import StudyMaterialFeedbackModal from "../../study_material/components/material/StudyMaterialFeedbackModal";
 import StudyMaterialManualEditor from "../../study_material/components/material/StudyMaterialManualEditor";
@@ -31,6 +27,8 @@ import StudyMaterialMentorWorkspace from "../../study_material/components/materi
 import EspaceNotPublishedModal from "../../study_material/components/space/EspaceNotPublishedModal";
 import QuizPage3 from "../../quiz/components/QuizPage3";
 import QuizPage4 from "../../quiz/components/QuizPage4";
+import GenerationProgressPanel from "../../generation/components/GenerationProgressPanel";
+import { useGenerationProgress } from "../../generation/hooks/useGenerationProgress";
 
 // Re-export for consumers that import from here
 export type { NodeStudyStatePatch };
@@ -63,17 +61,7 @@ interface NodeDetailPanelProps {
   onUpdateInstruction: (nodeId: string, payload: NodeUpdateInstructionRequest) => Promise<void>;
   onNavigateToNode: (nodeId: string) => void;
   isMentor?: boolean;
-  studyState?: {
-    currentPage: TopicContentPage;
-    hasTriggeredGeneration: boolean;
-    studyMaterialContent: string | null;
-    activeVersion: StudyMaterialVersionOut | null;
-    isGenerating: boolean;
-    isGeneratingQuiz: boolean;
-    isGeneratingHints: boolean;
-    referenceMaterial: ReferenceMaterialOut | null;
-    currentQuizId: string | null;
-  };
+  studyState?: NodeStudyState;
   onStudyStateChange?: (nodeId: string, patch: NodeStudyStatePatch) => void;
   onMentorProgressRefresh?: () => void;
   contentRefreshToken?: number;
@@ -116,6 +104,11 @@ const NodeDetailPanel: React.FC<NodeDetailPanelProps> = ({
     contentRefreshToken,
   });
 
+  const studyGenerationProgress = useGenerationProgress(
+    sm.generationProgressSessionId,
+    sm.isGenerating,
+  );
+
   // ── Quiz hook ─────────────────────────────────────────────────────────────
   const qz = useQuiz({
     node,
@@ -126,6 +119,7 @@ const NodeDetailPanel: React.FC<NodeDetailPanelProps> = ({
     currentQuizId: studyState?.currentQuizId ?? null,
     isGeneratingQuiz: studyState?.isGeneratingQuiz ?? false,
     isGeneratingHints: studyState?.isGeneratingHints ?? false,
+    generationProgressSessionId: studyState?.generationProgressSessionId ?? null,
     onNodeStudyStateChange: onStudyStateChange,
     onPageChange: sm.setCurrentPage,
     onMentorProgressRefresh,
@@ -297,10 +291,10 @@ const NodeDetailPanel: React.FC<NodeDetailPanelProps> = ({
       style={{ height: "100%", display: "flex", flexDirection: "column", background: "var(--color-bg-surface)", minHeight: 0 }}
     >
       {/* ── Header row (title + branch toggle + pagination) ─────────────── */}
-      <div className="node-detail-panel__header" style={{ flexShrink: 0, padding: "1.5rem 1.5rem 0" }}>
-        <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: "1rem", marginBottom: "1rem" }}>
+      <div className="node-detail-panel__header" style={{ flexShrink: 0 }}>
+        <div className="node-detail-panel__header-row">
           {/* Left: title */}
-          <div style={{ flex: 1, minWidth: 0 }}>
+          <div className="node-detail-panel__title-block">
             {node.auto_generated && (
               <div style={{ marginBottom: "0.5rem" }}>
                 <span style={{ fontSize: "0.75rem", fontWeight: 600, color: "var(--color-text-secondary)", background: "var(--color-primary-subtle)", padding: "0.2rem 0.6rem", borderRadius: "var(--radius-sm)", border: "1px solid var(--color-border)" }}>Auto-generated</span>
@@ -362,10 +356,10 @@ const NodeDetailPanel: React.FC<NodeDetailPanelProps> = ({
             }
 
             return (
-              <div style={{ flexShrink: 0 }}>
+              <div className="node-detail-panel__nav">
                 <TopicPageNav
                   currentPage={sm.currentPage}
-                  canAccessStudyMaterial={sm.canAccessStudyMaterial}
+                  canAccessStudyMaterial={sm.canAccessStudyMaterial || sm.isGenerating}
                   canAccessQuiz={sm.canAccessQuiz}
                   canAccessHints={sm.canAccessQuiz && qz.canAccessHints}
                   onPageChange={sm.setCurrentPage}
@@ -379,7 +373,7 @@ const NodeDetailPanel: React.FC<NodeDetailPanelProps> = ({
       </div>
 
       {/* ── Page content ─────────────────────────────────────────────────── */}
-      <div className="node-detail-panel__body" style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column", padding: "0 1.5rem 1.5rem", overflow: "hidden" }}>
+      <div className="node-detail-panel__body" style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column", overflow: "hidden" }}>
 
         {/* Mentor pages */}
         {isMentor && (
@@ -413,15 +407,11 @@ const NodeDetailPanel: React.FC<NodeDetailPanelProps> = ({
           <div className="study-material-page">
             {instructionChangeBanner}
             {sm.isGenerating ? (
-              <div className="study-material-loading">
-                <span className="spinner study-material-loading__spinner" />
-                <p className="study-material-loading__title">
-                  {sm.processingLabel ?? "Working on study material"}
-                </p>
-                <p className="study-material-loading__subtitle">
-                  The AI is updating study content for &ldquo;{node.title}&rdquo;. This may take a minute.
-                </p>
-              </div>
+              <GenerationProgressPanel
+                title={sm.processingLabel ?? "Working on study material"}
+                subtitle={`The AI is updating study content for "${node.title}". This may take a minute.`}
+                progress={studyGenerationProgress}
+              />
             ) : sm.studyMaterialContent?.trim() ? (
               <>
                 {isMentor && !sm.isManualEditMode && sm.mentorUiState?.student_visibility && (

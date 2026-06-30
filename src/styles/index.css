@@ -434,6 +434,7 @@ select.input-field option {
   flex-direction: column;
   flex: 1;
   min-height: 0;
+  min-width: 0;
   height: 100%;
 }
 
@@ -442,11 +443,35 @@ select.input-field option {
   position: relative;
   z-index: 20;
   overflow: visible;
+  padding: 1.25rem 1.75rem 0;
+}
+
+.node-detail-panel__header-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1rem;
+  flex-wrap: wrap;
+}
+
+.node-detail-panel__title-block {
+  flex: 1 1 220px;
+  min-width: 0;
+  padding-right: 0.25rem;
+}
+
+.node-detail-panel__nav {
+  flex: 1 1 320px;
+  display: flex;
+  justify-content: flex-end;
+  min-width: 0;
 }
 
 .node-detail-panel__body {
   position: relative;
   z-index: 1;
+  padding: 0 1.75rem 1.5rem;
 }
 
 .study-material-viewer__header {
@@ -651,6 +676,8 @@ select.input-field option {
 .study-material-document__page {
   max-width: 820px;
   margin: 0 auto;
+  min-width: 0;
+  overflow-x: hidden;
   background: #fffefb;
   border: 1px solid #d2cdc4;
   border-radius: 3px;
@@ -675,6 +702,9 @@ select.input-field option {
 
 .study-material-document__content {
   padding: 2.5rem 2.75rem 2.75rem;
+  min-width: 0;
+  max-width: 100%;
+  overflow-x: hidden;
 }
 
 .study-material-document--editor .study-material-document__content {
@@ -742,6 +772,35 @@ select.input-field option {
 
 .study-material-document .study-material-viewer__body strong {
   color: #1f2937;
+}
+
+/* Keep wide content (math, code, tables) inside the document page */
+.study-material-document .study-material-viewer__body,
+.study-material-viewer__body {
+  min-width: 0;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+
+.study-material-viewer__body .katex-display {
+  margin: 0.75rem 0;
+  padding: 0.125rem 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  max-width: 100%;
+  -webkit-overflow-scrolling: touch;
+}
+
+.study-material-viewer__body .katex-display > .katex {
+  text-align: left;
+}
+
+.study-material-viewer__body :not(.katex-display) > .katex {
+  max-width: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
+  display: inline-block;
+  vertical-align: bottom;
 }
 
 .study-material-viewer__body h1,
@@ -863,6 +922,110 @@ select.input-field option {
   color: var(--color-text-muted);
   max-width: 320px;
   line-height: 1.5;
+}
+
+/* ─── Generation progress (step timeline) ─────────────────────────── */
+.generation-progress {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  min-height: 320px;
+  gap: 0.75rem;
+  text-align: center;
+  padding: 2rem;
+}
+
+.generation-progress__spinner {
+  width: 2.25rem;
+  height: 2.25rem;
+  border-width: 3px;
+}
+
+.generation-progress__title {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--color-text-primary);
+}
+
+.generation-progress__subtitle {
+  margin: 0;
+  font-size: 0.8125rem;
+  color: var(--color-text-muted);
+  max-width: 360px;
+  line-height: 1.5;
+}
+
+.generation-progress__steps {
+  list-style: none;
+  margin: 1.25rem 0 0;
+  padding: 0;
+  width: 100%;
+  max-width: 380px;
+  text-align: left;
+}
+
+.generation-progress__step {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.875rem;
+  padding: 0.5rem 0;
+  position: relative;
+}
+
+.generation-progress__step--has-line::after {
+  content: "";
+  position: absolute;
+  left: 5px;
+  top: 1.375rem;
+  width: 2px;
+  height: calc(100% - 0.25rem);
+  background: #dbe3f8;
+}
+
+.generation-progress__step--completed.generation-progress__step--has-line::after {
+  background: var(--color-primary);
+}
+
+.generation-progress__dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  border: 2px solid #c7d2fe;
+  background: #fff;
+  flex-shrink: 0;
+  margin-top: 0.2rem;
+  position: relative;
+  z-index: 1;
+  transition: background 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.generation-progress__step--active .generation-progress__dot {
+  background: var(--color-primary);
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 4px rgba(59, 91, 219, 0.18);
+}
+
+.generation-progress__step--completed .generation-progress__dot {
+  background: var(--color-primary);
+  border-color: var(--color-primary);
+}
+
+.generation-progress__label {
+  font-size: 0.875rem;
+  line-height: 1.45;
+  color: var(--color-text-muted);
+}
+
+.generation-progress__step--active .generation-progress__label {
+  color: var(--color-text-primary);
+  font-weight: 600;
+}
+
+.generation-progress__step--completed .generation-progress__label {
+  color: var(--color-text-secondary);
 }
 
 /* ─── Study material page 2 workspace ────────────────────────────── */
@@ -1136,6 +1299,28 @@ select.input-field option {
   padding-top: 0.875rem;
 }
 
+.quiz-page__generation-placeholder {
+  margin: 0.5rem 0 1rem;
+  padding: 1.25rem 1.5rem;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-bg-surface);
+}
+
+.quiz-page__generation-placeholder-title {
+  margin: 0 0 0.625rem;
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--color-text-primary);
+}
+
+.quiz-page__generation-placeholder-body {
+  margin: 0;
+  font-size: 0.875rem;
+  color: var(--color-text-secondary);
+  line-height: 1.55;
+}
+
 .quiz-page__banner {
   flex-shrink: 0;
   margin-bottom: 0.625rem;
@@ -1193,10 +1378,9 @@ select.input-field option {
   font-size: 0.875rem;
   font-weight: 700;
   color: var(--color-text-primary);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
   display: block;
+  line-height: 1.35;
+  word-break: break-word;
 }
 
 .quiz-page__meta {
@@ -1303,7 +1487,7 @@ select.input-field option {
 .topic-page-nav {
   display: flex;
   width: 100%;
-  min-width: 400px;
+  min-width: 0;
   max-width: 520px;
   background: var(--color-bg-surface-alt, #f9fafb);
   border: 1px solid var(--color-border);
@@ -1381,6 +1565,7 @@ select.input-field option {
   min-height: 0;
   display: flex;
   flex-direction: column;
+  padding-right: 0.25rem;
 }
 
 .quiz-answer-key {
@@ -2015,18 +2200,6 @@ select.input-field option {
   line-height: 1.4;
 }
 
-.study-material-version-panel__back-link {
-  margin-top: 0.5rem;
-  background: none;
-  border: none;
-  padding: 0;
-  font-size: 0.75rem;
-  font-weight: 600;
-  color: var(--color-primary);
-  cursor: pointer;
-  text-decoration: underline;
-}
-
 .study-material-version-panel__date {
   display: block;
   margin-top: 0.25rem;
@@ -2278,7 +2451,7 @@ select.input-field option {
   position: fixed;
   inset: 0;
   background: rgba(0, 0, 0, 0.45);
-  z-index: 1000;
+  z-index: 1200;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -2297,12 +2470,18 @@ select.input-field option {
 }
 
 .study-material-modal__header {
-  padding: 1.125rem 1.25rem 0.875rem;
+  padding: 1.125rem 1.5rem 0.875rem;
   border-bottom: 1px solid var(--color-border);
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
   gap: 0.75rem;
+}
+
+.study-material-modal__header > div:first-child {
+  min-width: 0;
+  flex: 1;
+  padding-right: 0.25rem;
 }
 
 .study-material-modal__title {
@@ -2426,6 +2605,27 @@ select.input-field option {
   scroll-snap-align: start;
 }
 
+.reference-images-panel__thumb-btn {
+  display: block;
+  width: 100%;
+  padding: 0;
+  border: none;
+  background: none;
+  cursor: zoom-in;
+  border-radius: var(--radius-md);
+  transition: box-shadow 0.15s, transform 0.15s;
+}
+
+.reference-images-panel__thumb-btn:hover {
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.12);
+  transform: translateY(-1px);
+}
+
+.reference-images-panel__thumb-btn:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+}
+
 .reference-images-panel__image {
   display: block;
   width: 100%;
@@ -2434,6 +2634,7 @@ select.input-field option {
   border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
   background: #fff;
+  pointer-events: none;
 }
 
 .reference-images-panel__caption {
@@ -2445,6 +2646,97 @@ select.input-field option {
 
 .reference-images-panel__page {
   color: var(--color-text-muted);
+}
+
+.reference-image-lightbox {
+  position: fixed;
+  inset: 0;
+  z-index: 1300;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1.5rem;
+  background: rgba(0, 0, 0, 0.65);
+}
+
+.reference-image-lightbox__dialog {
+  display: flex;
+  flex-direction: column;
+  width: min(96vw, 1100px);
+  max-height: min(92vh, 900px);
+  background: var(--color-bg-surface);
+  border-radius: var(--radius-xl);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.28);
+  overflow: hidden;
+}
+
+.reference-image-lightbox__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.875rem 1rem 0.875rem 1.25rem;
+  border-bottom: 1px solid var(--color-border);
+  flex-shrink: 0;
+}
+
+.reference-image-lightbox__title {
+  margin: 0;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--color-text-primary);
+  line-height: 1.4;
+  word-break: break-word;
+}
+
+.reference-image-lightbox__page {
+  font-weight: 500;
+  color: var(--color-text-muted);
+}
+
+.reference-image-lightbox__close {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 2rem;
+  height: 2rem;
+  padding: 0;
+  border: none;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.reference-image-lightbox__close:hover {
+  background: var(--color-bg-surface-alt);
+  color: var(--color-text-primary);
+}
+
+.reference-image-lightbox__close:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+}
+
+.reference-image-lightbox__body {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 1;
+  min-height: 0;
+  padding: 1rem 1.25rem 1.25rem;
+  background: #f8f8f8;
+}
+
+.reference-image-lightbox__image {
+  display: block;
+  max-width: 100%;
+  max-height: min(78vh, 760px);
+  object-fit: contain;
+  border-radius: var(--radius-md);
+  background: #fff;
 }
 
 .reference-materials-trigger--generation {

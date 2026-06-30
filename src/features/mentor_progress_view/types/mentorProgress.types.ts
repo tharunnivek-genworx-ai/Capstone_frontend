@@ -41,3 +41,9 @@ export interface MentorSpaceProgressSummaryOut {
   total_nodes: number;
   total_enrolled_trainees: number;
 }
+
+export interface NodeDeletePreviewOut {
+  live_study_material_count: number;
+  live_quiz_count: number;
+  topic_count: number;
+}

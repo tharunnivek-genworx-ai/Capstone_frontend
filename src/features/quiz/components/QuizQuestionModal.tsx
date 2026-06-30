@@ -1,5 +1,6 @@
 // src/features/quiz/components/QuizQuestionModal.tsx
 import React, { useState, useEffect } from "react";
+import { createPortal } from "react-dom";
 import type { CorrectOption, QuizQuestionCreateRequest, QuizQuestionOut, QuizQuestionUpdateRequest } from "../types/quiz.types";
 
 interface QuizQuestionModalProps {
@@ -63,24 +64,31 @@ const QuizQuestionModal: React.FC<QuizQuestionModalProps> = ({
   const fieldStyle: React.CSSProperties = { marginBottom: "1rem" };
   const labelStyle: React.CSSProperties = { display: "block", fontSize: "0.8125rem", fontWeight: 600, color: "var(--color-text-secondary)", marginBottom: "0.375rem" };
 
-  return (
-    <div style={{
-      position: "fixed", inset: 0, zIndex: 100,
-      background: "rgba(0,0,0,0.45)", display: "flex",
-      alignItems: "center", justifyContent: "center", padding: "1rem",
-      overflowY: "auto",
-    }}>
-      <div style={{
-        background: "var(--color-bg-surface)", borderRadius: "var(--radius-xl)",
-        boxShadow: "0 8px 40px rgba(0,0,0,0.18)", width: "100%", maxWidth: "580px",
-        padding: "1.75rem", margin: "auto",
-      }}>
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "1.25rem" }}>
-          <h2 style={{ margin: 0, fontSize: "1.0625rem", fontWeight: 700, color: "var(--color-text-primary)" }}>
-            {mode === "create" ? "Add question" : "Edit question"}
-          </h2>
-          <button type="button" onClick={onClose} disabled={isSaving}
-            style={{ background: "none", border: "none", cursor: "pointer", color: "var(--color-text-muted)", padding: "0.25rem", borderRadius: "var(--radius-sm)" }}>
+  return createPortal(
+    <div
+      className="study-material-modal-overlay"
+      onClick={(e) => e.target === e.currentTarget && !isSaving && onClose()}
+    >
+      <div
+        className="study-material-modal"
+        role="dialog"
+        aria-modal="true"
+        style={{ maxWidth: "580px" }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="study-material-modal__header">
+          <div>
+            <h3 className="study-material-modal__title">
+              {mode === "create" ? "Add question" : "Edit question"}
+            </h3>
+          </div>
+          <button
+            type="button"
+            className="study-material-modal__close"
+            onClick={onClose}
+            disabled={isSaving}
+            aria-label="Close"
+          >
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
             </svg>
@@ -88,6 +96,7 @@ const QuizQuestionModal: React.FC<QuizQuestionModalProps> = ({
         </div>
 
         <form onSubmit={handleSubmit}>
+          <div className="study-material-modal__body">
           <div style={fieldStyle}>
             <label style={labelStyle}>Question text *</label>
             <textarea
@@ -156,7 +165,7 @@ const QuizQuestionModal: React.FC<QuizQuestionModalProps> = ({
             />
           </div>
 
-          <div style={{ display: "flex", gap: "0.75rem", justifyContent: "flex-end", marginTop: "1.25rem" }}>
+          <div style={{ display: "flex", gap: "0.75rem", justifyContent: "flex-end", marginTop: "0.25rem" }}>
             <button type="button" className="btn-secondary" onClick={onClose} disabled={isSaving} style={{ padding: "0.5rem 1rem" }}>
               Cancel
             </button>
@@ -169,9 +178,11 @@ const QuizQuestionModal: React.FC<QuizQuestionModalProps> = ({
               ) : "Save question"}
             </button>
           </div>
+          </div>
         </form>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 };
 

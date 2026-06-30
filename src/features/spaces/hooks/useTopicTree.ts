@@ -15,6 +15,7 @@ import type {
   NodeUpdateInstructionRequest,
   NodeReparentRequest,
   NodeArchiveRequest,
+  NodeArchiveOut,
 } from "../types/node.types";
 
 // ── Tree manipulation helpers ─────────────────────────────────────────────────
@@ -137,7 +138,7 @@ interface UseTopicTreeReturn {
   updateNodeInstruction: (nodeId: string, payload: NodeUpdateInstructionRequest) => Promise<NodeResponse>;
   reparentNode: (spaceId: string, nodeId: string, payload: NodeReparentRequest) => Promise<void>;
   reorderNode: (spaceId: string, nodeId: string, direction: "up" | "down") => Promise<void>;
-  archiveNode: (nodeId: string, payload: NodeArchiveRequest) => Promise<void>;
+  archiveNode: (nodeId: string, payload: NodeArchiveRequest) => Promise<NodeArchiveOut>;
   clearError: () => void;
 }
 
@@ -234,10 +235,11 @@ export const useTopicTree = (): UseTopicTreeReturn => {
   );
 
   const archiveNode = useCallback(
-    async (nodeId: string, payload: NodeArchiveRequest): Promise<void> => {
-      await nodeService.archiveNode(nodeId, payload);
+    async (nodeId: string, payload: NodeArchiveRequest): Promise<NodeArchiveOut> => {
+      const result = await nodeService.archiveNode(nodeId, payload);
       setRoots((prev) => archiveInTree(prev, nodeId, payload.archive_children));
-      setTotalNodes((t) => Math.max(0, t - 1)); // conservative estimate
+      setTotalNodes((t) => Math.max(0, t - result.archived_count));
+      return result;
     },
     []
   );

@@ -29,14 +29,17 @@ export interface ReferenceMaterialListOut {
 /** First-time generate — backend no longer accepts generation_type on this endpoint. */
 export interface StudyMaterialGenerateRequest {
   reference_material_id?: string | null;
+  progress_session_id?: string | null;
 }
 
 export interface StudyMaterialRegenerateRequest {
   mentor_regeneration_goal: string;
+  progress_session_id?: string | null;
 }
 
 export interface StudyMaterialImproveRequest {
   mentor_feedback: string;
+  progress_session_id?: string | null;
 }
 
 export interface StudyMaterialManualEditRequest {
@@ -109,15 +112,75 @@ export type LlmErrorType =
   | "llm_key_pool_exhausted"
   | "hint_quality_error";
 
+export type ConceptDomain = "STEM" | "Programming" | "Conceptual" | "Mixed" | "";
+
+export interface TopicSplitEntryOut {
+  id: string;
+  heading: string;
+  purpose?: string;
+}
+
+export interface ConceptPlanOut {
+  domain?: ConceptDomain;
+  topic_split?: TopicSplitEntryOut[];
+  must_cover_checklist?: Array<{
+    id: string;
+    concept: string;
+    section_id?: string | null;
+  }>;
+}
+
+export interface QualityCheckItemOut {
+  id: string;
+  category: string;
+  question: string;
+  passed: boolean;
+  severity: "critical" | "major" | "minor";
+  evidence?: string;
+  corrective_hint?: string;
+  section_id?: string | null;
+  checklist_id?: string | null;
+}
+
+export interface DetFailureDisplayOut {
+  check_id: string;
+  section_label: string;
+  subsection_label?: string | null;
+  user_message: string;
+  tier: "formatting" | "structure" | "evidence";
+}
+
+export interface QcWarningPresentationOut {
+  kind: "det_only" | "llm_content" | "mixed";
+  alert_title: string;
+  alert_body: string;
+  det_summary?: string | null;
+  reassurance?: string | null;
+  formatting_items: DetFailureDisplayOut[];
+  structure_items: DetFailureDisplayOut[];
+  evidence_items: DetFailureDisplayOut[];
+  formatting_list_label: string;
+  structure_list_label: string;
+  evidence_list_label: string;
+  det_only_list_label: string;
+  is_formatting_only: boolean;
+  content_issues_label: string;
+}
+
 export interface QualityCheckResultOut {
   overall_status: "pass" | "warn" | "fail";
   is_refusal: boolean;
   hallucination_risk: "none" | "low" | "medium" | "high";
   scores: QualityCheckScoresOut;
+  checks?: QualityCheckItemOut[];
+  failed_checks?: QualityCheckItemOut[];
   verification_mode?: "full" | "targeted" | null;
   issues: string[];
+  humanized_issues?: string[] | null;
   corrective_instructions: string;
+  humanized_corrective_instructions?: string | null;
   summary: string;
+  warning_presentation?: QcWarningPresentationOut | null;
   errorType?: LlmErrorType | null;
   suggestion?: string | null;
   providerMeta?: ProviderMetaOut | null;
@@ -144,6 +207,7 @@ export interface StudyMaterialVersionOut {
   display_label: string;
   qc_failed_permanently?: boolean;
   qc_result?: QualityCheckResultOut | null;
+  concept_plan?: ConceptPlanOut | null;
   next_llm_retry_at?: string | null;
 }
 
@@ -286,6 +350,7 @@ export interface NodeStudyStatePatch {
   isGenerating?: boolean;
   isGeneratingQuiz?: boolean;
   isGeneratingHints?: boolean;
+  generationProgressSessionId?: string | null;
   referenceMaterial?: ReferenceMaterialOut | null;
   currentQuizId?: string | null;
 }
@@ -299,6 +364,7 @@ export interface NodeStudyState {
   isGenerating: boolean;
   isGeneratingQuiz: boolean;
   isGeneratingHints: boolean;
+  generationProgressSessionId: string | null;
   referenceMaterial: ReferenceMaterialOut | null;
   currentQuizId: string | null;
 }

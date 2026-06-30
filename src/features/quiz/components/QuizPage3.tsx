@@ -26,6 +26,16 @@ import QuizUnpublishConfirmModal from "./QuizUnpublishConfirmModal";
 import QuizQuestionModal from "./QuizQuestionModal";
 import QuizHistoryPanel from "./QuizHistoryPanel";
 import QuizQcWarningPanel from "./QuizQcWarningPanel";
+import { isLlmRateLimited } from "../../study_material/utils/llmDiagnostics";
+import GenerationProgressPanel from "../../generation/components/GenerationProgressPanel";
+import { useGenerationProgress } from "../../generation/hooks/useGenerationProgress";
+
+const QUIZ_GENERATION_STEPS = [
+  { id: "preparing", label: "Preparing materials" },
+  { id: "outlining", label: "Outlining the topics to cover" },
+  { id: "generating", label: "Generating quiz" },
+  { id: "analyzing", label: "Analyzing the quality of the content" },
+];
 
 interface QuizPage3Props {
   nodeTitle: string;
@@ -44,6 +54,10 @@ const QuizPage3: React.FC<QuizPage3Props> = ({ nodeTitle, qz }) => {
   const [isSavingQuestion, setIsSavingQuestion] = useState(false);
   const [localQuestionIds, setLocalQuestionIds] = useState<string[] | null>(null);
   const [acceptedQuizId, setAcceptedQuizId] = useState<string | null>(null);
+  const generationProgress = useGenerationProgress(
+    qz.generationProgressSessionId,
+    qz.isGenerating,
+  );
 
   const sensors = useSensors(
     useSensor(PointerSensor),
@@ -98,6 +112,17 @@ const QuizPage3: React.FC<QuizPage3Props> = ({ nodeTitle, qz }) => {
       <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center" }}>
         <span className="spinner" style={{ width: "2rem", height: "2rem", borderTopColor: "var(--color-primary)" }} />
       </div>
+    );
+  }
+
+  if (qz.isGenerating) {
+    return (
+      <GenerationProgressPanel
+        title="Generating quiz"
+        subtitle={`The AI is building quiz questions for "${nodeTitle}". This may take a minute.`}
+        progress={generationProgress}
+        fallbackSteps={QUIZ_GENERATION_STEPS}
+      />
     );
   }
 
@@ -282,8 +307,13 @@ const QuizPage3: React.FC<QuizPage3Props> = ({ nodeTitle, qz }) => {
   const quiz = qz.quiz!;
   const difficultyLabel = DIFFICULTY_OPTIONS.find((d) => d.value === quiz.difficulty)?.label ?? quiz.difficulty;
   const displayTitle = quiz.title || `${nodeTitle} — Quiz`;
+  const rateLimited = isLlmRateLimited(quiz.qc_result);
 
-  const showQcWarning = !!(quiz.qc_failed_permanently && quiz.qc_result && acceptedQuizId !== quiz.quiz_id);
+  const showQcWarning = !!(
+    quiz.qc_failed_permanently
+    && quiz.qc_result
+    && (rateLimited || acceptedQuizId !== quiz.quiz_id)
+  );
 
   return (
     <div className="quiz-page">
@@ -416,14 +446,18 @@ const QuizPage3: React.FC<QuizPage3Props> = ({ nodeTitle, qz }) => {
 
           <div className="quiz-page__scroll">
             {qz.showAnswerKey && <QuizAnswerKeyPanel questions={quiz.questions} compact />}
-            {qz.isGenerating && (
-              <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", padding: "1rem", color: "var(--color-text-muted)", fontSize: "0.875rem" }}>
-                <span className="spinner" style={{ width: "1.25rem", height: "1.25rem", borderTopColor: "var(--color-primary)" }} />
-                Generating new quiz draft…
+
+            {!qz.isGenerating && quiz.questions.length === 0 && rateLimited && (
+              <div className="quiz-page__generation-placeholder">
+                <h3 className="quiz-page__generation-placeholder-title">Generation unavailable</h3>
+                <p className="quiz-page__generation-placeholder-body">
+                  The quiz could not be generated because the AI service is temporarily unavailable.
+                  Please try again after the rate limit clears.
+                </p>
               </div>
             )}
 
-            {!qz.isGenerating && quiz.questions.length === 0 && (
+            {!qz.isGenerating && quiz.questions.length === 0 && !rateLimited && (
               <div style={{ textAlign: "center", padding: "2rem", color: "var(--color-text-muted)" }}>
                 <p style={{ fontSize: "0.9375rem", fontWeight: 600, margin: "0 0 0.375rem" }}>No questions yet</p>
                 <p style={{ fontSize: "0.8125rem", margin: 0 }}>Add questions manually or regenerate.</p>
@@ -458,7 +492,7 @@ const QuizPage3: React.FC<QuizPage3Props> = ({ nodeTitle, qz }) => {
             )}
 
             {/* Add question button */}
-            {!qz.isGenerating && !quiz.is_published && (
+            {!qz.isGenerating && !quiz.is_published && !rateLimited && (
               <button
                 type="button"
                 onClick={() => setShowAddModal(true)}

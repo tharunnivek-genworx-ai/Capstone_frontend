@@ -14,7 +14,6 @@ interface StudyMaterialVersionPanelProps {
   focusStudentArchiveNonce: number;
   onSelectVersion: (versionId: string) => void;
   onUnarchiveVersion: (versionId: string) => void;
-  onBackToActiveHistory?: () => void;
   children?: React.ReactNode;
 }
 
@@ -169,7 +168,6 @@ const StudyMaterialVersionPanel: React.FC<StudyMaterialVersionPanelProps> = ({
   focusStudentArchiveNonce,
   onSelectVersion,
   onUnarchiveVersion,
-  onBackToActiveHistory,
   children,
 }) => {
   const selectedId = viewingVersionId ?? activeVersionId;
@@ -210,15 +208,6 @@ const StudyMaterialVersionPanel: React.FC<StudyMaterialVersionPanelProps> = ({
             ? "Drafts you moved out of your working list. Students are not affected."
             : "Versions you edit and publish. Older live versions are in the student archive below."}
         </p>
-        {isArchiveMode && onBackToActiveHistory && (
-          <button
-            type="button"
-            className="study-material-version-panel__back-link"
-            onClick={onBackToActiveHistory}
-          >
-            ← Back to your workspace
-          </button>
-        )}
       </div>
 
       {isLoading ? (

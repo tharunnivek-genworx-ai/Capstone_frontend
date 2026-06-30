@@ -280,6 +280,7 @@ export default function GenerateStudyMaterialPanel({
         modeText={modeText}
         branchDefault={branchDefault}
         previewParts={previewParts}
+        isRootTopic={!node.parent_id}
       />
 
       {/* ── Section 7: Generate action bar ───────────────────────────── */}

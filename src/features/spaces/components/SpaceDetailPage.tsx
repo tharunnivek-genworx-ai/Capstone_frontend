@@ -95,6 +95,7 @@ const SpaceDetailPage: React.FC = () => {
           isGenerating: false,
           isGeneratingQuiz: false,
           isGeneratingHints: false,
+          generationProgressSessionId: null,
           referenceMaterial: null,
           currentQuizId: null,
         };
@@ -131,15 +132,18 @@ const SpaceDetailPage: React.FC = () => {
 
   const handleArchiveNode = useCallback(
     async (nodeId: string, payload: NodeArchiveRequest) => {
-      await archiveNode(nodeId, payload);
+      const result = await archiveNode(nodeId, payload);
       if (!spaceId) return;
       try {
-        await mentorProgressService.syncSpaceProgress(spaceId);
+        await mentorProgressService.cascadeDeletedNodeContent(
+          spaceId,
+          result.archived_node_ids
+        );
         if (showSpaceProgress) {
           void refreshMentorSpaceProgress();
         }
       } catch {
-        // Best-effort cache sync; live GET progress remains correct.
+        // Best-effort content retire + progress sync.
       }
     },
     [archiveNode, spaceId, showSpaceProgress, refreshMentorSpaceProgress]

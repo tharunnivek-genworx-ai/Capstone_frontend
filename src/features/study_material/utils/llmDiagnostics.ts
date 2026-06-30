@@ -100,6 +100,12 @@ export function isLlmGenerationFailure(
   return !!diagnostics?.errorType && !diagnostics.qcInfraError;
 }
 
+export function isLlmRateLimited(
+  diagnostics?: LlmDiagnosticsFields | null,
+): boolean {
+  return diagnostics?.errorType === "rate_limited";
+}
+
 export function shouldShowLlmRetryNotice(
   diagnostics?: LlmDiagnosticsFields | null,
   entityRetryAt?: string | null,
