@@ -56,55 +56,40 @@ const StudyMaterialMentorWorkspace: React.FC<StudyMaterialMentorWorkspaceProps> 
   renderGenerationSourceButton,
   renderTopicResourcesButton,
 }) => {
-  const showDraftNotice = sm.isViewingArchivedVersion || sm.isViewingNonActiveVersion;
   const rateLimited = isLlmRateLimited(sm.activeVersion?.qc_result);
   const showQcWarning = Boolean(
     sm.activeVersion?.qc_failed_permanently && (rateLimited || !hasAcceptedFailedQc),
   );
   const versionTag = versionBarTag(sm);
+  const showBackToWorkspace = sm.showArchivedPanel || sm.isViewingArchivedVersion;
+
+  const handleBackToWorkspace = () => {
+    if (sm.isViewingArchivedVersion && sm.activeVersion) {
+      void sm.handleReturnToActiveDraft();
+    } else {
+      sm.setShowArchivedPanel(false);
+    }
+  };
 
   return (
     <div className="study-material-page__mentor-layout">
-      {showDraftNotice && (
+      {sm.isViewingArchivedVersion && (
         <div className="study-material-page__draft-notice-band">
-          {sm.isViewingArchivedVersion ? (
-            <div className="study-material-page__viewing-notice">
-              <div className="study-material-page__viewing-banner study-material-page__viewing-banner--archived">
-                <span>Viewing an archived draft — not in your working drafts.</span>
-              </div>
-              {sm.displayedVersionId && (
-                <button
-                  type="button"
-                  className="btn-primary study-material-page__activate-btn"
-                  onClick={sm.handleUnarchiveCurrentVersion}
-                  disabled={sm.isUnarchivingVersion}
-                >
-                  {sm.isUnarchivingVersion ? "Restoring…" : "Restore to drafts"}
-                </button>
-              )}
+          <div className="study-material-page__viewing-notice">
+            <div className="study-material-page__viewing-banner study-material-page__viewing-banner--archived">
+              <span>Viewing an archived draft — not in your working drafts.</span>
             </div>
-          ) : (
-            <div className="study-material-page__viewing-notice">
-              <div className="study-material-page__viewing-banner">
-                <span>This is not the active draft you are working on. Want to set it?</span>
-                <button
-                  type="button"
-                  className="study-material-page__banner-link"
-                  onClick={sm.handleReturnToActiveDraft}
-                >
-                  Back to active draft
-                </button>
-              </div>
+            {sm.displayedVersionId && (
               <button
                 type="button"
                 className="btn-primary study-material-page__activate-btn"
-                onClick={() => sm.handleActivateVersion(sm.viewingVersionId!)}
-                disabled={sm.isActivatingVersion}
+                onClick={sm.handleUnarchiveCurrentVersion}
+                disabled={sm.isUnarchivingVersion}
               >
-                {sm.isActivatingVersion ? "Setting…" : "Set as active draft"}
+                {sm.isUnarchivingVersion ? "Restoring…" : "Restore to drafts"}
               </button>
-            </div>
-          )}
+            )}
+          </div>
         </div>
       )}
 
@@ -216,6 +201,15 @@ const StudyMaterialMentorWorkspace: React.FC<StudyMaterialMentorWorkspaceProps> 
 
       {sm.displayedVersionBaseLabel && (
         <div className="sm-version-bar">
+          {showBackToWorkspace && (
+            <button
+              type="button"
+              className="sm-version-bar__back-link"
+              onClick={handleBackToWorkspace}
+            >
+              ← Back to workspace
+            </button>
+          )}
           <span className="sm-version-pill">
             {sm.displayedVersionBaseLabel}
             {versionTag && (
@@ -293,7 +287,6 @@ const StudyMaterialMentorWorkspace: React.FC<StudyMaterialMentorWorkspaceProps> 
             focusStudentArchiveNonce={sm.focusStudentArchiveNonce}
             onSelectVersion={sm.handleSelectVersion}
             onUnarchiveVersion={sm.handleUnarchiveVersion}
-            onBackToActiveHistory={() => sm.setShowArchivedPanel(false)}
           >
             <div className="study-material-version-panel__quiz-cta">
               <button

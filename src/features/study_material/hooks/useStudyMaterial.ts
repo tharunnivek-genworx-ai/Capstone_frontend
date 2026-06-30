@@ -607,18 +607,43 @@ export function useStudyMaterial({
     const nodeId = node.node_id;
     let cancelled = false;
 
+    const isWorkspaceDraft =
+      !targetSummary.is_archived &&
+      !targetSummary.is_published &&
+      targetSummary.mentor_display_badge !== "Previous for students";
+
     if (targetSummary.mentor_display_badge === "Previous for students") {
       setStudentArchiveExpanded(true);
     }
     setViewingVersionId(targetSummary.version_id);
 
-    studyMaterialService
-      .getVersion(nodeId, targetSummary.version_id)
-      .then((version) => {
+    const run = async () => {
+      try {
+        const version = await studyMaterialService.getVersion(nodeId, targetSummary.version_id);
         if (cancelled) return;
         patchNodeStudyState(nodeId, { studyMaterialContent: version.content });
-      })
-      .catch(() => {/* non-critical */ });
+      } catch {
+        /* non-critical */
+      }
+
+      // If no version is active yet, silently activate this one so that
+      // Regenerate / Improve / Manual edit are never blocked on first open.
+      if (!cancelled && isWorkspaceDraft && !targetSummary.is_active) {
+        try {
+          const activated = await studyMaterialService.activate(nodeId, {
+            version_id: targetSummary.version_id,
+          });
+          if (cancelled) return;
+          patchNodeStudyState(nodeId, { activeVersion: activated });
+          await refreshVersionHistoryRef.current(nodeId);
+          await refreshMentorUiStateRef.current(nodeId, targetSummary.version_id);
+        } catch {
+          /* non-critical */
+        }
+      }
+    };
+
+    void run();
 
     return () => {
       cancelled = true;
@@ -1030,6 +1055,11 @@ export function useStudyMaterial({
     if (!node) return;
     const nodeId = node.node_id;
     const summary = findVersionSummary(versionId);
+    const isWorkspaceDraft =
+      !summary?.is_archived &&
+      !summary?.is_published &&
+      summary?.mentor_display_badge !== "Previous for students";
+
     if (summary?.is_archived) {
       setShowArchivedPanel(true);
     } else if (summary?.mentor_display_badge === "Previous for students") {
@@ -1042,6 +1072,18 @@ export function useStudyMaterial({
       patchNodeStudyState(nodeId, { studyMaterialContent: version.content });
     } catch (err) {
       toast.error(extractErrorDetail(err));
+    }
+
+    // Silently activate workspace drafts so Regenerate/Improve/Edit are never blocked.
+    if (isWorkspaceDraft && !summary?.is_active) {
+      try {
+        const activated = await studyMaterialService.activate(nodeId, { version_id: versionId });
+        patchNodeStudyState(nodeId, { activeVersion: activated });
+        await refreshVersionHistoryRef.current(nodeId);
+        await refreshMentorUiStateRef.current(nodeId, versionId);
+      } catch {
+        // Non-critical — version is still viewable, edit buttons may remain disabled.
+      }
     }
   };
 
