@@ -1,9 +1,11 @@
 import React from "react";
-import { Maximize2, Zap } from "lucide-react";
+import { Download, Maximize2, Zap } from "lucide-react";
 import type { NodeTreeNode } from "../../../spaces/types/node.types";
 import type { UseStudyMaterialReturn } from "../../hooks/useStudyMaterial";
 import type { UseQuizReturn } from "../../../quiz/hooks/useQuiz";
 import StudyMaterialViewer from "./StudyMaterialViewer";
+import StudyMaterialHistoryHub from "./StudyMaterialHistoryHub";
+import StudentVisibilityBanner from "./StudentVisibilityBanner";
 import StudyMaterialVersionPanel from "../version/StudyMaterialVersionPanel";
 import StudyMaterialQcWarningPanel from "../shared/StudyMaterialQcWarningPanel";
 import { isLlmRateLimited } from "../../utils/llmDiagnostics";
@@ -61,7 +63,9 @@ const StudyMaterialMentorWorkspace: React.FC<StudyMaterialMentorWorkspaceProps> 
     sm.activeVersion?.qc_failed_permanently && (rateLimited || !hasAcceptedFailedQc),
   );
   const versionTag = versionBarTag(sm);
-  const showBackToWorkspace = sm.showArchivedPanel || sm.isViewingArchivedVersion;
+  const showBackToHistory = sm.isHistoryDetailView;
+  const showBackToWorkspace =
+    !sm.shouldShowHistoryHub && (sm.showArchivedPanel || sm.isViewingArchivedVersion);
 
   const handleBackToWorkspace = () => {
     if (sm.isViewingArchivedVersion && sm.activeVersion) {
@@ -71,9 +75,24 @@ const StudyMaterialMentorWorkspace: React.FC<StudyMaterialMentorWorkspaceProps> 
     }
   };
 
+  if (sm.isHistoryHubView) {
+    return (
+      <div className="study-material-page__mentor-layout">
+        {sm.mentorUiState?.student_visibility && (
+          <StudentVisibilityBanner visibility={sm.mentorUiState.student_visibility} />
+        )}
+        <StudyMaterialHistoryHub
+          partitions={sm.historyPartitions}
+          onSelectVersion={sm.handleSelectVersion}
+          onGoToGeneratePage={() => sm.setCurrentPage(1)}
+        />
+      </div>
+    );
+  }
+
   return (
     <div className="study-material-page__mentor-layout">
-      {sm.isViewingArchivedVersion && (
+      {sm.isViewingArchivedVersion && !sm.isHistoryDetailView && (
         <div className="study-material-page__draft-notice-band">
           <div className="study-material-page__viewing-notice">
             <div className="study-material-page__viewing-banner study-material-page__viewing-banner--archived">
@@ -243,6 +262,15 @@ const StudyMaterialMentorWorkspace: React.FC<StudyMaterialMentorWorkspaceProps> 
 
       {sm.displayedVersionBaseLabel && (
         <div className="sm-version-bar">
+          {showBackToHistory && (
+            <button
+              type="button"
+              className="sm-version-bar__back-link"
+              onClick={sm.handleBackToHistory}
+            >
+              ← Back to history
+            </button>
+          )}
           {showBackToWorkspace && (
             <button
               type="button"
@@ -282,15 +310,27 @@ const StudyMaterialMentorWorkspace: React.FC<StudyMaterialMentorWorkspaceProps> 
 
           <div className="sm-version-bar__spacer" />
 
-          <button
-            type="button"
-            className="sm-mentor-btn sm-mentor-btn--ghost sm-version-bar__focus-btn"
-            onClick={onOpenFocusView}
-            title="Open study material in a focused reading view"
-          >
-            <Maximize2 size={14} aria-hidden />
-            Reading view
-          </button>
+          <div className="sm-version-bar__reading-actions">
+            <button
+              type="button"
+              className="sm-mentor-btn sm-mentor-btn--ghost sm-version-bar__focus-btn"
+              onClick={() => void sm.handleDownloadDisplayedVersionPdf()}
+              disabled={sm.isDownloadingPdf || !sm.displayedVersionId || !sm.studyMaterialContent}
+              title="Download the version you are viewing as a PDF"
+            >
+              <Download size={14} aria-hidden />
+              {sm.isDownloadingPdf ? "Preparing PDF…" : "Download PDF"}
+            </button>
+            <button
+              type="button"
+              className="sm-mentor-btn sm-mentor-btn--ghost sm-version-bar__focus-btn"
+              onClick={onOpenFocusView}
+              title="Open study material in a focused reading view"
+            >
+              <Maximize2 size={14} aria-hidden />
+              Reading view
+            </button>
+          </div>
         </div>
       )}
 

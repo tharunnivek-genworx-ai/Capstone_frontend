@@ -165,6 +165,8 @@ const ArchivedStudyMaterialReader: React.FC<ArchivedStudyMaterialReaderProps> = 
       referenceImagesRefreshKey={material.version_id}
       scrollContainerRef={scrollContainerRef}
       hideReferenceImages={isFullscreen}
+      documentLayout
+      hideHeader
     />
   );
 

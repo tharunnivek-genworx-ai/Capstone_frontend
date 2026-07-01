@@ -4,6 +4,7 @@ import { createRoot } from "react-dom/client";
 import { BrowserRouter } from "react-router-dom";
 import { Toaster } from "react-hot-toast";
 import "./styles/index.css";
+import "./features/trainee_study_material/styles/traineeStudyMaterialReader.css";
 import AppRoutes from "./app/routes/AppRoutes";
 import { AuthProvider } from "./features/auth/context/AuthContext";
 

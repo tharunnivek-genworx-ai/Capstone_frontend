@@ -151,6 +151,28 @@ export const studyMaterialService = {
     return response.data;
   },
 
+  /** Mentor: download a study material version as PDF. */
+  async downloadVersionPdf(
+    nodeId: string,
+    versionId: string,
+    filename: string
+  ): Promise<void> {
+    const response = await studyAgentClient.get<Blob>(
+      `/nodes/${nodeId}/study-material/versions/${versionId}/pdf`,
+      { responseType: "blob" }
+    );
+    const url = window.URL.createObjectURL(
+      new Blob([response.data], { type: "application/pdf" })
+    );
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.URL.revokeObjectURL(url);
+  },
+
   /** Load the current active version for a node, if any. */
   async getActiveVersion(
     nodeId: string

@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import toast from "react-hot-toast";
 import type { NodeTreeNode } from "../../spaces/types/node.types";
 import type { TopicContentPage } from "../../spaces/types/node.types";
@@ -19,9 +19,20 @@ import type {
 import { studyMaterialService } from "../services/studyMaterialService";
 import { referenceMaterialService } from "../services/referenceMaterialService";
 import { createGenerationProgressSessionId } from "../../generation/services/generationProgressService";
+import {
+  computeShouldShowHistoryHub,
+  partitionHistoryVersions,
+  shouldSilentlyActivateOnSelect,
+  type HistoryVersionPartitions,
+} from "../utils/versionHistoryPartitions";
 
 // Re-export for consumers that import from this hook
 export type { NodeStudyStatePatch, NodeStudyState };
+
+type VersionHistoryLists = {
+  history: StudyMaterialVersionSummary[];
+  archived: StudyMaterialVersionSummary[];
+};
 
 export type RefModalMode = "manage" | "view";
 
@@ -89,6 +100,7 @@ export interface UseStudyMaterialReturn {
   isUnpublishingVersion: boolean;
   isArchivingVersion: boolean;
   isUnarchivingVersion: boolean;
+  isDownloadingPdf: boolean;
   isSavingManualEdit: boolean;
   processingLabel: string | null;
   showDeleteDraftModal: boolean;
@@ -126,6 +138,10 @@ export interface UseStudyMaterialReturn {
   isDisplayedActiveWorkingDraft: boolean;
   isViewingArchivedVersion: boolean;
   isViewingNonActiveVersion: boolean;
+  shouldShowHistoryHub: boolean;
+  isHistoryHubView: boolean;
+  isHistoryDetailView: boolean;
+  historyPartitions: HistoryVersionPartitions;
   canEditActiveDraft: boolean;
   canArchiveDisplayedVersion: boolean;
   canPublishDisplayedVersion: boolean;
@@ -159,9 +175,11 @@ export interface UseStudyMaterialReturn {
   handleSelectVersion: (versionId: string) => Promise<void>;
   handleActivateVersion: (versionId: string) => Promise<void>;
   handleReturnToActiveDraft: () => Promise<void>;
+  handleBackToHistory: () => void;
   handleArchiveCurrentVersion: () => void;
   handleUnarchiveCurrentVersion: () => void;
   handleUnarchiveVersion: (versionId: string) => Promise<void>;
+  handleDownloadDisplayedVersionPdf: () => Promise<void>;
   handleClearAllDrafts: () => Promise<void>;
   handlePublishCurrentVersion: () => void;
   handleUnpublishCurrentVersion: () => void;
@@ -199,6 +217,7 @@ export function useStudyMaterial({
   const [isPublishingVersion, setIsPublishingVersion] = useState(false);
   const [isUnpublishingVersion, setIsUnpublishingVersion] = useState(false);
   const [isArchivingVersion, setIsArchivingVersion] = useState(false);
+  const [isDownloadingPdf, setIsDownloadingPdf] = useState(false);
   const [isUnarchivingVersion, setIsUnarchivingVersion] = useState(false);
   const [isSavingManualEdit, setIsSavingManualEdit] = useState(false);
   const [processingLabel, setProcessingLabel] = useState<string | null>(null);
@@ -246,7 +265,9 @@ export function useStudyMaterial({
   }, []);
 
   const isViewingNode = (nodeId: string) => currentNodeIdRef.current === nodeId;
-  const refreshVersionHistoryRef = useRef<(nodeId: string) => Promise<void>>(async () => {});
+  const refreshVersionHistoryRef = useRef<(nodeId: string) => Promise<VersionHistoryLists | null>>(
+    async () => null,
+  );
   const refreshMentorUiStateRef = useRef<(nodeId: string, viewingId?: string | null) => Promise<void>>(
     async () => {}
   );
@@ -371,7 +392,7 @@ export function useStudyMaterial({
     }
   }, []);
 
-  const refreshVersionHistory = useCallback(async (nodeId: string) => {
+  const refreshVersionHistory = useCallback(async (nodeId: string): Promise<VersionHistoryLists | null> => {
     const requestId = ++versionHistoryRequestRef.current;
     setIsLoadingVersions(true);
     try {
@@ -379,12 +400,14 @@ export function useStudyMaterial({
         studyMaterialService.listVersions(nodeId, { archived: false }),
         studyMaterialService.listVersions(nodeId, { archived: true }),
       ]);
-      if (requestId !== versionHistoryRequestRef.current) return;
+      if (requestId !== versionHistoryRequestRef.current) return null;
       setVersionHistory(history.versions);
       setArchivedVersionHistory(archived.versions);
       await refreshClearDraftsEligibility(nodeId);
+      return { history: history.versions, archived: archived.versions };
     } catch {
       /* non-critical */
+      return null;
     } finally {
       if (requestId === versionHistoryRequestRef.current) {
         setIsLoadingVersions(false);
@@ -406,6 +429,21 @@ export function useStudyMaterial({
     },
     [allVersionSummaries]
   );
+
+  const historyPartitions = useMemo(
+    () => partitionHistoryVersions(versionHistory, archivedVersionHistory),
+    [versionHistory, archivedVersionHistory]
+  );
+
+  const shouldShowHistoryHub = useMemo(
+    () =>
+      mentorUiState != null &&
+      computeShouldShowHistoryHub(versionHistory, archivedVersionHistory, mentorUiState),
+    [versionHistory, archivedVersionHistory, mentorUiState]
+  );
+
+  const isHistoryHubView = shouldShowHistoryHub && viewingVersionId === null;
+  const isHistoryDetailView = shouldShowHistoryHub && viewingVersionId !== null;
 
   // ── Effects ───────────────────────────────────────────────────────────────
 
@@ -599,9 +637,22 @@ export function useStudyMaterial({
     void refreshVersionHistoryRef.current(node.node_id);
   }, [node?.node_id, currentPage, isMentor]);
 
+  // When entering history-only mode, clear any auto-loaded document so the hub shows.
+  const prevShouldShowHistoryHubRef = useRef(false);
+  useEffect(() => {
+    if (!node) return;
+    const enteredHistoryHub = shouldShowHistoryHub && !prevShouldShowHistoryHubRef.current;
+    prevShouldShowHistoryHubRef.current = shouldShowHistoryHub;
+    if (!enteredHistoryHub) return;
+    setViewingVersionId(null);
+    setShowArchivedPanel(false);
+    patchNodeStudyState(node.node_id, { studyMaterialContent: null });
+  }, [shouldShowHistoryHub, node, patchNodeStudyState]);
+
   // When every draft is in the archive, load one for viewing so Material is not blank.
   useEffect(() => {
     if (!node || !isMentor || currentPage !== 2 || isGenerating) return;
+    if (!mentorUiState || shouldShowHistoryHub) return;
     if (studyMaterialContent?.trim()) return;
     if (archivedVersionHistory.length === 0) return;
     const workspaceCount = versionHistory.filter((v) => !v.is_archived).length;
@@ -633,16 +684,22 @@ export function useStudyMaterial({
     versionHistory,
     viewingVersionId,
     patchNodeStudyState,
+    shouldShowHistoryHub,
+    mentorUiState,
   ]);
 
   // Load the best available version when Material opens with history but no body.
   useEffect(() => {
     if (!node || !isMentor || currentPage !== 2 || isGenerating || isLoadingVersions) return;
+    if (!mentorUiState || shouldShowHistoryHub) return;
     if (studyMaterialContent?.trim()) return;
     if (versionHistory.length === 0 && archivedVersionHistory.length === 0) return;
 
     const workspaceVersions = versionHistory.filter(
-      (v) => !v.is_archived && v.mentor_display_badge !== "Previous for students"
+      (v) =>
+        !v.is_archived &&
+        v.mentor_display_badge !== "Previous for students" &&
+        v.mentor_display_badge !== "Removed from students",
     );
     const studentArchiveVersions = versionHistory.filter(
       (v) => v.mentor_display_badge === "Previous for students"
@@ -657,11 +714,6 @@ export function useStudyMaterial({
 
     const nodeId = node.node_id;
     let cancelled = false;
-
-    const isWorkspaceDraft =
-      !targetSummary.is_archived &&
-      !targetSummary.is_published &&
-      targetSummary.mentor_display_badge !== "Previous for students";
 
     if (targetSummary.mentor_display_badge === "Previous for students") {
       setStudentArchiveExpanded(true);
@@ -679,7 +731,7 @@ export function useStudyMaterial({
 
       // If no version is active yet, silently activate this one so that
       // Regenerate / Improve / Manual edit are never blocked on first open.
-      if (!cancelled && isWorkspaceDraft && !targetSummary.is_active) {
+      if (!cancelled && shouldSilentlyActivateOnSelect(targetSummary)) {
         try {
           const activated = await studyMaterialService.activate(nodeId, {
             version_id: targetSummary.version_id,
@@ -709,6 +761,8 @@ export function useStudyMaterial({
     versionHistory,
     archivedVersionHistory.length,
     patchNodeStudyState,
+    shouldShowHistoryHub,
+    mentorUiState,
   ]);
 
   // Refresh mentor UI when returning to study material (e.g. after publishing a quiz)
@@ -769,9 +823,9 @@ export function useStudyMaterial({
   };
 
   const finalizeVersionMutation = async (version: StudyMaterialVersionOut) => {
-    if (!node) return;
+    if (!node) return null;
     const nodeId = node.node_id;
-    await refreshVersionHistory(nodeId);
+    const versionLists = await refreshVersionHistory(nodeId);
     const activeFromServer = await studyMaterialService.getActiveVersion(nodeId);
     patchNodeStudyState(nodeId, {
       activeVersion: activeFromServer,
@@ -781,6 +835,7 @@ export function useStudyMaterial({
     });
     await refreshMentorUiStateRef.current(nodeId, viewingVersionId);
     onMentorProgressRefreshRef.current?.();
+    return versionLists;
   };
 
   const handlePublishVersion = async (versionId: string) => {
@@ -870,18 +925,34 @@ export function useStudyMaterial({
       });
       setUnpublishPreview(null);
       setPendingUnpublishVersionId(null);
-      await finalizeVersionMutation(version);
+      const versionLists = await finalizeVersionMutation(version);
       const nodeId = node.node_id;
-      setViewingVersionId(version.version_id);
-      if (retentionMode === "keep_for_review") {
+      const uiState = await studyMaterialService.getMentorUiState(nodeId, null);
+      const willShowHistoryHub = Boolean(
+        versionLists &&
+          computeShouldShowHistoryHub(versionLists.history, versionLists.archived, uiState)
+      );
+
+      if (willShowHistoryHub) {
+        setViewingVersionId(null);
         setShowArchivedPanel(false);
-        setStudentArchiveExpanded(true);
+        patchNodeStudyState(nodeId, {
+          currentPage: 2,
+          hasTriggeredGeneration: true,
+          studyMaterialContent: null,
+        });
+      } else {
+        setViewingVersionId(version.version_id);
+        if (retentionMode === "keep_for_review") {
+          setShowArchivedPanel(false);
+          setStudentArchiveExpanded(true);
+        }
+        patchNodeStudyState(nodeId, {
+          currentPage: 2,
+          hasTriggeredGeneration: true,
+          studyMaterialContent: version.content,
+        });
       }
-      patchNodeStudyState(nodeId, {
-        currentPage: 2,
-        hasTriggeredGeneration: true,
-        studyMaterialContent: version.content,
-      });
       toast.success(`${version.display_label} removed from students.`);
     } catch (err) {
       if (isUnpublishTransactionError(err)) {
@@ -1110,10 +1181,6 @@ export function useStudyMaterial({
     if (!node) return;
     const nodeId = node.node_id;
     const summary = findVersionSummary(versionId);
-    const isWorkspaceDraft =
-      !summary?.is_archived &&
-      !summary?.is_published &&
-      summary?.mentor_display_badge !== "Previous for students";
 
     if (summary?.is_archived) {
       setShowArchivedPanel(true);
@@ -1129,8 +1196,9 @@ export function useStudyMaterial({
       toast.error(extractErrorDetail(err));
     }
 
-    // Silently activate workspace drafts so Regenerate/Improve/Edit are never blocked.
-    if (isWorkspaceDraft && !summary?.is_active) {
+    // Silently activate the selected version so Regenerate/Improve/Edit are never blocked
+    // (including versions opened from the history hub or student archive).
+    if (shouldSilentlyActivateOnSelect(summary)) {
       try {
         const activated = await studyMaterialService.activate(nodeId, { version_id: versionId });
         patchNodeStudyState(nodeId, { activeVersion: activated });
@@ -1161,8 +1229,20 @@ export function useStudyMaterial({
     }
   };
 
+  const handleBackToHistory = useCallback(() => {
+    if (!node) return;
+    setViewingVersionId(null);
+    setShowArchivedPanel(false);
+    patchNodeStudyState(node.node_id, { studyMaterialContent: null });
+  }, [node, patchNodeStudyState]);
+
   const handleReturnToActiveDraft = async () => {
-    if (!node || !activeVersion) return;
+    if (!node) return;
+    if (isHistoryDetailView) {
+      handleBackToHistory();
+      return;
+    }
+    if (!activeVersion) return;
     setViewingVersionId(null);
     setShowArchivedPanel(false);
     patchNodeStudyState(node.node_id, { studyMaterialContent: activeVersion.content });
@@ -1186,20 +1266,12 @@ export function useStudyMaterial({
           setViewingVersionId(null);
           setShowArchivedPanel(false);
         } else {
-          setShowArchivedPanel(true);
-          setViewingVersionId(versionId);
-          try {
-            const archivedVersion = await studyMaterialService.getVersion(nodeId, versionId);
-            patchNodeStudyState(nodeId, {
-              activeVersion: null,
-              studyMaterialContent: archivedVersion.content,
-            });
-          } catch {
-            patchNodeStudyState(nodeId, {
-              activeVersion: null,
-              studyMaterialContent: null,
-            });
-          }
+          setViewingVersionId(null);
+          setShowArchivedPanel(false);
+          patchNodeStudyState(nodeId, {
+            activeVersion: null,
+            studyMaterialContent: null,
+          });
         }
       } else if (viewingVersionId === versionId) {
         setShowArchivedPanel(true);
@@ -1245,6 +1317,21 @@ export function useStudyMaterial({
   const handleUnarchiveCurrentVersion = () => {
     const targetId = viewingVersionId ?? activeVersion?.version_id;
     if (targetId) void handleUnarchiveVersion(targetId);
+  };
+
+  const handleDownloadDisplayedVersionPdf = async () => {
+    const targetId = viewingVersionId ?? activeVersion?.version_id;
+    if (!node?.node_id || !targetId || isDownloadingPdf) return;
+    setIsDownloadingPdf(true);
+    try {
+      const safeTitle =
+        (node.title || "study-material").replace(/[^\w\s-]/g, "").trim() || "study-material";
+      await studyMaterialService.downloadVersionPdf(node.node_id, targetId, `${safeTitle}.pdf`);
+    } catch (err) {
+      toast.error(extractErrorDetail(err));
+    } finally {
+      setIsDownloadingPdf(false);
+    }
   };
 
   const expandStudentArchive = useCallback(() => {
@@ -1457,6 +1544,7 @@ export function useStudyMaterial({
     isUnpublishingVersion,
     isArchivingVersion,
     isUnarchivingVersion,
+    isDownloadingPdf,
     isSavingManualEdit,
     processingLabel,
     showDeleteDraftModal,
@@ -1494,6 +1582,10 @@ export function useStudyMaterial({
     isDisplayedActiveWorkingDraft,
     isViewingArchivedVersion,
     isViewingNonActiveVersion,
+    shouldShowHistoryHub,
+    isHistoryHubView,
+    isHistoryDetailView,
+    historyPartitions,
     canEditActiveDraft,
     canArchiveDisplayedVersion,
     canPublishDisplayedVersion,
@@ -1527,9 +1619,11 @@ export function useStudyMaterial({
     handleSelectVersion,
     handleActivateVersion,
     handleReturnToActiveDraft,
+    handleBackToHistory,
     handleArchiveCurrentVersion,
     handleUnarchiveCurrentVersion,
     handleUnarchiveVersion,
+    handleDownloadDisplayedVersionPdf,
     handleClearAllDrafts,
     handlePublishCurrentVersion,
     handleUnpublishCurrentVersion,
