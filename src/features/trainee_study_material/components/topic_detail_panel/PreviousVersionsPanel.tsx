@@ -7,7 +7,15 @@ interface PreviousVersionsPanelProps {
   nodeId: string;
   spaceId: string;
   nodeTitle: string;
-  onReadVersion: (versionId: string, versionLabel: string) => void;
+  onReadVersion: (version: TraineeArchivedSmItem) => void;
+}
+
+function formatRemovedDate(iso: string): string {
+  return new Date(iso).toLocaleDateString(undefined, {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
 }
 
 const PreviousVersionsPanel: React.FC<PreviousVersionsPanelProps> = ({
@@ -74,37 +82,23 @@ const PreviousVersionsPanel: React.FC<PreviousVersionsPanelProps> = ({
       {versions.map((version) => (
         <div key={version.version_id} className="topic-detail-panel__archive-card">
           <div className="topic-detail-panel__archive-card-header">
-            <span className="topic-detail-panel__archive-version-label">
-              {version.version_label}
-            </span>
-            {version.you_read_this && (
-              <span className="topic-detail-panel__archive-read-badge">You read this</span>
+            <span className="topic-detail-panel__archive-version-label">{nodeTitle}</span>
+            {version.removed_at && (
+              <span className="topic-detail-panel__archive-meta">
+                Removed {formatRemovedDate(version.removed_at)}
+              </span>
             )}
           </div>
-          {version.is_current_version ? (
-            <p className="topic-detail-panel__archive-meta">
-              Archived quiz from current study material
-            </p>
-          ) : (
-            version.superseded_at && (
-              <p className="topic-detail-panel__archive-meta">
-                Superseded{" "}
-                {new Date(version.superseded_at).toLocaleDateString(undefined, {
-                  month: "short",
-                  day: "numeric",
-                  year: "numeric",
-                })}
-              </p>
-            )
-          )}
           <div className="topic-detail-panel__archive-actions">
-            <button
-              type="button"
-              className="btn-secondary"
-              onClick={() => onReadVersion(version.version_id, version.version_label)}
-            >
-              Read material
-            </button>
+            {version.can_read_material && (
+              <button
+                type="button"
+                className="btn-secondary"
+                onClick={() => onReadVersion(version)}
+              >
+                Read material
+              </button>
+            )}
             {version.has_archived_quiz && version.archived_quiz_id && (
               <button
                 type="button"

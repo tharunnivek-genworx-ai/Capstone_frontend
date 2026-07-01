@@ -192,8 +192,10 @@ const QuizPage3: React.FC<QuizPage3Props> = ({ nodeTitle, qz }) => {
               canEdit={false}
               isSaving={false}
               isDeleting={false}
+              isRegenerating={false}
               onUpdate={async () => {}}
               onDelete={async () => {}}
+              onRegenerate={async () => {}}
             />
           ))}
         </div>
@@ -315,6 +317,9 @@ const QuizPage3: React.FC<QuizPage3Props> = ({ nodeTitle, qz }) => {
     && (rateLimited || acceptedQuizId !== quiz.quiz_id)
   );
 
+  const needsHintsBeforePublish = !quiz.is_published && quiz.hints_status !== "complete";
+  const showCombinedHintsCta = needsHintsBeforePublish && activeQuestions.length > 0;
+
   return (
     <div className="quiz-page">
       <div className="quiz-page__body-row">
@@ -404,26 +409,42 @@ const QuizPage3: React.FC<QuizPage3Props> = ({ nodeTitle, qz }) => {
                     {qz.showUpdateQuizNudge ? "Regenerate for new SM" : "Regenerate"}
                   </button>
                 )}
-                {!quiz.is_published && (
+                {showCombinedHintsCta ? (
                   <button
                     type="button"
-                    className="btn-secondary quiz-page__btn"
+                    className="btn-primary quiz-page__btn"
                     onClick={qz.handleProceedToHints}
-                    disabled={qz.isGenerating || activeQuestions.length === 0}
-                    title="Proceed to hint generation"
+                    disabled={qz.isGenerating}
+                    title="Hints must be generated before the quiz can go live for students"
                   >
-                    Hints →
+                    {quiz.hints_status === "partial"
+                      ? "Continue generating hints…"
+                      : "Generate hints and then publish quiz"}
                   </button>
+                ) : (
+                  <>
+                    {!quiz.is_published && (
+                      <button
+                        type="button"
+                        className="btn-secondary quiz-page__btn"
+                        onClick={qz.handleProceedToHints}
+                        disabled={qz.isGenerating || activeQuestions.length === 0}
+                        title="Proceed to hint generation"
+                      >
+                        Hints →
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      className="btn-primary quiz-page__btn"
+                      onClick={qz.handlePublishQuiz}
+                      disabled={!qz.canPublishQuiz || qz.isPublishing || quiz.is_published}
+                      title={!qz.canPublishQuiz ? qz.publishDisabledTooltip ?? undefined : undefined}
+                    >
+                      {qz.isPublishing ? "Making live…" : qz.publishQuizButtonLabel}
+                    </button>
+                  </>
                 )}
-                <button
-                  type="button"
-                  className="btn-primary quiz-page__btn"
-                  onClick={qz.handlePublishQuiz}
-                  disabled={!qz.canPublishQuiz || qz.isPublishing || quiz.is_published}
-                  title={!qz.canPublishQuiz ? qz.publishDisabledTooltip ?? undefined : undefined}
-                >
-                  {qz.isPublishing ? "Making live…" : qz.publishQuizButtonLabel}
-                </button>
                 <button
                   type="button"
                   className="btn-secondary quiz-page__btn"
@@ -483,8 +504,10 @@ const QuizPage3: React.FC<QuizPage3Props> = ({ nodeTitle, qz }) => {
                       canEdit={qz.canEditQuestions}
                       isSaving={isSavingQuestion}
                       isDeleting={qz.isDeletingQuestion === q.question_id}
+                      isRegenerating={qz.isRegeneratingQuestion === q.question_id}
                       onUpdate={qz.handleUpdateQuestion}
                       onDelete={qz.handleDeleteQuestion}
+                      onRegenerate={qz.handleRegenerateQuestion}
                     />
                   ))}
                 </SortableContext>

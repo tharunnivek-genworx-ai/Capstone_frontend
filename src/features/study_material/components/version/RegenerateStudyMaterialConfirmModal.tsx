@@ -3,6 +3,7 @@ import React from "react";
 interface RegenerateStudyMaterialConfirmModalProps {
   nodeTitle: string;
   hasReferenceMaterial: boolean;
+  sourceDocMismatch?: boolean;
   onClose: () => void;
   onConfirm: () => void;
   isSubmitting?: boolean;
@@ -11,6 +12,7 @@ interface RegenerateStudyMaterialConfirmModalProps {
 const RegenerateStudyMaterialConfirmModal: React.FC<RegenerateStudyMaterialConfirmModalProps> = ({
   nodeTitle,
   hasReferenceMaterial,
+  sourceDocMismatch = false,
   onClose,
   onConfirm,
   isSubmitting = false,
@@ -72,6 +74,12 @@ const RegenerateStudyMaterialConfirmModal: React.FC<RegenerateStudyMaterialConfi
             {hasReferenceMaterial
               ? ", and your reference PDF will be parsed again."
               : "."}
+            {sourceDocMismatch && (
+              <>
+                {" "}
+                This will use your newly uploaded source document; older draft content may no longer match.
+              </>
+            )}
           </p>
 
           <div style={{ display: "flex", gap: "0.75rem" }}>

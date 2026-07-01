@@ -36,6 +36,7 @@ interface TopicTreeProps {
   onArchive: (nodeId: string, payload: { archive_children: boolean }) => Promise<void>;
   isMentor?: boolean;
   onMoveModeChange?: (active: boolean) => void;
+  isCompact?: boolean;
 }
 
 const TopicTree: React.FC<TopicTreeProps> = ({
@@ -50,6 +51,7 @@ const TopicTree: React.FC<TopicTreeProps> = ({
   onArchive,
   isMentor = true,
   onMoveModeChange,
+  isCompact = false,
 }) => {
   // ── Create node state ────────────────────────────────────────────────────
   const [createState, setCreateState] = useState<CreateNodeState | null>(null);
@@ -473,6 +475,7 @@ const TopicTree: React.FC<TopicTreeProps> = ({
             excludedMoveTargetIds={excludedMoveIds}
             moveSelectedParentId={moveParentId}
             onPickMoveParent={(parentId) => setMoveParentId(parentId)}
+            isCompact={isCompact}
           />
         ))}
       </div>

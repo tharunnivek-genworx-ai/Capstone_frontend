@@ -126,24 +126,60 @@ const StudyMaterialMentorWorkspace: React.FC<StudyMaterialMentorWorkspaceProps> 
           >
             Discard drafts
           </button>
-          {renderGenerationSourceButton("sm-mentor-btn sm-mentor-btn--ghost")}
+          {Boolean(sm.activeVersion?.reference_material_id) &&
+            renderGenerationSourceButton("sm-mentor-btn sm-mentor-btn--ghost")}
           {renderTopicResourcesButton("sm-mentor-btn sm-mentor-btn--ghost")}
         </div>
 
         <div className="sm-mentor-toolbar__divider" aria-hidden />
 
+        {sm.showSourceDocMismatchBanner && (
+          <div
+            className="study-material-source-doc-mismatch-banner"
+            role="status"
+          >
+            <span>
+              This draft was generated from a different source document. Regenerating will use the new PDF
+              and delete existing drafts; older content may no longer match.
+            </span>
+            <button
+              type="button"
+              className="study-material-source-doc-mismatch-banner__dismiss"
+              onClick={sm.dismissSourceDocMismatchBanner}
+              aria-label="Dismiss warning"
+            >
+              Dismiss
+            </button>
+          </div>
+        )}
+
+        {sm.sourcePdfDeleted && (
+          <div
+            className="study-material-source-pdf-deleted-banner"
+            role="status"
+          >
+            <span>
+              The reference PDF used to generate this draft has been removed. Regenerate and Improve are
+              unavailable until you upload a new source document, or you discard drafts and generate fresh
+              from page 1 without a reference PDF.
+            </span>
+          </div>
+        )}
+
         <div className="sm-mentor-toolbar__group">
           <button
             type="button"
             className="sm-mentor-btn sm-mentor-btn--outline"
-            onClick={() => sm.setFeedbackModalMode("regenerate")}
-            disabled={!sm.canEditActiveDraft}
+            onClick={() => sm.openFeedbackModal("regenerate")}
+            disabled={!sm.canRegenerateOrImproveDraft}
             title={
-              sm.canEditActiveDraft
-                ? undefined
-                : sm.isViewingNonActiveVersion
-                  ? "Return to the active draft to regenerate"
-                  : "Set this version as your working draft to regenerate it"
+              sm.sourcePdfDeleted
+                ? sm.sourcePdfDeletedBlockReason
+                : sm.canEditActiveDraft
+                  ? undefined
+                  : sm.isViewingNonActiveVersion
+                    ? "Return to the active draft to regenerate"
+                    : "Set this version as your working draft to regenerate it"
             }
           >
             Regenerate
@@ -151,9 +187,15 @@ const StudyMaterialMentorWorkspace: React.FC<StudyMaterialMentorWorkspaceProps> 
           <button
             type="button"
             className="sm-mentor-btn sm-mentor-btn--outline"
-            onClick={() => sm.setFeedbackModalMode("improve")}
-            disabled={!sm.canEditActiveDraft}
-            title={sm.canEditActiveDraft ? undefined : "Return to the active draft to improve it"}
+            onClick={() => sm.openFeedbackModal("improve")}
+            disabled={!sm.canRegenerateOrImproveDraft}
+            title={
+              sm.sourcePdfDeleted
+                ? sm.sourcePdfDeletedBlockReason
+                : sm.canEditActiveDraft
+                  ? undefined
+                  : "Return to the active draft to improve it"
+            }
           >
             Improve
           </button>

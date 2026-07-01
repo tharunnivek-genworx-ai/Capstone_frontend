@@ -49,6 +49,8 @@ export interface UseQuizReturn {
   isDeletingDraft: boolean;
   isDeletingHintsDraft: boolean;
   isDeletingQuestion: string | null;
+  isRegeneratingQuestion: string | null;
+  hintsStaleQuestionIds: string[];
   quizDraftExists: boolean;
   quizHistory: QuizHistoryItemOut[];
   canGenerateQuiz: boolean;
@@ -100,10 +102,11 @@ export interface UseQuizReturn {
   confirmUnpublishQuiz: (retentionMode: RetentionMode) => Promise<void>;
   handleUpdateQuestion: (questionId: string, data: QuizQuestionUpdateRequest) => Promise<void>;
   handleDeleteQuestion: (questionId: string) => Promise<void>;
+  handleRegenerateQuestion: (questionId: string, feedback: string) => Promise<void>;
   handleCreateQuestion: (data: QuizQuestionCreateRequest) => Promise<void>;
   handleReorderQuestions: (questionIds: string[]) => Promise<void>;
   handleGenerateHints: () => Promise<void>;
-  handleRegenerateAllHints: () => Promise<void>;
+  handleRegenerateAllHints: (feedback: string) => Promise<void>;
   handleRegenerateHints: (questionId: string, feedback?: string) => Promise<void>;
   handleProceedToHints: () => void;
   handleViewHistoryQuiz: (quizId: string) => Promise<void>;
@@ -199,6 +202,8 @@ export function useQuiz({
   const [isDeletingDraft, setIsDeletingDraft] = useState(false);
   const [isDeletingHintsDraft, setIsDeletingHintsDraft] = useState(false);
   const [isDeletingQuestion, setIsDeletingQuestion] = useState<string | null>(null);
+  const [isRegeneratingQuestion, setIsRegeneratingQuestion] = useState<string | null>(null);
+  const [hintsStaleQuestionIds, setHintsStaleQuestionIds] = useState<string[]>([]);
   const [quizDraftExists, setQuizDraftExists] = useState(false);
   const [canGenerateQuiz, setCanGenerateQuiz] = useState(false);
   const [generateDisabledTooltip, setGenerateDisabledTooltip] = useState<string | null>(null);
@@ -305,6 +310,7 @@ export function useQuiz({
     setIsUnpublishing(false);
     setIsDeletingDraft(false);
     setIsDeletingHintsDraft(false);
+    setHintsStaleQuestionIds([]);
     setShowAnswerKey(false);
     setShowRegenerateModal(false);
     setShowDeleteDraftModal(false);
@@ -702,7 +708,38 @@ export function useQuiz({
     } finally {
       setIsDeletingQuestion(null);
     }
-  }, [node?.node_id, quiz, isDeletingQuestion]);
+  }, [node?.node_id, quiz, isDeletingQuestion, handleMutationError]);
+
+  const handleRegenerateQuestion = useCallback(async (questionId: string, feedback: string) => {
+    if (!node || !quiz || isRegeneratingQuestion || !canEditQuestions || quiz.is_published) return;
+    const trimmedFeedback = feedback.trim();
+    if (trimmedFeedback.length < 10) return;
+
+    const nodeId = node.node_id;
+    const quizId = quiz.quiz_id;
+    setIsRegeneratingQuestion(questionId);
+    try {
+      const updated = await quizService.regenerateQuestions(nodeId, quizId, {
+        question_ids: [questionId],
+        mentor_feedback: trimmedFeedback,
+      });
+      if (isViewingNode(nodeId)) {
+        setQuiz(updated);
+        await refreshQuiz(nodeId, quizId);
+      }
+      const staleIds = updated.hints_stale_question_ids ?? [];
+      if (staleIds.length > 0) {
+        setHintsStaleQuestionIds((prev) => [...new Set([...prev, ...staleIds])]);
+        toast.success("Question regenerated. Regenerate hints on the Hints page — they were cleared for the updated question.");
+      } else {
+        toast.success("Question regenerated.");
+      }
+    } catch (err) {
+      handleMutationError(err);
+    } finally {
+      setIsRegeneratingQuestion(null);
+    }
+  }, [node, quiz, isRegeneratingQuestion, canEditQuestions, refreshQuiz, handleMutationError]);
 
   const handleCreateQuestion = useCallback(async (data: QuizQuestionCreateRequest) => {
     if (!node || !quiz) return;
@@ -766,12 +803,10 @@ export function useQuiz({
     }
   }, [node, quiz, isGeneratingHints, canGenerateHints, refreshQuiz, patchNodeStudyState, handleMutationError]);
 
-  const handleRegenerateAllHints = useCallback(async () => {
+  const handleRegenerateAllHints = useCallback(async (feedback: string) => {
     if (!node || !quiz || isGeneratingHints || !canRegenerateHints) return;
-    const questionIds = quiz.questions
-      .filter((q) => q.is_active)
-      .map((q) => q.question_id);
-    if (questionIds.length === 0) return;
+    const trimmedFeedback = feedback.trim();
+    if (trimmedFeedback.length < 10) return;
 
     const nodeId = node.node_id;
     const quizId = quiz.quiz_id;
@@ -779,7 +814,8 @@ export function useQuiz({
     patchNodeStudyState(nodeId, { isGeneratingHints: true });
     try {
       const updated = await quizService.regenerateHints(nodeId, quizId, {
-        question_ids: questionIds,
+        scope: "all",
+        mentor_feedback: trimmedFeedback,
       });
       patchNodeStudyState(nodeId, { isGeneratingHints: false });
       if (isViewingNode(nodeId)) {
@@ -803,6 +839,7 @@ export function useQuiz({
     patchNodeStudyState(nodeId, { isGeneratingHints: true });
     try {
       const updated = await quizService.regenerateHints(nodeId, quizId, {
+        scope: "selective",
         question_ids: [questionId],
         mentor_feedback: feedback?.trim() || undefined,
       });
@@ -892,6 +929,8 @@ export function useQuiz({
     isDeletingDraft,
     isDeletingHintsDraft,
     isDeletingQuestion,
+    isRegeneratingQuestion,
+    hintsStaleQuestionIds,
     quizDraftExists,
     quizHistory,
     canGenerateQuiz,
@@ -937,6 +976,7 @@ export function useQuiz({
     confirmUnpublishQuiz,
     handleUpdateQuestion,
     handleDeleteQuestion,
+    handleRegenerateQuestion,
     handleCreateQuestion,
     handleReorderQuestions,
     handleGenerateHints,

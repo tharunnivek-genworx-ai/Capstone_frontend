@@ -23,6 +23,24 @@ import { createGenerationProgressSessionId } from "../../generation/services/gen
 // Re-export for consumers that import from this hook
 export type { NodeStudyStatePatch, NodeStudyState };
 
+export type RefModalMode = "manage" | "view";
+
+/** Shown when a draft's frozen reference_material_id no longer has an active upload. */
+export const SOURCE_PDF_DELETED_BLOCK_REASON =
+  "The reference PDF for this draft was removed. Upload a new PDF, or discard drafts and generate fresh from page 1 without a reference document.";
+
+function isSourcePdfDeleted(
+  activeVersion: StudyMaterialVersionOut | null,
+  referenceMaterial: ReferenceMaterialOut | null,
+  isLoadingGenerationSource: boolean,
+): boolean {
+  return Boolean(
+    activeVersion?.reference_material_id != null &&
+    !referenceMaterial &&
+    !isLoadingGenerationSource
+  );
+}
+
 /** Nodes with an in-flight generate/regenerate/improve request (survives node switches). */
 const generatingNodeIds = new Set<string>();
 
@@ -79,6 +97,20 @@ export interface UseStudyMaterialReturn {
   setShowRegenerateConfirmModal: (v: boolean) => void;
   showRefModal: boolean;
   setShowRefModal: (v: boolean) => void;
+  refModalMode: RefModalMode;
+  setRefModalMode: (mode: RefModalMode) => void;
+  refModalFocusDropzone: boolean;
+  setRefModalFocusDropzone: (v: boolean) => void;
+  openRefModalManage: (options?: { focusDropzone?: boolean }) => void;
+  openRefModalView: () => void;
+  handleRequestReplaceSource: () => void;
+  sourceDocMismatch: boolean;
+  showSourceDocMismatchBanner: boolean;
+  dismissSourceDocMismatchBanner: () => void;
+  sourcePdfDeleted: boolean;
+  sourcePdfDeletedBlockReason: string;
+  canRegenerateOrImproveDraft: boolean;
+  openFeedbackModal: (mode: StudyMaterialFeedbackMode) => void;
   showNodeMediaModal: boolean;
   setShowNodeMediaModal: (v: boolean) => void;
   isDeletingDrafts: boolean;
@@ -136,6 +168,7 @@ export interface UseStudyMaterialReturn {
   handleKeepExistingDraftsAfterMove: () => void;
   handleUseNewInstructions: () => void;
   setReferenceMaterial: (m: ReferenceMaterialOut | null) => void;
+  setReferenceMaterialForNode: (nodeId: string, m: ReferenceMaterialOut | null) => void;
   refreshGenerationSource: () => Promise<void>;
   refreshTopicResources: () => Promise<void>;
 }
@@ -191,6 +224,11 @@ export function useStudyMaterial({
   const [pendingUnpublishVersionId, setPendingUnpublishVersionId] = useState<string | null>(null);
   const [isDeletingDrafts, setIsDeletingDrafts] = useState(false);
   const [showRefModal, setShowRefModal] = useState(false);
+  const [refModalMode, setRefModalMode] = useState<RefModalMode>("manage");
+  const [refModalFocusDropzone, setRefModalFocusDropzone] = useState(false);
+  const [sourceDocMismatchDismissedByNode, setSourceDocMismatchDismissedByNode] = useState<
+    Record<string, string>
+  >({});
   const [showNodeMediaModal, setShowNodeMediaModal] = useState(false);
   const [nodeMedia, setNodeMedia] = useState<NodeMediaOut[]>([]);
   const [isLoadingGenerationSource, setIsLoadingGenerationSource] = useState(false);
@@ -213,6 +251,7 @@ export function useStudyMaterial({
     async () => {}
   );
   const versionHistoryRequestRef = useRef(0);
+  const generationSourceRequestRef = useRef(0);
 
   // ── Convenient accessors into lifted state ────────────────────────────────
   const currentPage = studyState?.currentPage ?? 1;
@@ -228,21 +267,31 @@ export function useStudyMaterial({
     if (!node) return;
     patchNodeStudyState(node.node_id, { currentPage: p });
   };
+  const setReferenceMaterialForNode = useCallback(
+    (nodeId: string, m: ReferenceMaterialOut | null) => {
+      patchNodeStudyState(nodeId, { referenceMaterial: m });
+    },
+    [patchNodeStudyState]
+  );
   const setReferenceMaterial = (m: ReferenceMaterialOut | null) => {
     if (!node) return;
-    patchNodeStudyState(node.node_id, { referenceMaterial: m });
+    setReferenceMaterialForNode(node.node_id, m);
   };
 
   const refreshGenerationSource = useCallback(async () => {
     if (!node || !isMentor) return;
+    const requestId = ++generationSourceRequestRef.current;
     setIsLoadingGenerationSource(true);
     try {
       const latest = await referenceMaterialService.getLatestByNode(node.node_id);
+      if (requestId !== generationSourceRequestRef.current) return;
       patchNodeStudyState(node.node_id, { referenceMaterial: latest });
     } catch {
       /* non-critical */
     } finally {
-      setIsLoadingGenerationSource(false);
+      if (requestId === generationSourceRequestRef.current) {
+        setIsLoadingGenerationSource(false);
+      }
     }
   }, [node, isMentor, patchNodeStudyState]);
 
@@ -366,7 +415,9 @@ export function useStudyMaterial({
   // appear stale and silently drop the result (leaving the panel empty).
   useEffect(() => {
     versionHistoryRequestRef.current += 1;
+    generationSourceRequestRef.current += 1;
     setIsLoadingVersions(false);
+    setIsLoadingGenerationSource(false);
     setFeedbackModalMode(null);
     setIsManualEditMode(false);
     setViewingVersionId(null);
@@ -972,6 +1023,10 @@ export function useStudyMaterial({
 
   const runFeedbackAction = async (mode: StudyMaterialFeedbackMode, feedback: string) => {
     if (!node || isGenerating) return;
+    if (isSourcePdfDeleted(activeVersion, referenceMaterial, isLoadingGenerationSource)) {
+      toast.error(SOURCE_PDF_DELETED_BLOCK_REASON);
+      return;
+    }
     const nodeId = node.node_id;
     const progressSessionId = createGenerationProgressSessionId();
     generatingNodeIds.add(nodeId);
@@ -1265,6 +1320,45 @@ export function useStudyMaterial({
     setCurrentPage(1);
   };
 
+  const openRefModalManage = useCallback((options?: { focusDropzone?: boolean }) => {
+    setRefModalMode("manage");
+    setRefModalFocusDropzone(options?.focusDropzone ?? false);
+    setShowRefModal(true);
+  }, []);
+
+  const openRefModalView = useCallback(() => {
+    setRefModalMode("view");
+    setRefModalFocusDropzone(false);
+    setShowRefModal(true);
+  }, []);
+
+  const handleRequestReplaceSource = useCallback(() => {
+    setShowRefModal(false);
+    setCurrentPage(1);
+    setRefModalMode("manage");
+    setRefModalFocusDropzone(true);
+    setShowRefModal(true);
+  }, [setCurrentPage]);
+
+  const dismissSourceDocMismatchBanner = useCallback(() => {
+    if (!node || !referenceMaterial) return;
+    setSourceDocMismatchDismissedByNode((dismissed) => ({
+      ...dismissed,
+      [node.node_id]: referenceMaterial.material_id,
+    }));
+  }, [node, referenceMaterial]);
+
+  const openFeedbackModal = useCallback(
+    (mode: StudyMaterialFeedbackMode) => {
+      if (isSourcePdfDeleted(activeVersion, referenceMaterial, isLoadingGenerationSource)) {
+        toast.error(SOURCE_PDF_DELETED_BLOCK_REASON);
+        return;
+      }
+      setFeedbackModalMode(mode);
+    },
+    [activeVersion, referenceMaterial, isLoadingGenerationSource]
+  );
+
   // ── Computed values ───────────────────────────────────────────────────────
 
   const versionActions = mentorUiState?.displayed_version_actions;
@@ -1295,6 +1389,28 @@ export function useStudyMaterial({
     mentorUiState?.instruction_changed_since_generation &&
     mentorUiState.current_effective_instruction !== instructionBannerDismissedFor
   );
+
+  const sourceDocMismatch = Boolean(
+    activeVersion?.reference_material_id != null &&
+    referenceMaterial?.material_id != null &&
+    activeVersion.reference_material_id !== referenceMaterial.material_id
+  );
+
+  const sourceDocMismatchDismissedFor = node
+    ? sourceDocMismatchDismissedByNode[node.node_id]
+    : undefined;
+
+  const showSourceDocMismatchBanner = Boolean(
+    sourceDocMismatch &&
+    referenceMaterial?.material_id !== sourceDocMismatchDismissedFor
+  );
+
+  const sourcePdfDeleted = isSourcePdfDeleted(
+    activeVersion,
+    referenceMaterial,
+    isLoadingGenerationSource
+  );
+  const canRegenerateOrImproveDraft = Boolean(canEditActiveDraft && !sourcePdfDeleted);
 
   const displayedVersionBaseLabel =
     displayedVersionSummary?.display_label ?? activeVersion?.display_label ?? null;
@@ -1349,6 +1465,20 @@ export function useStudyMaterial({
     setShowRegenerateConfirmModal,
     showRefModal,
     setShowRefModal,
+    refModalMode,
+    setRefModalMode,
+    refModalFocusDropzone,
+    setRefModalFocusDropzone,
+    openRefModalManage,
+    openRefModalView,
+    handleRequestReplaceSource,
+    sourceDocMismatch,
+    showSourceDocMismatchBanner,
+    dismissSourceDocMismatchBanner,
+    sourcePdfDeleted,
+    sourcePdfDeletedBlockReason: SOURCE_PDF_DELETED_BLOCK_REASON,
+    canRegenerateOrImproveDraft,
+    openFeedbackModal,
     showNodeMediaModal,
     setShowNodeMediaModal,
     isDeletingDrafts,
@@ -1406,6 +1536,7 @@ export function useStudyMaterial({
     handleKeepExistingDraftsAfterMove,
     handleUseNewInstructions,
     setReferenceMaterial,
+    setReferenceMaterialForNode,
     refreshGenerationSource,
     refreshTopicResources,
   };

@@ -2,15 +2,20 @@ import React, { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import toast from "react-hot-toast";
 import StudyMaterialViewer from "../../../study_material/components/material/StudyMaterialViewer";
-import type { TraineeArchivedStudyMaterialOut } from "../../types/traineeStudyMaterial.types";
 import { traineeStudyMaterialService } from "../../services/traineeStudyMaterialService";
 
 interface ArchivedStudyMaterialReaderProps {
   nodeId: string;
   versionId: string;
   nodeTitle: string;
-  versionLabel: string;
+  isCurrentVersion?: boolean;
   onBack: () => void;
+}
+
+interface ReaderMaterial {
+  content: string;
+  version_id: string;
+  reference_material_id: string | null;
 }
 
 function extractErrorDetail(err: unknown): string {
@@ -23,10 +28,10 @@ const ArchivedStudyMaterialReader: React.FC<ArchivedStudyMaterialReaderProps> = 
   nodeId,
   versionId,
   nodeTitle,
-  versionLabel,
+  isCurrentVersion = false,
   onBack,
 }) => {
-  const [material, setMaterial] = useState<TraineeArchivedStudyMaterialOut | null>(null);
+  const [material, setMaterial] = useState<ReaderMaterial | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [isDownloadingPdf, setIsDownloadingPdf] = useState(false);
@@ -39,10 +44,21 @@ const ArchivedStudyMaterialReader: React.FC<ArchivedStudyMaterialReaderProps> = 
     setIsLoading(true);
     setLoadError(null);
 
-    traineeStudyMaterialService
-      .getArchived(nodeId, versionId)
-      .then((archived) => {
-        if (!cancelled) setMaterial(archived);
+    const loadMaterial = isCurrentVersion
+      ? traineeStudyMaterialService.getPublished(nodeId).then((published) => ({
+          content: published.content,
+          version_id: published.version_id,
+          reference_material_id: published.reference_material_id,
+        }))
+      : traineeStudyMaterialService.getArchived(nodeId, versionId).then((archived) => ({
+          content: archived.content,
+          version_id: archived.version_id,
+          reference_material_id: archived.reference_material_id,
+        }));
+
+    loadMaterial
+      .then((loaded) => {
+        if (!cancelled) setMaterial(loaded);
       })
       .catch((err) => {
         if (!cancelled) setLoadError(extractErrorDetail(err));
@@ -54,7 +70,7 @@ const ArchivedStudyMaterialReader: React.FC<ArchivedStudyMaterialReaderProps> = 
     return () => {
       cancelled = true;
     };
-  }, [nodeId, versionId]);
+  }, [nodeId, versionId, isCurrentVersion]);
 
   useEffect(() => {
     if (!isFullscreen) return;
@@ -76,11 +92,15 @@ const ArchivedStudyMaterialReader: React.FC<ArchivedStudyMaterialReaderProps> = 
     if (!material || isDownloadingPdf) return;
     setIsDownloadingPdf(true);
     try {
-      await traineeStudyMaterialService.downloadArchivedPdf(
-        nodeId,
-        versionId,
-        `${nodeTitle}-${versionLabel}.pdf`
-      );
+      if (isCurrentVersion) {
+        await traineeStudyMaterialService.downloadPublishedPdf(nodeId, `${nodeTitle}.pdf`);
+      } else {
+        await traineeStudyMaterialService.downloadArchivedPdf(
+          nodeId,
+          versionId,
+          `${nodeTitle}.pdf`
+        );
+      }
     } catch (err) {
       toast.error(extractErrorDetail(err));
     } finally {
@@ -114,7 +134,7 @@ const ArchivedStudyMaterialReader: React.FC<ArchivedStudyMaterialReaderProps> = 
     <div className="trainee-study-material-page__toolbar">
       <div className="topic-detail-panel__archive-reader-label">
         <span className="topic-detail-panel__archive-reference-badge">Reference only</span>
-        <span>{versionLabel}</span>
+        <span>{nodeTitle}</span>
       </div>
       <div className="trainee-study-material-page__actions">
         <button
@@ -140,7 +160,7 @@ const ArchivedStudyMaterialReader: React.FC<ArchivedStudyMaterialReaderProps> = 
     <StudyMaterialViewer
       nodeId={nodeId}
       content={material.content}
-      title={`${nodeTitle} (${versionLabel})`}
+      title={nodeTitle}
       referenceMaterialId={material.reference_material_id}
       referenceImagesRefreshKey={material.version_id}
       scrollContainerRef={scrollContainerRef}
@@ -154,7 +174,7 @@ const ArchivedStudyMaterialReader: React.FC<ArchivedStudyMaterialReaderProps> = 
       className="trainee-study-material-page__focus-surface"
       tabIndex={0}
       role="document"
-      aria-label={`Archived study material ${versionLabel}`}
+      aria-label={`Study material ${nodeTitle}`}
     >
       {viewer}
     </div>
@@ -166,7 +186,7 @@ const ArchivedStudyMaterialReader: React.FC<ArchivedStudyMaterialReaderProps> = 
           className="trainee-study-material-fullscreen"
           role="dialog"
           aria-modal="true"
-          aria-label={`${versionLabel} archived material`}
+          aria-label={`${nodeTitle} study material`}
         >
           <div className="trainee-study-material-fullscreen__inner">
             {toolbar}
