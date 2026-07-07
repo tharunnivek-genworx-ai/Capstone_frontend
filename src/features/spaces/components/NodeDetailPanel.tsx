@@ -88,7 +88,6 @@ const NodeDetailPanel: React.FC<NodeDetailPanelProps> = ({
   const [modeText, setModeText] = useState("");
   const [branchDefault, setBranchDefault] = useState("");
   const [isSavingInstruction, setIsSavingInstruction] = useState(false);
-  const [hasAcceptedFailedQcByNode, setHasAcceptedFailedQcByNode] = useState<Record<string, boolean>>({});
   const [showSavedConfirm, setShowSavedConfirm] = useState(false);
   const [showFocusModal, setShowFocusModal] = useState(false);
 
@@ -418,15 +417,18 @@ const NodeDetailPanel: React.FC<NodeDetailPanelProps> = ({
                 subtitle={`The AI is updating study content for "${node.title}". This may take a minute.`}
                 progress={studyGenerationProgress}
               />
-            ) : sm.studyMaterialContent?.trim() ? (
+            ) : sm.isHistoryHubView || sm.studyMaterialContent?.trim() ? (
               <>
-                {isMentor && !sm.isManualEditMode && sm.mentorUiState?.student_visibility && (
+                {isMentor &&
+                  !sm.isManualEditMode &&
+                  !sm.isHistoryHubView &&
+                  sm.mentorUiState?.student_visibility && (
                   <StudentVisibilityBanner
                     visibility={sm.mentorUiState.student_visibility}
                     onShowStudentArchive={sm.expandStudentArchive}
                   />
                 )}
-                {isMentor && sm.isManualEditMode ? (
+                {isMentor && sm.isManualEditMode && sm.studyMaterialContent ? (
                   <StudyMaterialManualEditor
                     initialContent={sm.studyMaterialContent}
                     title={node.title}
@@ -441,27 +443,12 @@ const NodeDetailPanel: React.FC<NodeDetailPanelProps> = ({
                     sm={sm}
                     qz={qz}
                     spaceIsPublished={spaceIsPublished}
-                    hasAcceptedFailedQc={!!hasAcceptedFailedQcByNode[node.node_id]}
-                    onAcceptFailedQc={() => {
-                      setHasAcceptedFailedQcByNode((prev) => ({
-                        ...prev,
-                        [node.node_id]: true,
-                      }));
-                    }}
                     onOpenFocusView={() => setShowFocusModal(true)}
                     renderGenerationSourceButton={renderGenerationSourceButton}
                     renderTopicResourcesButton={renderTopicResourcesButton}
                   />
                 )}
               </>
-            ) : sm.archivedVersionHistory.length > 0 ? (
-              <div className="study-material-loading">
-                <span className="spinner study-material-loading__spinner" />
-                <p className="study-material-loading__title">Loading archived draft</p>
-                <p className="study-material-loading__subtitle">
-                  Your working drafts are in the archive. Restoring or generating a new draft in a moment…
-                </p>
-              </div>
             ) : sm.isLoadingVersions || sm.versionHistory.length > 0 ? (
               <div className="study-material-loading">
                 <span className="spinner study-material-loading__spinner" />

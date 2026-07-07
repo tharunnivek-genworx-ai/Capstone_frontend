@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { BookOpen } from "lucide-react";
 import { useTraineeStudyMaterial } from "../hooks/useTraineeStudyMaterial";
 import StudyMaterialViewer from "../../study_material/components/material/StudyMaterialViewer";
 
@@ -11,6 +12,7 @@ interface TraineeStudyMaterialPanelProps {
 }
 
 interface StudyMaterialToolbarProps {
+  nodeTitle: string;
   readPercent: number;
   isDownloadingPdf: boolean;
   onDownloadPdf: () => void;
@@ -20,6 +22,7 @@ interface StudyMaterialToolbarProps {
 }
 
 const StudyMaterialToolbar: React.FC<StudyMaterialToolbarProps> = ({
+  nodeTitle,
   readPercent,
   isDownloadingPdf,
   onDownloadPdf,
@@ -28,42 +31,53 @@ const StudyMaterialToolbar: React.FC<StudyMaterialToolbarProps> = ({
   isFullscreen = false,
 }) => (
   <div className="trainee-study-material-page__toolbar">
-    <div className="trainee-study-material-page__progress">
-      <span className="trainee-study-material-page__progress-label">Reading progress</span>
-      <div className="trainee-study-material-page__progress-track">
-        <div
-          className="trainee-study-material-page__progress-fill"
-          style={{ width: `${readPercent}%` }}
-        />
+    <div className="trainee-study-material-page__toolbar-main">
+      <div className="trainee-study-material-page__toolbar-icon" aria-hidden>
+        <BookOpen size={18} />
       </div>
-      <span className="trainee-study-material-page__progress-value">{readPercent}%</span>
+      <div className="trainee-study-material-page__toolbar-copy">
+        <p className="trainee-study-material-page__toolbar-eyebrow">Study material</p>
+        <h2 className="trainee-study-material-page__toolbar-title">{nodeTitle}</h2>
+      </div>
     </div>
-    <div className="trainee-study-material-page__actions">
-      <button
-        type="button"
-        className="btn-secondary trainee-study-material-page__download-btn"
-        onClick={onDownloadPdf}
-        disabled={isDownloadingPdf}
-      >
-        {isDownloadingPdf ? "Preparing PDF…" : "Download PDF"}
-      </button>
-      {isFullscreen ? (
+    <div className="trainee-study-material-page__toolbar-right">
+      <div className="trainee-study-material-page__progress">
+        <span className="trainee-study-material-page__progress-label">Reading progress</span>
+        <div className="trainee-study-material-page__progress-track">
+          <div
+            className="trainee-study-material-page__progress-fill"
+            style={{ width: `${readPercent}%` }}
+          />
+        </div>
+        <span className="trainee-study-material-page__progress-value">{readPercent}%</span>
+      </div>
+      <div className="trainee-study-material-page__actions">
         <button
           type="button"
-          className="btn-secondary trainee-study-material-page__fullscreen-btn"
-          onClick={onExitFullscreen}
+          className="btn-secondary trainee-study-material-page__download-btn"
+          onClick={onDownloadPdf}
+          disabled={isDownloadingPdf}
         >
-          Exit full screen
+          {isDownloadingPdf ? "Preparing PDF…" : "Download PDF"}
         </button>
-      ) : (
-        <button
-          type="button"
-          className="btn-secondary trainee-study-material-page__fullscreen-btn"
-          onClick={onOpenFullscreen}
-        >
-          Open in full screen
-        </button>
-      )}
+        {isFullscreen ? (
+          <button
+            type="button"
+            className="btn-secondary trainee-study-material-page__fullscreen-btn"
+            onClick={onExitFullscreen}
+          >
+            Exit full screen
+          </button>
+        ) : (
+          <button
+            type="button"
+            className="btn-secondary trainee-study-material-page__fullscreen-btn"
+            onClick={onOpenFullscreen}
+          >
+            Open in full screen
+          </button>
+        )}
+      </div>
     </div>
   </div>
 );
@@ -135,6 +149,7 @@ const TraineeStudyMaterialPanel: React.FC<TraineeStudyMaterialPanelProps> = ({
 
   const toolbar = (
     <StudyMaterialToolbar
+      nodeTitle={nodeTitle}
       readPercent={trainee.readPercent}
       isDownloadingPdf={trainee.isDownloadingPdf}
       onDownloadPdf={() => void trainee.handleDownloadPdf()}
@@ -153,6 +168,8 @@ const TraineeStudyMaterialPanel: React.FC<TraineeStudyMaterialPanelProps> = ({
       referenceImagesRefreshKey={trainee.material.version_id}
       scrollContainerRef={trainee.scrollContainerRef}
       hideReferenceImages={isFullscreen}
+      documentLayout
+      hideHeader
     />
   );
 

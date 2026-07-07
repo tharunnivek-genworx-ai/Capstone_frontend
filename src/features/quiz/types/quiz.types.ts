@@ -75,6 +75,7 @@ export interface QuizQualityCheckResultOut {
   retryAfterSeconds?: number | null;
   nextLlmRetryAt?: string | null;
   hintGeneration?: HintGenerationDiagnosticsOut | null;
+  mentorDismissedQcWarning?: boolean | null;
 }
 
 export interface QuizOut {

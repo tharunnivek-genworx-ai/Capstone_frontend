@@ -385,10 +385,10 @@ const MentorSpaceProgressPanel: React.FC<MentorSpaceProgressPanelProps> = ({
                       >
                         <div>
                           <p style={{ margin: 0, fontSize: "0.75rem", color: "#6b7280" }}>
-                            Completed Nodes Count
+                            Completed Lessons Count
                           </p>
                           <p style={{ margin: "4px 0 0", fontSize: "0.9375rem", fontWeight: 700, color: "#111827" }}>
-                            {trainee.completed_nodes} / {progress.total_nodes} nodes
+                            {trainee.completed_nodes} / {progress.total_nodes} lessons
                           </p>
                         </div>
                         <div>

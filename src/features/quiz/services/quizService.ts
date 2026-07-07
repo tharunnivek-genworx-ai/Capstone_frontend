@@ -47,6 +47,12 @@ export const quizService = {
       .then((r) => r.data);
   },
 
+  dismissQcWarning(nodeId: string, quizId: string): Promise<QuizOut> {
+    return studyAgentClient
+      .patch<QuizOut>(`/nodes/${nodeId}/quizzes/${quizId}/dismiss-qc-warning`)
+      .then((r) => r.data);
+  },
+
   publish(nodeId: string, quizId: string): Promise<QuizOut> {
     return studyAgentClient
       .patch<QuizOut>(`/nodes/${nodeId}/quizzes/${quizId}/publish`, {})

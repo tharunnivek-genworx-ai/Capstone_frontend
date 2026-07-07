@@ -187,6 +187,7 @@ export interface QualityCheckResultOut {
   qcInfraError?: boolean | null;
   retryAfterSeconds?: number | null;
   nextLlmRetryAt?: string | null;
+  mentorDismissedQcWarning?: boolean | null;
 }
 
 export interface StudyMaterialVersionOut {
