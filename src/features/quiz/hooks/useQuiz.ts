@@ -112,6 +112,7 @@ export interface UseQuizReturn {
   handleViewHistoryQuiz: (quizId: string) => Promise<void>;
   handleCloseHistoryView: () => void;
   handleDeleteHistoryQuiz: (quizId: string) => Promise<void>;
+  handleAcceptFailedQc: () => Promise<void>;
   isViewingHistoryQuiz: boolean;
   isLoadingHistoryQuiz: boolean;
   historyQuiz: QuizOut | null;
@@ -609,6 +610,18 @@ export function useQuiz({
     }
   }, [node, quiz, isDeletingHintsDraft, refreshQuiz, handleMutationError]);
 
+  const handleAcceptFailedQc = useCallback(async () => {
+    if (!node || !quiz?.quiz_id) return;
+    const nodeId = node.node_id;
+    try {
+      const updated = await quizService.dismissQcWarning(nodeId, quiz.quiz_id);
+      setQuiz(updated);
+      setResolvedQuizIdForNode(nodeId, updated.quiz_id);
+    } catch (err) {
+      handleMutationError(err);
+    }
+  }, [node, quiz?.quiz_id, setResolvedQuizIdForNode, handleMutationError]);
+
   const confirmPublishQuiz = useCallback(async () => {
     if (!node || !quiz || isPublishing || !canPublishQuiz) return;
     const nodeId = node.node_id;
@@ -986,6 +999,7 @@ export function useQuiz({
     handleViewHistoryQuiz,
     handleCloseHistoryView,
     handleDeleteHistoryQuiz,
+    handleAcceptFailedQc,
     isViewingHistoryQuiz: viewingHistoryQuizId !== null,
     isLoadingHistoryQuiz,
     historyQuiz,

@@ -8,7 +8,7 @@ import StudyMaterialHistoryHub from "./StudyMaterialHistoryHub";
 import StudentVisibilityBanner from "./StudentVisibilityBanner";
 import StudyMaterialVersionPanel from "../version/StudyMaterialVersionPanel";
 import StudyMaterialQcWarningPanel from "../shared/StudyMaterialQcWarningPanel";
-import { isLlmRateLimited } from "../../utils/llmDiagnostics";
+import { shouldShowQcWarning } from "../../utils/qcDisplayUtils";
 import VersionLineageInfo from "../version/VersionLineageInfo";
 import "../../styles/studyMaterialMentor.css";
 
@@ -17,8 +17,6 @@ interface StudyMaterialMentorWorkspaceProps {
   sm: UseStudyMaterialReturn;
   qz: UseQuizReturn;
   spaceIsPublished?: boolean;
-  hasAcceptedFailedQc: boolean;
-  onAcceptFailedQc: () => void;
   onOpenFocusView: () => void;
   renderGenerationSourceButton: (className?: string) => React.ReactNode;
   renderTopicResourcesButton: (className?: string) => React.ReactNode;
@@ -52,15 +50,13 @@ const StudyMaterialMentorWorkspace: React.FC<StudyMaterialMentorWorkspaceProps> 
   sm,
   qz,
   spaceIsPublished,
-  hasAcceptedFailedQc,
-  onAcceptFailedQc,
   onOpenFocusView,
   renderGenerationSourceButton,
   renderTopicResourcesButton,
 }) => {
-  const rateLimited = isLlmRateLimited(sm.activeVersion?.qc_result);
-  const showQcWarning = Boolean(
-    sm.activeVersion?.qc_failed_permanently && (rateLimited || !hasAcceptedFailedQc),
+  const showQcWarning = shouldShowQcWarning(
+    sm.activeVersion?.qc_failed_permanently,
+    sm.activeVersion?.qc_result,
   );
   const versionTag = versionBarTag(sm);
   const showBackToHistory = sm.isHistoryDetailView;
@@ -353,7 +349,7 @@ const StudyMaterialMentorWorkspace: React.FC<StudyMaterialMentorWorkspaceProps> 
         {showQcWarning && sm.activeVersion ? (
           <StudyMaterialQcWarningPanel
             activeVersion={sm.activeVersion}
-            onAcceptDraft={onAcceptFailedQc}
+            onAcceptDraft={sm.handleAcceptFailedQc}
             onDiscardDrafts={() => sm.setShowDeleteDraftModal(true)}
           />
         ) : (

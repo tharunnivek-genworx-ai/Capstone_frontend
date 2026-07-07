@@ -189,6 +189,7 @@ export interface UseStudyMaterialReturn {
   setReferenceMaterialForNode: (nodeId: string, m: ReferenceMaterialOut | null) => void;
   refreshGenerationSource: () => Promise<void>;
   refreshTopicResources: () => Promise<void>;
+  handleAcceptFailedQc: () => Promise<void>;
 }
 
 // ── Hook ────────────────────────────────────────────────────────────────────
@@ -1229,6 +1230,23 @@ export function useStudyMaterial({
     }
   };
 
+  const handleAcceptFailedQc = useCallback(async () => {
+    if (!node || !activeVersion?.version_id) return;
+    const nodeId = node.node_id;
+    try {
+      const updated = await studyMaterialService.dismissQcWarning(
+        nodeId,
+        activeVersion.version_id,
+      );
+      patchNodeStudyState(nodeId, {
+        activeVersion: updated,
+        studyMaterialContent: updated.content,
+      });
+    } catch (err) {
+      toast.error(extractErrorDetail(err));
+    }
+  }, [node, activeVersion?.version_id, patchNodeStudyState]);
+
   const handleBackToHistory = useCallback(() => {
     if (!node) return;
     setViewingVersionId(null);
@@ -1633,5 +1651,6 @@ export function useStudyMaterial({
     setReferenceMaterialForNode,
     refreshGenerationSource,
     refreshTopicResources,
+    handleAcceptFailedQc,
   };
 }

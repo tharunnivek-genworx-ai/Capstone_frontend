@@ -141,6 +141,16 @@ export const studyMaterialService = {
     return response.data;
   },
 
+  async dismissQcWarning(
+    nodeId: string,
+    versionId: string,
+  ): Promise<StudyMaterialVersionOut> {
+    const response = await studyAgentClient.patch<StudyMaterialVersionOut>(
+      `/nodes/${nodeId}/study-material/versions/${versionId}/dismiss-qc-warning`
+    );
+    return response.data;
+  },
+
   async getVersion(
     nodeId: string,
     versionId: string

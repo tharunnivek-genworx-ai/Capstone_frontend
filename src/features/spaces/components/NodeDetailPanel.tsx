@@ -88,7 +88,6 @@ const NodeDetailPanel: React.FC<NodeDetailPanelProps> = ({
   const [modeText, setModeText] = useState("");
   const [branchDefault, setBranchDefault] = useState("");
   const [isSavingInstruction, setIsSavingInstruction] = useState(false);
-  const [hasAcceptedFailedQcByNode, setHasAcceptedFailedQcByNode] = useState<Record<string, boolean>>({});
   const [showSavedConfirm, setShowSavedConfirm] = useState(false);
   const [showFocusModal, setShowFocusModal] = useState(false);
 
@@ -444,13 +443,6 @@ const NodeDetailPanel: React.FC<NodeDetailPanelProps> = ({
                     sm={sm}
                     qz={qz}
                     spaceIsPublished={spaceIsPublished}
-                    hasAcceptedFailedQc={!!hasAcceptedFailedQcByNode[node.node_id]}
-                    onAcceptFailedQc={() => {
-                      setHasAcceptedFailedQcByNode((prev) => ({
-                        ...prev,
-                        [node.node_id]: true,
-                      }));
-                    }}
                     onOpenFocusView={() => setShowFocusModal(true)}
                     renderGenerationSourceButton={renderGenerationSourceButton}
                     renderTopicResourcesButton={renderTopicResourcesButton}

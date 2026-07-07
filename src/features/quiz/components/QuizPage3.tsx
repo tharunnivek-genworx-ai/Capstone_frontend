@@ -27,6 +27,7 @@ import QuizQuestionModal from "./QuizQuestionModal";
 import QuizHistoryPanel from "./QuizHistoryPanel";
 import QuizQcWarningPanel from "./QuizQcWarningPanel";
 import { isLlmRateLimited } from "../../study_material/utils/llmDiagnostics";
+import { shouldShowQcWarning } from "../../study_material/utils/qcDisplayUtils";
 import GenerationProgressPanel from "../../generation/components/GenerationProgressPanel";
 import { useGenerationProgress } from "../../generation/hooks/useGenerationProgress";
 
@@ -53,7 +54,6 @@ const QuizPage3: React.FC<QuizPage3Props> = ({ nodeTitle, qz }) => {
   const [showAddModal, setShowAddModal] = useState(false);
   const [isSavingQuestion, setIsSavingQuestion] = useState(false);
   const [localQuestionIds, setLocalQuestionIds] = useState<string[] | null>(null);
-  const [acceptedQuizId, setAcceptedQuizId] = useState<string | null>(null);
   const generationProgress = useGenerationProgress(
     qz.generationProgressSessionId,
     qz.isGenerating,
@@ -311,11 +311,7 @@ const QuizPage3: React.FC<QuizPage3Props> = ({ nodeTitle, qz }) => {
   const displayTitle = quiz.title || `${nodeTitle} — Quiz`;
   const rateLimited = isLlmRateLimited(quiz.qc_result);
 
-  const showQcWarning = !!(
-    quiz.qc_failed_permanently
-    && quiz.qc_result
-    && (rateLimited || acceptedQuizId !== quiz.quiz_id)
-  );
+  const showQcWarning = shouldShowQcWarning(quiz.qc_failed_permanently, quiz.qc_result);
 
   const needsHintsBeforePublish = !quiz.is_published && quiz.hints_status !== "complete";
   const showCombinedHintsCta = needsHintsBeforePublish && activeQuestions.length > 0;
@@ -554,7 +550,7 @@ const QuizPage3: React.FC<QuizPage3Props> = ({ nodeTitle, qz }) => {
         {showQcWarning && (
           <QuizQcWarningPanel
             quiz={quiz}
-            onAcceptDraft={() => setAcceptedQuizId(quiz.quiz_id)}
+            onAcceptDraft={() => void qz.handleAcceptFailedQc()}
             onDeleteDraft={() => qz.setShowDeleteDraftModal(true)}
           />
         )}
