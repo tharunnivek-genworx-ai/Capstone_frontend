@@ -1,6 +1,6 @@
 /** Static mentor-facing copy when the API does not supply warning_presentation. */
 
-import type { QualityCheckResultOut } from "../types/studyMaterial.types";
+import type { LlmDiagnosticsFields } from "./llmDiagnostics";
 import { isLlmRateLimited } from "./llmDiagnostics";
 
 export const QC_LLM_FAILED_TITLE = "Quality review recommended";
@@ -22,7 +22,7 @@ export function isQcWarningDismissed(
 
 export function shouldShowQcWarning(
   qcFailedPermanently: boolean | undefined,
-  qcResult?: QualityCheckResultOut | { mentorDismissedQcWarning?: boolean | null } | null,
+  qcResult?: (LlmDiagnosticsFields & { mentorDismissedQcWarning?: boolean | null }) | null,
 ): boolean {
   if (!qcFailedPermanently) return false;
   if (isLlmRateLimited(qcResult)) return true;

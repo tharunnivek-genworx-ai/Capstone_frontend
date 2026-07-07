@@ -1,5 +1,5 @@
 // src/features/quiz/components/QuizPage3.tsx
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
   DndContext,
   closestCenter,
@@ -54,6 +54,7 @@ const QuizPage3: React.FC<QuizPage3Props> = ({ nodeTitle, qz }) => {
   const [showAddModal, setShowAddModal] = useState(false);
   const [isSavingQuestion, setIsSavingQuestion] = useState(false);
   const [localQuestionIds, setLocalQuestionIds] = useState<string[] | null>(null);
+  const [questionCountInput, setQuestionCountInput] = useState(String(qz.questionCount));
   const generationProgress = useGenerationProgress(
     qz.generationProgressSessionId,
     qz.isGenerating,
@@ -104,6 +105,17 @@ const QuizPage3: React.FC<QuizPage3Props> = ({ nodeTitle, qz }) => {
     } finally {
       setIsSavingQuestion(false);
     }
+  };
+
+  useEffect(() => {
+    setQuestionCountInput(String(qz.questionCount));
+  }, [qz.questionCount]);
+
+  const commitQuestionCountInput = () => {
+    const parsed = Number.parseInt(questionCountInput, 10);
+    const clamped = Number.isFinite(parsed) ? Math.max(5, Math.min(20, parsed)) : qz.questionCount;
+    qz.setQuestionCount(clamped);
+    setQuestionCountInput(String(clamped));
   };
 
   // ── Loading state (workspace quiz or history fetch) ─────────────────────
@@ -236,10 +248,11 @@ const QuizPage3: React.FC<QuizPage3Props> = ({ nodeTitle, qz }) => {
             <input
               type="number"
               className="input-field"
-              value={qz.questionCount}
+              value={questionCountInput}
               min={5}
               max={20}
-              onChange={(e) => qz.setQuestionCount(Math.max(5, Math.min(20, parseInt(e.target.value) || 10)))}
+              onChange={(e) => setQuestionCountInput(e.target.value)}
+              onBlur={commitQuestionCountInput}
               style={{ width: "140px", fontSize: "0.9375rem" }}
             />
             <span style={{ marginLeft: "0.625rem", fontSize: "0.8125rem", color: "var(--color-text-muted)" }}>
@@ -274,7 +287,10 @@ const QuizPage3: React.FC<QuizPage3Props> = ({ nodeTitle, qz }) => {
           <button
             type="button"
             className="btn-primary"
-            onClick={qz.handleGenerate}
+            onClick={() => {
+              commitQuestionCountInput();
+              void qz.handleGenerate();
+            }}
             disabled={qz.isGenerating || !qz.canGenerateQuiz}
             title={!qz.canGenerateQuiz ? qz.generateDisabledTooltip ?? undefined : undefined}
             style={{ padding: "0.625rem 1.5rem", fontSize: "0.9375rem", display: "flex", alignItems: "center", gap: "0.625rem" }}
