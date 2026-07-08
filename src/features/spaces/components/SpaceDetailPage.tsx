@@ -26,6 +26,20 @@ import EspaceRepublishChecklistModal from "./EspaceRepublishChecklistModal";
 import { useTraineeSpaceProgress } from "../../trainee_space_progress/hooks/useTraineeSpaceProgress";
 import SpaceProgressPanel from "../../trainee_space_progress/components/SpaceProgressPanel";
 import { useMentorSpaceProgress, MentorSpaceProgressPanel, mentorProgressService } from "../../mentor_progress_view";
+import GenerateAllRootPickerModal, {
+  type RootQueueBusyStatus,
+} from "../../study_material/components/queue/GenerateAllRootPickerModal";
+import GenerateAllPolicyModal from "../../study_material/components/queue/GenerateAllPolicyModal";
+import GenerateAllInstructionWarningModal from "../../study_material/components/queue/GenerateAllInstructionWarningModal";
+import GenerateAllDebugPanel, {
+  logGenerateAllDebug,
+} from "../../study_material/components/queue/GenerateAllDebugPanel";
+import { studyMaterialBatchService } from "../../study_material/services/studyMaterialBatchService";
+import { runGenerateAllSequentially } from "../../study_material/services/runGenerateAllSequentially";
+import type {
+  ExistingMaterialPolicy,
+  StudyMaterialBatchPreviewResponse,
+} from "../../study_material/types/studyMaterialBatch.types";
 
 function findNodeInTree(nodes: NodeTreeNode[], id: string): NodeTreeNode | null {
   for (const n of nodes) {
@@ -63,6 +77,22 @@ const SpaceDetailPage: React.FC = () => {
   const [nodeStudyStates, setNodeStudyStates] = useState<Map<string, NodeStudyState>>(new Map());
   const [showSpaceProgress, setShowSpaceProgress] = useState(false);
   const [cameFromSpaceProgress, setCameFromSpaceProgress] = useState(false);
+  const [showRootPickerModal, setShowRootPickerModal] = useState(false);
+  const [showPolicyModal, setShowPolicyModal] = useState(false);
+  const [showWarningModal, setShowWarningModal] = useState(false);
+  const [selectedRootNodeIds, setSelectedRootNodeIds] = useState<string[]>([]);
+  const [batchPreview, setBatchPreview] = useState<StudyMaterialBatchPreviewResponse | null>(null);
+  const [existingPolicy, setExistingPolicy] = useState<ExistingMaterialPolicy>("skip");
+  const [isSubmittingBatchFlow, setIsSubmittingBatchFlow] = useState(false);
+  /** Nodes still waiting in an active generate-all plan (Generate button blocked). */
+  const [generateAllBlockedNodeIds, setGenerateAllBlockedNodeIds] = useState<Set<string>>(
+    () => new Set(),
+  );
+  /** Selected roots marked running in the picker while generate-all is active. */
+  const [busyRootStatusById, setBusyRootStatusById] = useState<
+    Record<string, RootQueueBusyStatus | undefined>
+  >({});
+  const generateAllCancelRef = useRef<{ cancelled: boolean } | null>(null);
   const {
     progress: traineeSpaceProgress,
     isLoading: isLoadingTraineeSpaceProgress,
@@ -188,6 +218,19 @@ const SpaceDetailPage: React.FC = () => {
     setNodeStudyStates(new Map());
     setShowSpaceProgress(false);
     setCameFromSpaceProgress(false);
+    setShowRootPickerModal(false);
+    setShowPolicyModal(false);
+    setShowWarningModal(false);
+    setSelectedRootNodeIds([]);
+    setBatchPreview(null);
+    setExistingPolicy("skip");
+    setIsSubmittingBatchFlow(false);
+    setGenerateAllBlockedNodeIds(new Set());
+    setBusyRootStatusById({});
+    if (generateAllCancelRef.current) {
+      generateAllCancelRef.current.cancelled = true;
+      generateAllCancelRef.current = null;
+    }
 
     const load = async () => {
       setIsLoadingSpace(true);
@@ -463,6 +506,117 @@ const SpaceDetailPage: React.FC = () => {
     [updateNodeInstruction, selectedNode]
   );
 
+  const closeBatchWizard = useCallback(() => {
+    setShowRootPickerModal(false);
+    setShowPolicyModal(false);
+    setShowWarningModal(false);
+    setBatchPreview(null);
+    setSelectedRootNodeIds([]);
+  }, []);
+
+  const startGenerateAllFromWizard = useCallback(async (policy: ExistingMaterialPolicy) => {
+    if (!spaceId || selectedRootNodeIds.length === 0) return;
+    const rootIds = [...selectedRootNodeIds];
+    const plannedItems = batchPreview?.items ?? [];
+    const plannedNodeIds = plannedItems.map((item) => item.node_id);
+    if (plannedNodeIds.length === 0) {
+      toast.error("No topics to generate for the selected sections.");
+      return;
+    }
+
+    setIsSubmittingBatchFlow(true);
+    closeBatchWizard();
+
+    // Cancel any previous in-page runner (new Proceed supersedes).
+    if (generateAllCancelRef.current) {
+      generateAllCancelRef.current.cancelled = true;
+    }
+    const cancelToken = { cancelled: false };
+    generateAllCancelRef.current = cancelToken;
+
+    // Block Generate + mark roots running immediately (before network).
+    setGenerateAllBlockedNodeIds(new Set(plannedNodeIds));
+    const busy: Record<string, RootQueueBusyStatus | undefined> = {};
+    for (const rootId of rootIds) {
+      busy[rootId] = "running";
+    }
+    setBusyRootStatusById(busy);
+
+    logGenerateAllDebug("info", "Blocked Generate on planned nodes", {
+      count: plannedNodeIds.length,
+      titles: plannedItems.map((i) => i.title),
+      roots: rootIds,
+    });
+    toast.success(
+      "Generate-all started. Keep this tab open — topics run one at a time.",
+    );
+    setIsSubmittingBatchFlow(false);
+
+    try {
+      await runGenerateAllSequentially({
+        items: plannedItems,
+        policy,
+        signal: cancelToken,
+        patchNodeStudyState: updateNodeStudyState,
+        onNodeStarted: (nodeId) => {
+          setGenerateAllBlockedNodeIds((prev) => {
+            if (!prev.has(nodeId)) return prev;
+            const next = new Set(prev);
+            next.delete(nodeId);
+            return next;
+          });
+        },
+        onNodeFinished: (nodeId) => {
+          setGenerateAllBlockedNodeIds((prev) => {
+            if (!prev.has(nodeId)) return prev;
+            const next = new Set(prev);
+            next.delete(nodeId);
+            return next;
+          });
+        },
+        onContentRefresh: (nodeId) => {
+          setNodeContentRefreshTokens((prev) => ({
+            ...prev,
+            [nodeId]: (prev[nodeId] ?? 0) + 1,
+          }));
+        },
+      });
+    } finally {
+      if (generateAllCancelRef.current === cancelToken) {
+        generateAllCancelRef.current = null;
+      }
+      setGenerateAllBlockedNodeIds(new Set());
+      setBusyRootStatusById({});
+    }
+  }, [spaceId, selectedRootNodeIds, batchPreview, closeBatchWizard, updateNodeStudyState]);
+
+  const handleContinueRootPicker = useCallback(async (rootIds: string[]) => {
+    if (!spaceId || rootIds.length === 0) return;
+    setIsSubmittingBatchFlow(true);
+    try {
+      const preview = await studyMaterialBatchService.preview(spaceId, { root_node_ids: rootIds });
+      setBatchPreview(preview);
+      setSelectedRootNodeIds(rootIds);
+      setShowRootPickerModal(false);
+      setShowPolicyModal(true);
+    } catch (err) {
+      const e = err as { response?: { data?: { detail?: string } }; message?: string };
+      toast.error(e?.response?.data?.detail ?? e?.message ?? "Failed to preview generation plan.");
+    } finally {
+      setIsSubmittingBatchFlow(false);
+    }
+  }, [spaceId]);
+
+  const handlePolicyContinue = useCallback(async (policy: ExistingMaterialPolicy) => {
+    setExistingPolicy(policy);
+    if (batchPreview?.warnings.show_no_instruction_warning || batchPreview?.warnings.show_inheritance_warning) {
+      setShowPolicyModal(false);
+      setShowWarningModal(true);
+      return;
+    }
+    await startGenerateAllFromWizard(policy);
+  }, [batchPreview, startGenerateAllFromWizard]);
+
   if (isLoadingSpace) {
     return (
       <div
@@ -717,6 +871,23 @@ const SpaceDetailPage: React.FC = () => {
 
           {isMentor && (
             <button
+              type="button"
+              className="btn-primary"
+              style={{ padding: "0.375rem 0.875rem", fontSize: "0.8125rem" }}
+              disabled={isSubmittingBatchFlow || roots.length === 0}
+              title={
+                roots.length === 0
+                  ? "Create at least one section first"
+                  : "Generate materials across selected sections"
+              }
+              onClick={() => setShowRootPickerModal(true)}
+            >
+              Generate study materials
+            </button>
+          )}
+
+          {isMentor && (
+            <button
               onClick={() => void handlePublishClick()}
               className={space.is_published ? "btn-danger" : "btn-primary"}
               style={{ padding: "0.375rem 0.875rem", fontSize: "0.8125rem" }}
@@ -945,6 +1116,11 @@ const SpaceDetailPage: React.FC = () => {
                 contentRefreshToken={
                   selectedNode ? nodeContentRefreshTokens[selectedNode.node_id] ?? 0 : 0
                 }
+                isWaitingForGenerateAll={
+                  Boolean(
+                    selectedNode && generateAllBlockedNodeIds.has(selectedNode.node_id),
+                  )
+                }
               />
             )
           ) : (
@@ -1010,6 +1186,60 @@ const SpaceDetailPage: React.FC = () => {
           nodes={republishChecklist}
           onClose={() => setRepublishChecklist(null)}
           onContentPublished={handleRepublishContentPublished}
+        />
+      )}
+
+      {isMentor && <GenerateAllDebugPanel />}
+
+      {showRootPickerModal && (
+        <GenerateAllRootPickerModal
+          roots={roots}
+          initialSelectedRootIds={selectedRootNodeIds}
+          busyRootStatusById={busyRootStatusById}
+          onClose={closeBatchWizard}
+          onContinue={(rootIds) => {
+            void handleContinueRootPicker(rootIds);
+          }}
+        />
+      )}
+
+      {showPolicyModal && (
+        <GenerateAllPolicyModal
+          defaultPolicy={existingPolicy}
+          isSubmitting={isSubmittingBatchFlow}
+          onClose={closeBatchWizard}
+          onBack={() => {
+            setShowPolicyModal(false);
+            setShowRootPickerModal(true);
+          }}
+          onContinue={(policy) => {
+            void handlePolicyContinue(policy);
+          }}
+        />
+      )}
+
+      {showWarningModal && batchPreview && (
+        <GenerateAllInstructionWarningModal
+          warnings={batchPreview.warnings}
+          isSubmitting={isSubmittingBatchFlow}
+          onClose={closeBatchWizard}
+          onBack={() => {
+            setShowWarningModal(false);
+            setShowPolicyModal(true);
+          }}
+          onProceed={() => {
+            setShowWarningModal(false);
+            void startGenerateAllFromWizard(existingPolicy);
+          }}
+          onCustomize={() => {
+            const firstNodeId =
+              batchPreview.warnings.missing_instruction_nodes[0]?.node_id ??
+              batchPreview.warnings.inherits_section_default_nodes[0]?.node_id;
+            closeBatchWizard();
+            if (firstNodeId) {
+              handleNavigateToNode(firstNodeId);
+            }
+          }}
         />
       )}
     </div>

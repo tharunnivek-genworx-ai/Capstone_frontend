@@ -28,6 +28,19 @@ export const studyMaterialService = {
     return response.data;
   },
 
+  /** Sequential generate-all: one request runs create→graph→persist with a single lock. */
+  async generateInline(
+    nodeId: string,
+    payload: StudyMaterialGenerateRequest,
+  ): Promise<StudyMaterialVersionOut & { run_id: string }> {
+    const response = await studyAgentClient.post<StudyMaterialVersionOut & { run_id: string }>(
+      `/nodes/${nodeId}/study-material/generate-inline`,
+      payload,
+      { timeout: 600000 },
+    );
+    return response.data;
+  },
+
   async startRegenerate(
     nodeId: string,
     payload: StudyMaterialRegenerateRequest,

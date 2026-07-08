@@ -7,6 +7,8 @@ import type {
 
 const POLL_INTERVAL_MS = 1200;
 const MAX_NOT_FOUND_RETRIES = 6;
+const ACTIVE_RUN_CLEAR_MAX_ATTEMPTS = 40;
+const ACTIVE_RUN_CLEAR_INTERVAL_MS = 250;
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => window.setTimeout(resolve, ms));
@@ -45,6 +47,13 @@ export const generationJobService = {
     return response.data;
   },
 
+  async resumeRun(runId: string): Promise<{ run_id: string }> {
+    const response = await studyAgentClient.post<{ run_id: string }>(
+      `/generation-runs/${runId}/resume`,
+    );
+    return response.data;
+  },
+
   async waitForCompletion(
     runId: string,
     onProgress?: (progress: GenerationProgressOut) => void,
@@ -67,6 +76,20 @@ export const generationJobService = {
         }
       }
       await sleep(POLL_INTERVAL_MS);
+    }
+  },
+
+  /** Wait until no study-material run is active for this node (lock released server-side). */
+  async waitForResourceIdle(
+    resourceId: string,
+    pipeline = "study_material",
+  ): Promise<void> {
+    for (let attempt = 0; attempt < ACTIVE_RUN_CLEAR_MAX_ATTEMPTS; attempt += 1) {
+      const active = await this.getActiveRun(resourceId, pipeline);
+      if (!active?.run_id) {
+        return;
+      }
+      await sleep(ACTIVE_RUN_CLEAR_INTERVAL_MS);
     }
   },
 

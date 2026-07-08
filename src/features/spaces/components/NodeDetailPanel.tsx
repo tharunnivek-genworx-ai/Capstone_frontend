@@ -65,6 +65,8 @@ interface NodeDetailPanelProps {
   onStudyStateChange?: (nodeId: string, patch: NodeStudyStatePatch) => void;
   onMentorProgressRefresh?: () => void;
   contentRefreshToken?: number;
+  /** Block manual Generate while this node is still waiting in generate-all. */
+  isWaitingForGenerateAll?: boolean;
 }
 
 const NodeDetailPanel: React.FC<NodeDetailPanelProps> = ({
@@ -79,6 +81,7 @@ const NodeDetailPanel: React.FC<NodeDetailPanelProps> = ({
   onStudyStateChange,
   onMentorProgressRefresh,
   contentRefreshToken = 0,
+  isWaitingForGenerateAll = false,
 }) => {
   // ── Instruction editing state (stays local — not study material) ─────────
   const [isRenaming, setIsRenaming] = useState(false);
@@ -103,9 +106,10 @@ const NodeDetailPanel: React.FC<NodeDetailPanelProps> = ({
     contentRefreshToken,
   });
 
+  const showGenerationProgress = sm.isGenerating;
   const studyGenerationProgress = useGenerationProgress(
     sm.generationProgressSessionId,
-    sm.isGenerating,
+    showGenerationProgress,
   );
 
   // ── Quiz hook ─────────────────────────────────────────────────────────────
@@ -403,6 +407,7 @@ const NodeDetailPanel: React.FC<NodeDetailPanelProps> = ({
               sm={sm}
               onOpenRefModal={() => sm.openRefModalManage()}
               onOpenMediaModal={() => sm.setShowNodeMediaModal(true)}
+              isWaitingForGenerateAll={isWaitingForGenerateAll}
             />
           </div>
         )}
@@ -411,7 +416,7 @@ const NodeDetailPanel: React.FC<NodeDetailPanelProps> = ({
         {sm.currentPage === 2 && (
           <div className="study-material-page">
             {instructionChangeBanner}
-            {sm.isGenerating ? (
+            {showGenerationProgress ? (
               <GenerationProgressPanel
                 title={sm.processingLabel ?? "Working on study material"}
                 subtitle={`The AI is updating study content for "${node.title}". This may take a minute.`}

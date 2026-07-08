@@ -41,6 +41,9 @@ export interface GenerateStudyMaterialPanelProps {
   // ── Modal openers ────────────────────────────────────────────────────
   onOpenRefModal: () => void;
   onOpenMediaModal: () => void;
+
+  /** True while generate-all has this node planned but not yet started. */
+  isWaitingForGenerateAll?: boolean;
 }
 
 export default function GenerateStudyMaterialPanel({
@@ -60,15 +63,12 @@ export default function GenerateStudyMaterialPanel({
   sm,
   onOpenRefModal,
   onOpenMediaModal,
+  isWaitingForGenerateAll = false,
 }: GenerateStudyMaterialPanelProps) {
   const [isTeachingStyleExpanded, setIsTeachingStyleExpanded] = useState(true);
   const [showNoInstructionWarning, setShowNoInstructionWarning] = useState(false);
 
   const handleOpenExisting = useCallback(() => sm.setCurrentPage(2), [sm]);
-  const handleRegenerate = useCallback(
-    () => sm.setShowRegenerateConfirmModal(true),
-    [sm]
-  );
 
   const handleLocalModeChange = useCallback(
     (m: InstructionMode) => {
@@ -85,6 +85,7 @@ export default function GenerateStudyMaterialPanel({
   );
 
   const handleGenerateClick = useCallback(() => {
+    if (isWaitingForGenerateAll && !sm.isGenerating) return;
     const hasInherited = previewParts.some(
       (p) => p.type === "inherited" || p.type === "branch-default"
     );
@@ -97,12 +98,18 @@ export default function GenerateStudyMaterialPanel({
     } else {
       void sm.handleGenerateStudyMaterial();
     }
-  }, [previewParts, mode, modeText, branchDefault, sm]);
+  }, [previewParts, mode, modeText, branchDefault, sm, isWaitingForGenerateAll]);
 
   const handleContinueFromWarning = useCallback(() => {
+    if (isWaitingForGenerateAll && !sm.isGenerating) return;
     setShowNoInstructionWarning(false);
     void sm.handleGenerateStudyMaterial();
-  }, [sm]);
+  }, [sm, isWaitingForGenerateAll]);
+
+  const handleRegenerate = useCallback(() => {
+    if (isWaitingForGenerateAll && !sm.isGenerating) return;
+    sm.setShowRegenerateConfirmModal(true);
+  }, [sm, isWaitingForGenerateAll]);
 
   const handleAddInstructionFromWarning = useCallback(() => {
     setShowNoInstructionWarning(false);
@@ -290,6 +297,7 @@ export default function GenerateStudyMaterialPanel({
         clearDraftsBlockReason={sm.clearDraftsBlockReason}
         isGenerating={sm.isGenerating}
         isDeletingDrafts={sm.isDeletingDrafts}
+        isWaitingForGenerateAll={isWaitingForGenerateAll && !sm.isGenerating}
         onOpenExisting={handleOpenExisting}
         onGenerate={handleGenerateClick}
         onRegenerate={handleRegenerate}

@@ -599,9 +599,11 @@ export function useStudyMaterial({
       .catch(() => {/* non-critical */ });
   }, [node?.node_id, currentPage, studyMaterialContent, isGenerating, isMentor, patchNodeStudyState]);
 
-  // Recover polling when returning to a node with an in-flight generation run.
+  // Detect an in-flight generate for this node (manual click OR generate-all).
+  // Backend sequential generate-all uses the same /generate path, so opening the
+  // topic must pick up the usual progress panel without any batch-queue UI.
   useEffect(() => {
-    if (!node || !isMentor || !isGenerating || currentPage !== 2) return;
+    if (!node || !isMentor) return;
     if (generatingNodeIds.has(node.node_id)) return;
     if (generationProgressSessionId) return;
     const nodeId = node.node_id;
@@ -611,17 +613,23 @@ export function useStudyMaterial({
       .then(async (active) => {
         if (cancelled) return;
         if (!active?.run_id) {
-          patchNodeStudyState(nodeId, {
-            isGenerating: false,
-            generationProgressSessionId: null,
-            activeGenerationRunId: null,
-          });
+          if (isGenerating) {
+            patchNodeStudyState(nodeId, {
+              isGenerating: false,
+              generationProgressSessionId: null,
+              activeGenerationRunId: null,
+            });
+          }
           return;
         }
         patchNodeStudyState(nodeId, {
+          currentPage: 2,
+          isGenerating: true,
           generationProgressSessionId: active.run_id,
           activeGenerationRunId: active.run_id,
+          hasTriggeredGeneration: true,
         });
+        setProcessingLabel("Generating study material");
         try {
           await generationJobService.waitForCompletion(active.run_id);
           const result = await generationJobService.getResult(active.run_id);
@@ -650,6 +658,9 @@ export function useStudyMaterial({
               activeGenerationRunId: null,
               hasTriggeredGeneration: true,
             });
+            if (isViewingNode(nodeId)) {
+              setProcessingLabel(null);
+            }
           }
         }
       })
@@ -657,7 +668,7 @@ export function useStudyMaterial({
     return () => {
       cancelled = true;
     };
-  }, [node?.node_id, isMentor, isGenerating, currentPage, generationProgressSessionId, patchNodeStudyState]);
+  }, [node?.node_id, isMentor, isGenerating, generationProgressSessionId, patchNodeStudyState]);
 
   // Load version history on page 2 (once per node/page — not on every activeVersion change)
   useEffect(() => {

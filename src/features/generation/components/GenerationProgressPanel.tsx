@@ -5,12 +5,15 @@ interface GenerationProgressPanelProps {
   title: string;
   subtitle: string;
   progress: GenerationProgressOut | null;
+  /** Compact layout for floating docks — does not stretch to fill the page. */
+  compact?: boolean;
 }
 
 const GenerationProgressPanel: React.FC<GenerationProgressPanelProps> = ({
   title,
   subtitle,
   progress,
+  compact = false,
 }) => {
   const steps = progress?.steps ?? [];
   const isFailed = progress?.status === "failed";
@@ -21,7 +24,7 @@ const GenerationProgressPanel: React.FC<GenerationProgressPanelProps> = ({
       : "Starting…";
 
   return (
-    <div className="generation-progress">
+    <div className={`generation-progress${compact ? " generation-progress--compact" : ""}`}>
       <span className="spinner generation-progress__spinner" aria-hidden />
       <p className="generation-progress__title">{title}</p>
       <p className="generation-progress__subtitle">{displaySubtitle}</p>
