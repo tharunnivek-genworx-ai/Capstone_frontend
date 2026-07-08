@@ -1,4 +1,4 @@
-export type GenerationPipeline = "study_material" | "quiz";
+export type GenerationPipeline = "study_material" | "quiz" | "hint";
 
 export type GenerationJobStatus = "running" | "completed" | "failed";
 

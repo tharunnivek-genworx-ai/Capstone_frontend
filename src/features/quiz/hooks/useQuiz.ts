@@ -15,7 +15,7 @@ import type {
   RetentionMode,
 } from "../types/quiz.types";
 import { quizService } from "../services/quizService";
-import { createGenerationProgressSessionId } from "../../generation/services/generationProgressService";
+import { generationJobService } from "../../generation/services/generationProgressService";
 
 /** Nodes with an in-flight quiz generate/regenerate request (survives node switches). */
 const generatingQuizNodeIds = new Set<string>();
@@ -434,85 +434,167 @@ export function useQuiz({
     void refreshQuiz(node.node_id, currentQuizIdRef.current);
   }, [contentRefreshToken, node?.node_id, isMentor, refreshQuiz]);
 
-  // Recover stale quiz-generation flags when returning to a node whose request
-  // finished while another node was selected.
+  // Recover polling when returning to a node with an in-flight quiz generation run.
   useEffect(() => {
     if (!node || !isMentor || !isGeneratingQuiz) return;
     if (currentPage !== 3 && currentPage !== 4) return;
     if (generatingQuizNodeIds.has(node.node_id)) return;
+    if (generationProgressSessionId) return;
 
     const nodeId = node.node_id;
+    const resourceId = currentQuizId ?? nodeId;
     let cancelled = false;
-    quizService
-      .getMentorUiState(nodeId, { preferredQuizId: currentQuizId, includeQuiz: true })
-      .then((state) => {
+
+    generationJobService
+      .getActiveRun(resourceId, "quiz")
+      .then(async (active) => {
         if (cancelled) return;
+        if (!active?.run_id) {
+          patchNodeStudyState(nodeId, {
+            isGeneratingQuiz: false,
+            generationProgressSessionId: null,
+            activeGenerationRunId: null,
+          });
+          return;
+        }
         patchNodeStudyState(nodeId, {
-          isGeneratingQuiz: false,
-          currentQuizId: state.resolved_quiz_id,
+          generationProgressSessionId: active.run_id,
+          activeGenerationRunId: active.run_id,
         });
-        if (isViewingNode(nodeId)) {
-          applyMentorUiState(state, mentorStateSetters, { includeQuiz: true });
+        try {
+          await generationJobService.waitForCompletion(active.run_id);
+          const result = await generationJobService.getResult(active.run_id);
+          const generated = result.quiz as QuizOut | null | undefined;
+          if (generated) {
+            setResolvedQuizIdForNode(nodeId, generated.quiz_id);
+            if (isViewingNode(nodeId)) {
+              setQuiz(generated);
+              await refreshQuiz(nodeId, generated.quiz_id);
+            }
+          }
+        } catch {
+          /* cleared below */
+        } finally {
+          if (!cancelled) {
+            patchNodeStudyState(nodeId, {
+              isGeneratingQuiz: false,
+              generationProgressSessionId: null,
+              activeGenerationRunId: null,
+            });
+          }
         }
       })
-      .catch(() => {
-        if (cancelled) return;
-        patchNodeStudyState(nodeId, { isGeneratingQuiz: false });
-      });
+      .catch(() => {/* non-critical */});
+
     return () => {
       cancelled = true;
     };
-  }, [node?.node_id, isMentor, isGeneratingQuiz, currentPage, currentQuizId, patchNodeStudyState]);
+  }, [
+    node?.node_id,
+    isMentor,
+    isGeneratingQuiz,
+    currentPage,
+    currentQuizId,
+    generationProgressSessionId,
+    patchNodeStudyState,
+    refreshQuiz,
+    setResolvedQuizIdForNode,
+  ]);
 
-  // Recover stale hints-generation flags the same way.
+  // Recover polling when returning to a node with an in-flight hint generation run.
   useEffect(() => {
     if (!node || !isMentor || !isGeneratingHints) return;
     if (currentPage !== 4) return;
     if (generatingHintsNodeIds.has(node.node_id)) return;
+    if (generationProgressSessionId) return;
+    if (!currentQuizId) return;
 
     const nodeId = node.node_id;
+    const quizId = currentQuizId;
     let cancelled = false;
-    quizService
-      .getMentorUiState(nodeId, {
-        preferredQuizId: currentQuizId,
-        includeQuiz: true,
-      })
-      .then((state) => {
+
+    generationJobService
+      .getActiveRun(quizId, "hint")
+      .then(async (active) => {
         if (cancelled) return;
-        patchNodeStudyState(nodeId, { isGeneratingHints: false, currentQuizId: state.resolved_quiz_id });
-        if (isViewingNode(nodeId)) {
-          applyMentorUiState(state, mentorStateSetters, { includeQuiz: true });
+        if (!active?.run_id) {
+          patchNodeStudyState(nodeId, {
+            isGeneratingHints: false,
+            generationProgressSessionId: null,
+            activeGenerationRunId: null,
+          });
+          return;
+        }
+        patchNodeStudyState(nodeId, {
+          generationProgressSessionId: active.run_id,
+          activeGenerationRunId: active.run_id,
+        });
+        try {
+          await generationJobService.waitForCompletion(active.run_id);
+          const result = await generationJobService.getResult(active.run_id);
+          const updated = result.quiz as QuizOut | null | undefined;
+          if (updated && isViewingNode(nodeId)) {
+            setQuiz(updated);
+            await refreshQuiz(nodeId, quizId);
+          }
+        } catch {
+          /* cleared below */
+        } finally {
+          if (!cancelled) {
+            patchNodeStudyState(nodeId, {
+              isGeneratingHints: false,
+              generationProgressSessionId: null,
+              activeGenerationRunId: null,
+            });
+          }
         }
       })
-      .catch(() => {
-        if (cancelled) return;
-        patchNodeStudyState(nodeId, { isGeneratingHints: false });
-      });
+      .catch(() => {/* non-critical */});
+
     return () => {
       cancelled = true;
     };
-  }, [node?.node_id, isMentor, isGeneratingHints, currentPage, currentQuizId, patchNodeStudyState]);
+  }, [
+    node?.node_id,
+    isMentor,
+    isGeneratingHints,
+    currentPage,
+    currentQuizId,
+    generationProgressSessionId,
+    patchNodeStudyState,
+    refreshQuiz,
+  ]);
 
   const handleGenerate = useCallback(async () => {
     if (!node || isGeneratingQuiz || !canGenerateQuiz) return;
     const nodeId = node.node_id;
-    const progressSessionId = createGenerationProgressSessionId();
     generatingQuizNodeIds.add(nodeId);
     patchNodeStudyState(nodeId, {
       isGeneratingQuiz: true,
-      generationProgressSessionId: progressSessionId,
+      generationProgressSessionId: null,
+      activeGenerationRunId: null,
     });
     try {
-      const generated = await quizService.generate(nodeId, {
-        difficulty,
-        question_count: questionCount,
-        mode: "generate",
-        progress_session_id: progressSessionId,
-      });
+      const { result } = await generationJobService.runJob(
+        () => quizService.startGenerate(nodeId, {
+          difficulty,
+          question_count: questionCount,
+          mode: "generate",
+        }),
+        (progress) => {
+          patchNodeStudyState(nodeId, {
+            generationProgressSessionId: progress.session_id,
+            activeGenerationRunId: progress.session_id,
+          });
+        },
+      );
+      const generated = result.quiz as QuizOut | null | undefined;
+      if (!generated) throw new Error("Quiz generation returned no quiz.");
       setResolvedQuizIdForNode(nodeId, generated.quiz_id);
       patchNodeStudyState(nodeId, {
         isGeneratingQuiz: false,
         generationProgressSessionId: null,
+        activeGenerationRunId: null,
       });
       if (isViewingNode(nodeId)) {
         setQuiz(generated);
@@ -523,6 +605,7 @@ export function useQuiz({
       patchNodeStudyState(nodeId, {
         isGeneratingQuiz: false,
         generationProgressSessionId: null,
+        activeGenerationRunId: null,
       });
       handleMutationError(err);
     } finally {
@@ -534,28 +617,38 @@ export function useQuiz({
     if (!node || !quiz || isGeneratingQuiz || !canGenerateQuiz) return;
     const nodeId = node.node_id;
     const quizId = quiz.quiz_id;
-    const progressSessionId = createGenerationProgressSessionId();
     generatingQuizNodeIds.add(nodeId);
     patchNodeStudyState(nodeId, {
       isGeneratingQuiz: true,
-      generationProgressSessionId: progressSessionId,
+      generationProgressSessionId: null,
+      activeGenerationRunId: null,
     });
     if (isViewingNode(nodeId)) {
       setShowRegenerateModal(false);
     }
     try {
-      const generated = await quizService.generate(nodeId, {
-        difficulty,
-        question_count: questionCount,
-        mode: "regenerate",
-        quiz_id: quizId,
-        mentor_feedback: feedback || undefined,
-        progress_session_id: progressSessionId,
-      });
+      const { result } = await generationJobService.runJob(
+        () => quizService.startGenerate(nodeId, {
+          difficulty,
+          question_count: questionCount,
+          mode: "regenerate",
+          quiz_id: quizId,
+          mentor_feedback: feedback || undefined,
+        }),
+        (progress) => {
+          patchNodeStudyState(nodeId, {
+            generationProgressSessionId: progress.session_id,
+            activeGenerationRunId: progress.session_id,
+          });
+        },
+      );
+      const generated = result.quiz as QuizOut | null | undefined;
+      if (!generated) throw new Error("Quiz regeneration returned no quiz.");
       setResolvedQuizIdForNode(nodeId, generated.quiz_id);
       patchNodeStudyState(nodeId, {
         isGeneratingQuiz: false,
         generationProgressSessionId: null,
+        activeGenerationRunId: null,
       });
       if (isViewingNode(nodeId)) {
         setQuiz(generated);
@@ -566,6 +659,7 @@ export function useQuiz({
       patchNodeStudyState(nodeId, {
         isGeneratingQuiz: false,
         generationProgressSessionId: null,
+        activeGenerationRunId: null,
       });
       handleMutationError(err);
     } finally {
@@ -731,11 +825,25 @@ export function useQuiz({
     const nodeId = node.node_id;
     const quizId = quiz.quiz_id;
     setIsRegeneratingQuestion(questionId);
+    patchNodeStudyState(nodeId, {
+      generationProgressSessionId: null,
+      activeGenerationRunId: null,
+    });
     try {
-      const updated = await quizService.regenerateQuestions(nodeId, quizId, {
-        question_ids: [questionId],
-        mentor_feedback: trimmedFeedback,
-      });
+      const { result } = await generationJobService.runJob(
+        () => quizService.startRegenerateQuestions(nodeId, quizId, {
+          question_ids: [questionId],
+          mentor_feedback: trimmedFeedback,
+        }),
+        (progress) => {
+          patchNodeStudyState(nodeId, {
+            generationProgressSessionId: progress.session_id,
+            activeGenerationRunId: progress.session_id,
+          });
+        },
+      );
+      const updated = result.quiz as QuizOut | null | undefined;
+      if (!updated) throw new Error("Question regeneration returned no quiz.");
       if (isViewingNode(nodeId)) {
         setQuiz(updated);
         await refreshQuiz(nodeId, quizId);
@@ -751,8 +859,12 @@ export function useQuiz({
       handleMutationError(err);
     } finally {
       setIsRegeneratingQuestion(null);
+      patchNodeStudyState(nodeId, {
+        generationProgressSessionId: null,
+        activeGenerationRunId: null,
+      });
     }
-  }, [node, quiz, isRegeneratingQuestion, canEditQuestions, refreshQuiz, handleMutationError]);
+  }, [node, quiz, isRegeneratingQuestion, canEditQuestions, refreshQuiz, handleMutationError, patchNodeStudyState]);
 
   const handleCreateQuestion = useCallback(async (data: QuizQuestionCreateRequest) => {
     if (!node || !quiz) return;
@@ -799,17 +911,39 @@ export function useQuiz({
     const nodeId = node.node_id;
     const quizId = quiz.quiz_id;
     generatingHintsNodeIds.add(nodeId);
-    patchNodeStudyState(nodeId, { isGeneratingHints: true });
+    patchNodeStudyState(nodeId, {
+      isGeneratingHints: true,
+      generationProgressSessionId: null,
+      activeGenerationRunId: null,
+    });
     try {
-      const updated = await quizService.generateHints(nodeId, quizId);
-      patchNodeStudyState(nodeId, { isGeneratingHints: false });
+      const { result } = await generationJobService.runJob(
+        () => quizService.startGenerateHints(nodeId, quizId),
+        (progress) => {
+          patchNodeStudyState(nodeId, {
+            generationProgressSessionId: progress.session_id,
+            activeGenerationRunId: progress.session_id,
+          });
+        },
+      );
+      const updated = result.quiz as QuizOut | null | undefined;
+      if (!updated) throw new Error("Hint generation returned no quiz.");
+      patchNodeStudyState(nodeId, {
+        isGeneratingHints: false,
+        generationProgressSessionId: null,
+        activeGenerationRunId: null,
+      });
       if (isViewingNode(nodeId)) {
         setQuiz(updated);
         await refreshQuiz(nodeId, quizId);
       }
       toast.success("Hints generated for all questions.");
     } catch (err) {
-      patchNodeStudyState(nodeId, { isGeneratingHints: false });
+      patchNodeStudyState(nodeId, {
+        isGeneratingHints: false,
+        generationProgressSessionId: null,
+        activeGenerationRunId: null,
+      });
       handleMutationError(err);
     } finally {
       generatingHintsNodeIds.delete(nodeId);
@@ -824,20 +958,42 @@ export function useQuiz({
     const nodeId = node.node_id;
     const quizId = quiz.quiz_id;
     generatingHintsNodeIds.add(nodeId);
-    patchNodeStudyState(nodeId, { isGeneratingHints: true });
+    patchNodeStudyState(nodeId, {
+      isGeneratingHints: true,
+      generationProgressSessionId: null,
+      activeGenerationRunId: null,
+    });
     try {
-      const updated = await quizService.regenerateHints(nodeId, quizId, {
-        scope: "all",
-        mentor_feedback: trimmedFeedback,
+      const { result } = await generationJobService.runJob(
+        () => quizService.startRegenerateHints(nodeId, quizId, {
+          scope: "all",
+          mentor_feedback: trimmedFeedback,
+        }),
+        (progress) => {
+          patchNodeStudyState(nodeId, {
+            generationProgressSessionId: progress.session_id,
+            activeGenerationRunId: progress.session_id,
+          });
+        },
+      );
+      const updated = result.quiz as QuizOut | null | undefined;
+      if (!updated) throw new Error("Hint regeneration returned no quiz.");
+      patchNodeStudyState(nodeId, {
+        isGeneratingHints: false,
+        generationProgressSessionId: null,
+        activeGenerationRunId: null,
       });
-      patchNodeStudyState(nodeId, { isGeneratingHints: false });
       if (isViewingNode(nodeId)) {
         setQuiz(updated);
         await refreshQuiz(nodeId, quizId);
       }
       toast.success("Hints regenerated for all questions.");
     } catch (err) {
-      patchNodeStudyState(nodeId, { isGeneratingHints: false });
+      patchNodeStudyState(nodeId, {
+        isGeneratingHints: false,
+        generationProgressSessionId: null,
+        activeGenerationRunId: null,
+      });
       handleMutationError(err);
     } finally {
       generatingHintsNodeIds.delete(nodeId);
@@ -849,21 +1005,43 @@ export function useQuiz({
     const nodeId = node.node_id;
     const quizId = quiz.quiz_id;
     generatingHintsNodeIds.add(nodeId);
-    patchNodeStudyState(nodeId, { isGeneratingHints: true });
+    patchNodeStudyState(nodeId, {
+      isGeneratingHints: true,
+      generationProgressSessionId: null,
+      activeGenerationRunId: null,
+    });
     try {
-      const updated = await quizService.regenerateHints(nodeId, quizId, {
-        scope: "selective",
-        question_ids: [questionId],
-        mentor_feedback: feedback?.trim() || undefined,
+      const { result } = await generationJobService.runJob(
+        () => quizService.startRegenerateHints(nodeId, quizId, {
+          scope: "selective",
+          question_ids: [questionId],
+          mentor_feedback: feedback?.trim() || undefined,
+        }),
+        (progress) => {
+          patchNodeStudyState(nodeId, {
+            generationProgressSessionId: progress.session_id,
+            activeGenerationRunId: progress.session_id,
+          });
+        },
+      );
+      const updated = result.quiz as QuizOut | null | undefined;
+      if (!updated) throw new Error("Hint regeneration returned no quiz.");
+      patchNodeStudyState(nodeId, {
+        isGeneratingHints: false,
+        generationProgressSessionId: null,
+        activeGenerationRunId: null,
       });
-      patchNodeStudyState(nodeId, { isGeneratingHints: false });
       if (isViewingNode(nodeId)) {
         setQuiz(updated);
         await refreshQuiz(nodeId, quizId);
       }
       toast.success("Hints regenerated.");
     } catch (err) {
-      patchNodeStudyState(nodeId, { isGeneratingHints: false });
+      patchNodeStudyState(nodeId, {
+        isGeneratingHints: false,
+        generationProgressSessionId: null,
+        activeGenerationRunId: null,
+      });
       handleMutationError(err);
     } finally {
       generatingHintsNodeIds.delete(nodeId);

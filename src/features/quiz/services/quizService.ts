@@ -1,4 +1,5 @@
 // src/features/quiz/services/quizService.ts
+import type { GenerationJobStartResponse } from "../../generation/types/generationJob.types";
 import studyAgentClient from "../../../lib/studyAgentClient";
 import type {
   HintRegenerateRequest,
@@ -16,6 +17,44 @@ import type {
 } from "../types/quiz.types";
 
 export const quizService = {
+  startGenerate(nodeId: string, payload: QuizGenerateRequest): Promise<GenerationJobStartResponse> {
+    return studyAgentClient
+      .post<GenerationJobStartResponse>(`/nodes/${nodeId}/quizzes/generate`, payload)
+      .then((r) => r.data);
+  },
+
+  startRegenerateQuestions(
+    nodeId: string,
+    quizId: string,
+    payload: QuizQuestionRegenerateRequest,
+  ): Promise<GenerationJobStartResponse> {
+    return studyAgentClient
+      .post<GenerationJobStartResponse>(
+        `/nodes/${nodeId}/quizzes/${quizId}/questions/regenerate`,
+        payload,
+      )
+      .then((r) => r.data);
+  },
+
+  startGenerateHints(nodeId: string, quizId: string): Promise<GenerationJobStartResponse> {
+    return studyAgentClient
+      .post<GenerationJobStartResponse>(`/nodes/${nodeId}/quizzes/${quizId}/hints/generate`, {})
+      .then((r) => r.data);
+  },
+
+  startRegenerateHints(
+    nodeId: string,
+    quizId: string,
+    payload: HintRegenerateRequest,
+  ): Promise<GenerationJobStartResponse> {
+    return studyAgentClient
+      .post<GenerationJobStartResponse>(
+        `/nodes/${nodeId}/quizzes/${quizId}/hints/regenerate`,
+        payload,
+      )
+      .then((r) => r.data);
+  },
+
   generate(nodeId: string, payload: QuizGenerateRequest): Promise<QuizOut> {
     return studyAgentClient
       .post<QuizOut>(`/nodes/${nodeId}/quizzes/generate`, payload)

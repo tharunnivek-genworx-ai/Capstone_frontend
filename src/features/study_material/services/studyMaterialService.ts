@@ -1,9 +1,9 @@
 import studyAgentClient from "../../../lib/studyAgentClient";
+import type { GenerationJobStartResponse } from "../../generation/types/generationJob.types";
 import type {
   StudyMaterialActivateRequest,
   StudyMaterialClearDraftsEligibilityOut,
   StudyMaterialClearDraftsOut,
-  StudyMaterialFeedbackResponse,
   StudyMaterialGenerateRequest,
   StudyMaterialImproveRequest,
   StudyMaterialManualEditRequest,
@@ -17,35 +17,35 @@ import type {
 import type { SpaceRepublishChecklistOut } from "../../spaces/types/space.types";
 
 export const studyMaterialService = {
-  async generate(
+  async startGenerate(
     nodeId: string,
-    payload: StudyMaterialGenerateRequest
-  ): Promise<StudyMaterialVersionOut> {
-    const response = await studyAgentClient.post<StudyMaterialVersionOut>(
+    payload: StudyMaterialGenerateRequest,
+  ): Promise<GenerationJobStartResponse> {
+    const response = await studyAgentClient.post<GenerationJobStartResponse>(
       `/nodes/${nodeId}/study-material/generate`,
-      payload
+      payload,
     );
     return response.data;
   },
 
-  async regenerate(
+  async startRegenerate(
     nodeId: string,
-    payload: StudyMaterialRegenerateRequest
-  ): Promise<StudyMaterialFeedbackResponse> {
-    const response = await studyAgentClient.post<StudyMaterialFeedbackResponse>(
+    payload: StudyMaterialRegenerateRequest,
+  ): Promise<GenerationJobStartResponse> {
+    const response = await studyAgentClient.post<GenerationJobStartResponse>(
       `/nodes/${nodeId}/study-material/regenerate`,
-      payload
+      payload,
     );
     return response.data;
   },
 
-  async improve(
+  async startImprove(
     nodeId: string,
-    payload: StudyMaterialImproveRequest
-  ): Promise<StudyMaterialFeedbackResponse> {
-    const response = await studyAgentClient.post<StudyMaterialFeedbackResponse>(
+    payload: StudyMaterialImproveRequest,
+  ): Promise<GenerationJobStartResponse> {
+    const response = await studyAgentClient.post<GenerationJobStartResponse>(
       `/nodes/${nodeId}/study-material/improve`,
-      payload
+      payload,
     );
     return response.data;
   },

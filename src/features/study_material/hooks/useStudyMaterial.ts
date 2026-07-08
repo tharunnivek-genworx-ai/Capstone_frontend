@@ -8,6 +8,7 @@ import type {
   RetentionMode,
   StudyMaterialClearDraftsEligibilityOut,
   StudyMaterialFeedbackMode,
+  StudyMaterialFeedbackResponse,
   StudyMaterialMentorUiStateOut,
   StudyMaterialPublishPreviewOut,
   StudyMaterialUnpublishPreviewOut,
@@ -18,7 +19,7 @@ import type {
 } from "../types/studyMaterial.types";
 import { studyMaterialService } from "../services/studyMaterialService";
 import { referenceMaterialService } from "../services/referenceMaterialService";
-import { createGenerationProgressSessionId } from "../../generation/services/generationProgressService";
+import { generationJobService } from "../../generation/services/generationProgressService";
 import {
   computeShouldShowHistoryHub,
   partitionHistoryVersions,
@@ -598,39 +599,65 @@ export function useStudyMaterial({
       .catch(() => {/* non-critical */ });
   }, [node?.node_id, currentPage, studyMaterialContent, isGenerating, isMentor, patchNodeStudyState]);
 
-  // Recover from stale isGenerating when returning to a node whose generation
-  // finished while another node was selected (state updates must target node id).
+  // Recover polling when returning to a node with an in-flight generation run.
   useEffect(() => {
     if (!node || !isMentor || !isGenerating || currentPage !== 2) return;
     if (generatingNodeIds.has(node.node_id)) return;
+    if (generationProgressSessionId) return;
     const nodeId = node.node_id;
     let cancelled = false;
-    studyMaterialService
-      .getActiveVersion(nodeId)
-      .then((version) => {
+    generationJobService
+      .getActiveRun(nodeId, "study_material")
+      .then(async (active) => {
         if (cancelled) return;
-        if (version) {
+        if (!active?.run_id) {
           patchNodeStudyState(nodeId, {
             isGenerating: false,
             generationProgressSessionId: null,
-            studyMaterialContent: version.content,
-            activeVersion: version,
-            hasTriggeredGeneration: true,
+            activeGenerationRunId: null,
           });
           return;
         }
         patchNodeStudyState(nodeId, {
-          isGenerating: false,
-          generationProgressSessionId: null,
-          currentPage: 1,
-          hasTriggeredGeneration: false,
+          generationProgressSessionId: active.run_id,
+          activeGenerationRunId: active.run_id,
         });
+        try {
+          await generationJobService.waitForCompletion(active.run_id);
+          const result = await generationJobService.getResult(active.run_id);
+          if (result.study_material_generate) {
+            applyVersion(
+              nodeId,
+              result.study_material_generate as unknown as StudyMaterialVersionOut,
+            );
+          } else if (result.study_material_feedback?.new_version) {
+            applyVersion(
+              nodeId,
+              result.study_material_feedback.new_version as unknown as StudyMaterialVersionOut,
+            );
+          }
+          if (isViewingNode(nodeId)) {
+            await refreshVersionHistory(nodeId);
+            await refreshMentorUiStateRef.current(nodeId, null);
+          }
+        } catch {
+          /* leave isGenerating cleared below */
+        } finally {
+          if (!cancelled) {
+            patchNodeStudyState(nodeId, {
+              isGenerating: false,
+              generationProgressSessionId: null,
+              activeGenerationRunId: null,
+              hasTriggeredGeneration: true,
+            });
+          }
+        }
       })
-      .catch(() => {/* non-critical */ });
+      .catch(() => {/* non-critical */});
     return () => {
       cancelled = true;
     };
-  }, [node?.node_id, isMentor, isGenerating, currentPage, patchNodeStudyState]);
+  }, [node?.node_id, isMentor, isGenerating, currentPage, generationProgressSessionId, patchNodeStudyState]);
 
   // Load version history on page 2 (once per node/page — not on every activeVersion change)
   useEffect(() => {
@@ -980,20 +1007,29 @@ export function useStudyMaterial({
   const handleGenerateStudyMaterial = async () => {
     if (!node || isGenerating) return;
     const nodeId = node.node_id;
-    const progressSessionId = createGenerationProgressSessionId();
     generatingNodeIds.add(nodeId);
     patchNodeStudyState(nodeId, {
       hasTriggeredGeneration: true,
       currentPage: 2,
       isGenerating: true,
-      generationProgressSessionId: progressSessionId,
+      generationProgressSessionId: null,
+      activeGenerationRunId: null,
     });
     setProcessingLabel("Generating study material");
     try {
-      const version = await studyMaterialService.generate(nodeId, {
-        reference_material_id: referenceMaterial?.material_id ?? null,
-        progress_session_id: progressSessionId,
-      });
+      const { result } = await generationJobService.runJob(
+        () => studyMaterialService.startGenerate(nodeId, {
+          reference_material_id: referenceMaterial?.material_id ?? null,
+        }),
+        (progress) => {
+          patchNodeStudyState(nodeId, {
+            generationProgressSessionId: progress.session_id,
+            activeGenerationRunId: progress.session_id,
+          });
+        },
+      );
+      const version = result.study_material_generate as StudyMaterialVersionOut | null | undefined;
+      if (!version) throw new Error("Study material generation returned no version.");
       applyVersion(nodeId, version);
       if (isViewingNode(nodeId)) {
         await refreshVersionHistory(nodeId);
@@ -1002,6 +1038,7 @@ export function useStudyMaterial({
       patchNodeStudyState(nodeId, {
         isGenerating: false,
         generationProgressSessionId: null,
+        activeGenerationRunId: null,
       });
       toast.success(`Study material saved as ${version.display_label}.`);
     } catch (err) {
@@ -1011,6 +1048,7 @@ export function useStudyMaterial({
         hasTriggeredGeneration: false,
         isGenerating: false,
         generationProgressSessionId: null,
+        activeGenerationRunId: null,
       });
     } finally {
       generatingNodeIds.delete(nodeId);
@@ -1038,22 +1076,31 @@ export function useStudyMaterial({
       delete next[nodeId];
       return next;
     });
-    const progressSessionId = createGenerationProgressSessionId();
     patchNodeStudyState(nodeId, {
       hasTriggeredGeneration: true,
       currentPage: 2,
       isGenerating: true,
       studyMaterialContent: null,
       activeVersion: null,
-      generationProgressSessionId: progressSessionId,
+      generationProgressSessionId: null,
+      activeGenerationRunId: null,
     });
     setProcessingLabel("Generating study material");
     try {
       await studyMaterialService.clearAllDrafts(nodeId);
-      const version = await studyMaterialService.generate(nodeId, {
-        reference_material_id: referenceMaterial?.material_id ?? null,
-        progress_session_id: progressSessionId,
-      });
+      const { result } = await generationJobService.runJob(
+        () => studyMaterialService.startGenerate(nodeId, {
+          reference_material_id: referenceMaterial?.material_id ?? null,
+        }),
+        (progress) => {
+          patchNodeStudyState(nodeId, {
+            generationProgressSessionId: progress.session_id,
+            activeGenerationRunId: progress.session_id,
+          });
+        },
+      );
+      const version = result.study_material_generate as StudyMaterialVersionOut | null | undefined;
+      if (!version) throw new Error("Study material generation returned no version.");
       applyVersion(nodeId, version);
       if (isViewingNode(nodeId)) {
         await refreshVersionHistory(nodeId);
@@ -1066,17 +1113,16 @@ export function useStudyMaterial({
       patchNodeStudyState(nodeId, {
         isGenerating: false,
         generationProgressSessionId: null,
+        activeGenerationRunId: null,
       });
       toast.success(`Study material regenerated as ${version.display_label}.`);
     } catch (err) {
       toast.error(extractErrorDetail(err));
-      // If clearAllDrafts succeeded but generate failed, all drafts are gone.
-      // Reset hasTriggeredGeneration so the UI returns to the "no material" state
-      // rather than showing a broken empty page 2.
       patchNodeStudyState(nodeId, {
         currentPage: 1,
         isGenerating: false,
         generationProgressSessionId: null,
+        activeGenerationRunId: null,
         hasTriggeredGeneration: false,
         studyMaterialContent: null,
         activeVersion: null,
@@ -1100,30 +1146,35 @@ export function useStudyMaterial({
       return;
     }
     const nodeId = node.node_id;
-    const progressSessionId = createGenerationProgressSessionId();
     generatingNodeIds.add(nodeId);
     patchNodeStudyState(nodeId, {
       isGenerating: true,
       currentPage: 2,
-      generationProgressSessionId: progressSessionId,
+      generationProgressSessionId: null,
+      activeGenerationRunId: null,
     });
-    // Close the modal immediately so the user sees the full progress panel on page 2
     if (isViewingNode(nodeId)) {
       setFeedbackModalMode(null);
     }
     setProcessingLabel(mode === "regenerate" ? "Regenerating study material" : "Improving study material");
     try {
-      const res =
-        mode === "regenerate"
-          ? await studyMaterialService.regenerate(nodeId, {
+      const { result } = await generationJobService.runJob(
+        () => (mode === "regenerate"
+          ? studyMaterialService.startRegenerate(nodeId, {
             mentor_regeneration_goal: feedback,
-            progress_session_id: progressSessionId,
           })
-          : await studyMaterialService.improve(nodeId, {
+          : studyMaterialService.startImprove(nodeId, {
             mentor_feedback: feedback,
-            progress_session_id: progressSessionId,
+          })),
+        (progress) => {
+          patchNodeStudyState(nodeId, {
+            generationProgressSessionId: progress.session_id,
+            activeGenerationRunId: progress.session_id,
           });
-      
+        },
+      );
+      const res = result.study_material_feedback as StudyMaterialFeedbackResponse | null | undefined;
+      if (!res) throw new Error("Study material feedback returned no result.");
       if (!res.has_new_version) {
         toast(res.status_message || "Feedback was too vague to apply.", {
           icon: "⚠️",
@@ -1152,6 +1203,7 @@ export function useStudyMaterial({
       patchNodeStudyState(nodeId, {
         isGenerating: false,
         generationProgressSessionId: null,
+        activeGenerationRunId: null,
       });
       generatingNodeIds.delete(nodeId);
       if (isViewingNode(nodeId)) {

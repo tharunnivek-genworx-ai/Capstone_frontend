@@ -31,13 +31,6 @@ import { shouldShowQcWarning } from "../../study_material/utils/qcDisplayUtils";
 import GenerationProgressPanel from "../../generation/components/GenerationProgressPanel";
 import { useGenerationProgress } from "../../generation/hooks/useGenerationProgress";
 
-const QUIZ_GENERATION_STEPS = [
-  { id: "preparing", label: "Preparing materials" },
-  { id: "outlining", label: "Outlining the topics to cover" },
-  { id: "generating", label: "Generating quiz" },
-  { id: "analyzing", label: "Analyzing the quality of the content" },
-];
-
 interface QuizPage3Props {
   nodeTitle: string;
   qz: UseQuizReturn;
@@ -57,7 +50,7 @@ const QuizPage3: React.FC<QuizPage3Props> = ({ nodeTitle, qz }) => {
   const [questionCountInput, setQuestionCountInput] = useState(String(qz.questionCount));
   const generationProgress = useGenerationProgress(
     qz.generationProgressSessionId,
-    qz.isGenerating,
+    qz.isGenerating || Boolean(qz.isRegeneratingQuestion),
   );
 
   const sensors = useSensors(
@@ -133,7 +126,16 @@ const QuizPage3: React.FC<QuizPage3Props> = ({ nodeTitle, qz }) => {
         title="Generating quiz"
         subtitle={`The AI is building quiz questions for "${nodeTitle}". This may take a minute.`}
         progress={generationProgress}
-        fallbackSteps={QUIZ_GENERATION_STEPS}
+      />
+    );
+  }
+
+  if (qz.isRegeneratingQuestion) {
+    return (
+      <GenerationProgressPanel
+        title="Regenerating question"
+        subtitle={`The AI is reworking a quiz question for "${nodeTitle}".`}
+        progress={generationProgress}
       />
     );
   }
