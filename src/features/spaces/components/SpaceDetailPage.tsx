@@ -96,6 +96,7 @@ const SpaceDetailPage: React.FC = () => {
           isGeneratingQuiz: false,
           isGeneratingHints: false,
           generationProgressSessionId: null,
+          activeGenerationRunId: null,
           referenceMaterial: null,
           currentQuizId: null,
         };

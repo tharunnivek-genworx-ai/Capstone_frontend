@@ -146,7 +146,6 @@ export interface QuizGenerateRequest {
   mode?: "generate" | "regenerate";
   quiz_id?: string;
   mentor_feedback?: string;
-  progress_session_id?: string | null;
 }
 
 export interface QuizQuestionCreateRequest {

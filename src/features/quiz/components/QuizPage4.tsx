@@ -9,6 +9,8 @@ import HintDeleteDraftModal from "./HintDeleteDraftModal";
 import QuizPublishConfirmModal from "./QuizPublishConfirmModal";
 import QuizUnpublishConfirmModal from "./QuizUnpublishConfirmModal";
 import HintGenerationDiagnosticsPanel from "./HintGenerationDiagnosticsPanel";
+import GenerationProgressPanel from "../../generation/components/GenerationProgressPanel";
+import { useGenerationProgress } from "../../generation/hooks/useGenerationProgress";
 
 interface QuizPage4Props {
   qz: UseQuizReturn;
@@ -22,6 +24,10 @@ const QuizPage4: React.FC<QuizPage4Props> = ({ qz, onPageChange }) => {
     questionText: string;
   } | null>(null);
   const [showRegenerateAllHintsModal, setShowRegenerateAllHintsModal] = useState(false);
+  const hintGenerationProgress = useGenerationProgress(
+    qz.generationProgressSessionId,
+    qz.isGeneratingHints,
+  );
 
   if (qz.isLoadingQuiz || (qz.isViewingHistoryQuiz && qz.isLoadingHistoryQuiz)) {
     return (
@@ -33,10 +39,21 @@ const QuizPage4: React.FC<QuizPage4Props> = ({ qz, onPageChange }) => {
 
   if (!qz.quiz && qz.isGeneratingHints) {
     return (
-      <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "0.75rem" }}>
-        <span className="spinner" style={{ width: "2rem", height: "2rem", borderTopColor: "var(--color-primary)" }} />
-        <p style={{ margin: 0, fontSize: "0.875rem", color: "var(--color-text-muted)" }}>Generating hints…</p>
-      </div>
+      <GenerationProgressPanel
+        title="Generating hints"
+        subtitle="The AI is writing hints for your quiz questions. This may take a minute."
+        progress={hintGenerationProgress}
+      />
+    );
+  }
+
+  if (qz.isGeneratingHints) {
+    return (
+      <GenerationProgressPanel
+        title="Generating hints"
+        subtitle="The AI is updating hints for your quiz questions."
+        progress={hintGenerationProgress}
+      />
     );
   }
 
