@@ -53,6 +53,8 @@ export function shouldSilentlyActivateOnSelect(
   summary: StudyMaterialVersionSummary | null | undefined,
 ): boolean {
   if (!summary || summary.is_active) return false;
+  // Mentor shelf archives must be restored explicitly — activate() unarchives on the server.
+  if (summary.is_archived) return false;
   // Preserve view-only when peeking at the live published version alongside another draft.
   if (summary.is_published) return false;
   return true;
@@ -82,7 +84,7 @@ export function computeShouldShowHistoryHub(
   return (
     !hasLiveVersion &&
     !hasActiveWorkingDraft &&
-    partitions.workspaceDrafts.length <= 1 &&
+    partitions.workspaceDrafts.length === 0 &&
     hasHistoricalVersions
   );
 }

@@ -19,6 +19,10 @@ export interface LoginResponse {
   expires_in_minutes: number;
   refresh_token: string;
   refresh_token_expires_in_days: number;
+  /** Present when the authenticated user is a mentor */
+  departmentid?: string | null;
+  department_name?: string | null;
+  department_code?: string | null;
 }
 
 /** POST /auth/refresh — request body */

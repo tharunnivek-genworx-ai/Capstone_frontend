@@ -599,13 +599,14 @@ export function useStudyMaterial({
       .catch(() => {/* non-critical */ });
   }, [node?.node_id, currentPage, studyMaterialContent, isGenerating, isMentor, patchNodeStudyState]);
 
-  // Detect an in-flight generate for this node (manual click OR generate-all).
-  // Backend sequential generate-all uses the same /generate path, so opening the
-  // topic must pick up the usual progress panel without any batch-queue UI.
+  // Detect an in-flight async generate for this node (manual click only).
   useEffect(() => {
     if (!node || !isMentor) return;
     if (generatingNodeIds.has(node.node_id)) return;
     if (generationProgressSessionId) return;
+    // After generate-all (inline) the draft is already in state — ignore stale
+    // RUNNING rows left by a race with manual /generate on the same node.
+    if (hasTriggeredGeneration && activeVersion) return;
     const nodeId = node.node_id;
     let cancelled = false;
     generationJobService
@@ -668,7 +669,15 @@ export function useStudyMaterial({
     return () => {
       cancelled = true;
     };
-  }, [node?.node_id, isMentor, isGenerating, generationProgressSessionId, patchNodeStudyState]);
+  }, [
+    node?.node_id,
+    isMentor,
+    isGenerating,
+    generationProgressSessionId,
+    hasTriggeredGeneration,
+    activeVersion,
+    patchNodeStudyState,
+  ]);
 
   // Load version history on page 2 (once per node/page — not on every activeVersion change)
   useEffect(() => {
@@ -1028,6 +1037,7 @@ export function useStudyMaterial({
     });
     setProcessingLabel("Generating study material");
     try {
+      await generationJobService.waitForResourceIdle(nodeId);
       const { result } = await generationJobService.runJob(
         () => studyMaterialService.startGenerate(nodeId, {
           reference_material_id: referenceMaterial?.material_id ?? null,
@@ -1098,6 +1108,7 @@ export function useStudyMaterial({
     });
     setProcessingLabel("Generating study material");
     try {
+      await generationJobService.waitForResourceIdle(nodeId);
       await studyMaterialService.clearAllDrafts(nodeId);
       const { result } = await generationJobService.runJob(
         () => studyMaterialService.startGenerate(nodeId, {
@@ -1169,6 +1180,7 @@ export function useStudyMaterial({
     }
     setProcessingLabel(mode === "regenerate" ? "Regenerating study material" : "Improving study material");
     try {
+      await generationJobService.waitForResourceIdle(nodeId);
       const { result } = await generationJobService.runJob(
         () => (mode === "regenerate"
           ? studyMaterialService.startRegenerate(nodeId, {
@@ -1335,30 +1347,58 @@ export function useStudyMaterial({
     setIsArchivingVersion(true);
     try {
       await studyMaterialService.archive(nodeId, versionId);
-      const wasActive = activeVersion?.version_id === versionId;
-      await refreshVersionHistory(nodeId);
-      if (wasActive) {
-        const nextActive = await studyMaterialService.getActiveVersion(nodeId);
-        if (nextActive) {
-          patchNodeStudyState(nodeId, {
-            activeVersion: nextActive,
-            studyMaterialContent: nextActive.content,
+      const versionLists = await refreshVersionHistory(nodeId);
+
+      setViewingVersionId(null);
+      setShowArchivedPanel(false);
+
+      if (!versionLists) {
+        await refreshMentorUiStateRef.current(nodeId, null);
+        toast.success("Draft moved to archive.");
+        return;
+      }
+
+      const uiState = await studyMaterialService.getMentorUiState(nodeId, null);
+      const willShowHistoryHub = computeShouldShowHistoryHub(
+        versionLists.history,
+        versionLists.archived,
+        uiState,
+      );
+
+      if (willShowHistoryHub) {
+        patchNodeStudyState(nodeId, {
+          activeVersion: null,
+          studyMaterialContent: null,
+        });
+      } else {
+        const partitions = partitionHistoryVersions(
+          versionLists.history,
+          versionLists.archived,
+        );
+        const remainingDrafts = partitions.workspaceDrafts.filter((v) => !v.is_archived);
+
+        let nextVersion = await studyMaterialService.getActiveVersion(nodeId);
+        if (!nextVersion && remainingDrafts.length > 0) {
+          nextVersion = await studyMaterialService.activate(nodeId, {
+            version_id: remainingDrafts[0].version_id,
           });
-          setViewingVersionId(null);
-          setShowArchivedPanel(false);
+          await refreshVersionHistory(nodeId);
+        }
+
+        if (nextVersion) {
+          patchNodeStudyState(nodeId, {
+            activeVersion: nextVersion,
+            studyMaterialContent: nextVersion.content,
+          });
         } else {
-          setViewingVersionId(null);
-          setShowArchivedPanel(false);
           patchNodeStudyState(nodeId, {
             activeVersion: null,
             studyMaterialContent: null,
           });
         }
-      } else if (viewingVersionId === versionId) {
-        setShowArchivedPanel(true);
-        patchNodeStudyState(nodeId, { studyMaterialContent: null });
       }
-      await refreshMentorUiStateRef.current(nodeId, wasActive ? versionId : viewingVersionId);
+
+      await refreshMentorUiStateRef.current(nodeId, null);
       toast.success("Draft moved to archive.");
     } catch (err) {
       toast.error(extractErrorDetail(err));

@@ -93,7 +93,7 @@ export interface UseQuizReturn {
 
   // handlers
   handleGenerate: () => Promise<void>;
-  handleRegenerate: (feedback: string) => Promise<void>;
+  handleRegenerate: (feedback: string, questionCountOverride?: number) => Promise<void>;
   handleDeleteDraft: () => Promise<void>;
   handleDeleteHintsDraft: () => Promise<void>;
   handlePublishQuiz: () => void;
@@ -613,8 +613,12 @@ export function useQuiz({
     }
   }, [node, canGenerateQuiz, difficulty, questionCount, isGeneratingQuiz, refreshQuiz, patchNodeStudyState, setResolvedQuizIdForNode, handleMutationError]);
 
-  const handleRegenerate = useCallback(async (feedback: string) => {
+  const handleRegenerate = useCallback(async (feedback: string, questionCountOverride?: number) => {
     if (!node || !quiz || isGeneratingQuiz || !canGenerateQuiz) return;
+    const finalQuestionCount = questionCountOverride ?? questionCount;
+    if (questionCountOverride !== undefined) {
+      setQuestionCount(questionCountOverride);
+    }
     const nodeId = node.node_id;
     const quizId = quiz.quiz_id;
     generatingQuizNodeIds.add(nodeId);
@@ -630,7 +634,7 @@ export function useQuiz({
       const { result } = await generationJobService.runJob(
         () => quizService.startGenerate(nodeId, {
           difficulty,
-          question_count: questionCount,
+          question_count: finalQuestionCount,
           mode: "regenerate",
           quiz_id: quizId,
           mentor_feedback: feedback || undefined,

@@ -233,7 +233,87 @@ h1, h2, h3, h4, h5, h6 {
 
 /* ─── Topic tree rows ────────────────────────────────────────────── */
 .tree-node {
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: 0.45rem 0.75rem 0.45rem 0.5rem;
+  border-radius: var(--radius-lg);
+  transition: background 0.12s, border-color 0.12s;
+  user-select: none;
+  min-width: 0;
+  scrollbar-width: thin;
+}
+
+.tree-node__track {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  min-width: min(100%, max-content);
+}
+
+.tree-node__select {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  flex: 1 1 auto;
+  min-width: 0;
+  cursor: inherit;
+}
+
+.tree-node--actions-visible .tree-node__select {
+  flex: 0 0 auto;
+}
+
+.tree-node__chevron {
+  background: none;
+  border: none;
+  padding: 0.125rem;
+  border-radius: var(--radius-sm);
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.tree-node__icon {
+  width: 18px;
+  height: 18px;
+  border-radius: 5px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.tree-node__title {
+  font-size: 0.875rem;
+  white-space: nowrap;
+  flex: 1 1 auto;
+  min-width: 0;
   overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.tree-node--actions-visible .tree-node__title {
+  flex: 0 0 auto;
+  overflow: visible;
+  text-overflow: clip;
+}
+
+.tree-node__child-count {
+  font-size: 0.6875rem;
+  color: var(--color-text-muted);
+  background: var(--color-bg-surface-alt);
+  padding: 0.1rem 0.4rem;
+  border-radius: var(--radius-sm);
+  flex-shrink: 0;
+  font-weight: 500;
+}
+
+.tree-node__actions {
+  display: flex;
+  align-items: center;
+  gap: 0.125rem;
+  flex-shrink: 0;
+  margin-left: 0.25rem;
 }
 
 .tree-node--compact .tree-action-btn__label {
@@ -487,6 +567,20 @@ select.input-field option {
   position: relative;
   z-index: 1;
   padding: 0 1.75rem 1.5rem;
+}
+
+.node-detail-panel__page1-subtitle {
+  margin: 0.5rem 0 0;
+  font-size: 0.875rem;
+  color: var(--color-text-secondary);
+  line-height: 1.45;
+}
+
+.node-detail-panel__page1 {
+  border-top: 1px solid var(--color-border);
+  padding: 26px 32px;
+  margin-left: -1.75rem;
+  margin-right: -1.75rem;
 }
 
 .study-material-viewer__header {

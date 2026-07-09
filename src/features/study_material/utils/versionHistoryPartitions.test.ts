@@ -146,6 +146,28 @@ describe("computeShouldShowHistoryHub", () => {
     ).toBe(true);
   });
 
+  it("hides hub when one workspace draft remains after another was archived", () => {
+    const versionHistory = [
+      makeVersion({ version_id: "draft-2", mentor_display_badge: "Your draft", version_number: 2 }),
+    ];
+    const archivedVersionHistory = [
+      makeVersion({
+        version_id: "draft-1",
+        mentor_display_badge: "In your archive",
+        is_archived: true,
+        version_number: 1,
+      }),
+    ];
+
+    expect(
+      computeShouldShowHistoryHub(
+        versionHistory,
+        archivedVersionHistory,
+        makeMentorUiState(),
+      ),
+    ).toBe(false);
+  });
+
   it("hides hub when multiple workspace drafts exist", () => {
     const versionHistory = [
       makeVersion({ version_id: "draft-1", mentor_display_badge: "Your draft" }),
@@ -254,7 +276,7 @@ describe("computeShouldShowHistoryHub", () => {
 });
 
 describe("shouldSilentlyActivateOnSelect", () => {
-  it("activates student-archive and mentor-archive versions that are not active", () => {
+  it("activates student-archive versions that are not active", () => {
     expect(
       shouldSilentlyActivateOnSelect(
         makeVersion({
@@ -263,6 +285,9 @@ describe("shouldSilentlyActivateOnSelect", () => {
         }),
       ),
     ).toBe(true);
+  });
+
+  it("skips mentor shelf archives because activate would unarchive them", () => {
     expect(
       shouldSilentlyActivateOnSelect(
         makeVersion({
@@ -271,7 +296,7 @@ describe("shouldSilentlyActivateOnSelect", () => {
           is_archived: true,
         }),
       ),
-    ).toBe(true);
+    ).toBe(false);
   });
 
   it("skips versions that are already active or live for students", () => {

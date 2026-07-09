@@ -31,9 +31,7 @@ import GenerateAllRootPickerModal, {
 } from "../../study_material/components/queue/GenerateAllRootPickerModal";
 import GenerateAllPolicyModal from "../../study_material/components/queue/GenerateAllPolicyModal";
 import GenerateAllInstructionWarningModal from "../../study_material/components/queue/GenerateAllInstructionWarningModal";
-import GenerateAllDebugPanel, {
-  logGenerateAllDebug,
-} from "../../study_material/components/queue/GenerateAllDebugPanel";
+import { logGenerateAllDebug } from "../../study_material/components/queue/GenerateAllDebugPanel";
 import { studyMaterialBatchService } from "../../study_material/services/studyMaterialBatchService";
 import { runGenerateAllSequentially } from "../../study_material/services/runGenerateAllSequentially";
 import type {
@@ -305,8 +303,14 @@ const SpaceDetailPage: React.FC = () => {
     const handleMouseMove = (e: MouseEvent) => {
       if (!isResizingRef.current || !bodyRef.current) return;
       const rect = bodyRef.current.getBoundingClientRect();
-      const maxWidth = Math.max(320, rect.width * 0.7);
-      const next = Math.min(maxWidth, Math.max(260, e.clientX - rect.left));
+      const MIN_TREE = 260;
+      const MAX_TREE = 380;
+      const MIN_MAIN = 560;
+      const maxWidth = Math.min(
+        MAX_TREE,
+        Math.max(MIN_TREE, rect.width - MIN_MAIN)
+      );
+      const next = Math.min(maxWidth, Math.max(MIN_TREE, e.clientX - rect.left));
       setTreePanelWidth(next);
     };
     const handleMouseUp = () => {
@@ -882,7 +886,7 @@ const SpaceDetailPage: React.FC = () => {
               }
               onClick={() => setShowRootPickerModal(true)}
             >
-              Generate study materials
+              Generate all study materials
             </button>
           )}
 
@@ -1069,6 +1073,7 @@ const SpaceDetailPage: React.FC = () => {
         <main
           style={{
             flex: 1,
+            minWidth: 0,
             overflow: "hidden",
             display: "flex",
             flexDirection: "column",
@@ -1188,8 +1193,6 @@ const SpaceDetailPage: React.FC = () => {
           onContentPublished={handleRepublishContentPublished}
         />
       )}
-
-      {isMentor && <GenerateAllDebugPanel />}
 
       {showRootPickerModal && (
         <GenerateAllRootPickerModal

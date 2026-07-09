@@ -1,5 +1,5 @@
 // src/features/quiz/components/QuizRegenerateModal.tsx
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import ModalPortal from "../../../components/ModalPortal";
 import type { QuizDifficulty } from "../types/quiz.types";
 
@@ -20,7 +20,7 @@ interface QuizRegenerateModalProps {
   difficulty: QuizDifficulty;
   setDifficulty: (d: QuizDifficulty) => void;
   onClose: () => void;
-  onConfirm: (feedback: string) => void;
+  onConfirm: (feedback: string, questionCount: number) => void;
 }
 
 const QuizRegenerateModal: React.FC<QuizRegenerateModalProps> = ({
@@ -36,8 +36,21 @@ const QuizRegenerateModal: React.FC<QuizRegenerateModalProps> = ({
   onConfirm,
 }) => {
   const [feedback, setFeedback] = useState("");
+  const [questionCountInput, setQuestionCountInput] = useState(String(questionCount));
   const minLen = 10;
   const canSubmit = feedback.trim().length >= minLen && !isSubmitting;
+
+  useEffect(() => {
+    setQuestionCountInput(String(questionCount));
+  }, [questionCount]);
+
+  const commitQuestionCountInput = () => {
+    const parsed = Number.parseInt(questionCountInput, 10);
+    const clamped = Number.isFinite(parsed) ? Math.max(5, Math.min(20, parsed)) : questionCount;
+    setQuestionCount(clamped);
+    setQuestionCountInput(String(clamped));
+    return clamped;
+  };
 
   return (
     <ModalPortal>
@@ -100,10 +113,11 @@ const QuizRegenerateModal: React.FC<QuizRegenerateModalProps> = ({
           <input
             type="number"
             className="input-field"
-            value={questionCount}
+            value={questionCountInput}
             min={5}
             max={20}
-            onChange={(e) => setQuestionCount(Math.max(5, Math.min(20, parseInt(e.target.value) || 10)))}
+            onChange={(e) => setQuestionCountInput(e.target.value)}
+            onBlur={commitQuestionCountInput}
             disabled={isSubmitting}
             style={{ width: "140px", fontSize: "0.9375rem" }}
           />
@@ -168,7 +182,11 @@ const QuizRegenerateModal: React.FC<QuizRegenerateModalProps> = ({
           <button
             type="button"
             className="btn-primary"
-            onClick={() => canSubmit && onConfirm(feedback.trim())}
+            onClick={() => {
+              if (!canSubmit) return;
+              const committedCount = commitQuestionCountInput();
+              onConfirm(feedback.trim(), committedCount);
+            }}
             disabled={!canSubmit}
             style={{ padding: "0.5rem 1.25rem" }}
           >
