@@ -1,11 +1,9 @@
-import { ArrowUp, FileText, RefreshCw, Sparkles } from "lucide-react";
-import type { InstructionMode } from "./instructionMode.types";
-import { getApproachSummary } from "./instructionPreviewContent";
+import { FileText, RefreshCw, Sparkles } from "lucide-react";
+import StudentReferenceCard from "./StudentReferenceCard";
 
 interface GenerationRailProps {
   nodeTitle: string;
-  mode: InstructionMode;
-  modeText: string;
+  nodeMediaCount: number;
   hasWorkspaceStudyMaterial: boolean;
   canClearAllDrafts: boolean;
   clearDraftsBlockReason?: string | null;
@@ -15,23 +13,12 @@ interface GenerationRailProps {
   onOpenExisting: () => void;
   onGenerate: () => void;
   onRegenerate: () => void;
-  onScrollToApproach: () => void;
-}
-
-function buildStickySummary(mode: InstructionMode, modeText: string): string {
-  const base = getApproachSummary(mode);
-  const note = modeText.trim();
-  if (mode !== "inherit" && note) {
-    const preview = note.length > 56 ? `${note.slice(0, 56)}…` : note;
-    return `${base} — "${preview}"`;
-  }
-  return base;
+  onOpenMediaModal: () => void;
 }
 
 export default function GenerationRail({
   nodeTitle,
-  mode,
-  modeText,
+  nodeMediaCount,
   hasWorkspaceStudyMaterial,
   canClearAllDrafts,
   clearDraftsBlockReason,
@@ -41,31 +28,13 @@ export default function GenerationRail({
   onOpenExisting,
   onGenerate,
   onRegenerate,
-  onScrollToApproach,
+  onOpenMediaModal,
 }: GenerationRailProps) {
   const isWorking = isGenerating || isDeletingDrafts;
   const blockManualGenerate = isWorking || isWaitingForGenerateAll;
-  const summary = buildStickySummary(mode, modeText);
 
   return (
     <aside className="gsm-rail">
-      <button
-        type="button"
-        className="gsm-sticky-note gsm-sticky-note--link"
-        onClick={onScrollToApproach}
-        aria-label={`Change how AI teaches ${nodeTitle}. Currently: ${summary}`}
-      >
-        <div className="gsm-sticky-note__label">What AI will use</div>
-        <p className="gsm-sticky-note__summary">{summary}</p>
-        <div className="gsm-sticky-note__foot">
-          <span>Applies to {nodeTitle}</span>
-          <span className="gsm-sticky-note__change">
-            Change
-            <ArrowUp size={12} strokeWidth={2.5} aria-hidden />
-          </span>
-        </div>
-      </button>
-
       <div className="gsm-card gsm-ready-card">
         {hasWorkspaceStudyMaterial && (
           <div className="gsm-ready-status">
@@ -144,6 +113,11 @@ export default function GenerationRail({
           )}
         </div>
       </div>
+
+      <StudentReferenceCard
+        nodeMediaCount={nodeMediaCount}
+        onOpenMediaModal={onOpenMediaModal}
+      />
     </aside>
   );
 }

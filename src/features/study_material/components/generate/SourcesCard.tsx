@@ -1,19 +1,15 @@
 import { useState } from "react";
-import { BookOpen, ChevronDown, Link2, Upload } from "lucide-react";
+import { BookOpen, ChevronDown, Upload } from "lucide-react";
 import type { ReferenceMaterialOut } from "../../types/studyMaterial.types";
 
 interface SourcesCardProps {
   referenceMaterial: ReferenceMaterialOut | null;
-  nodeMediaCount: number;
   onOpenRefModal: () => void;
-  onOpenMediaModal: () => void;
 }
 
 export default function SourcesCard({
   referenceMaterial,
-  nodeMediaCount,
   onOpenRefModal,
-  onOpenMediaModal,
 }: SourcesCardProps) {
   const [isCardOpen, setIsCardOpen] = useState(false);
 
@@ -56,50 +52,28 @@ export default function SourcesCard({
 
       {isCardOpen && (
         <div id="gsm-sources-body" className="gsm-card__body">
-          <div className="gsm-source-row">
-            <button
-              type="button"
-              className="gsm-source-btn"
-              onClick={onOpenRefModal}
-              title={
-                referenceMaterial
-                  ? `Reference: ${referenceMaterial.title}`
-                  : "Add a reference PDF for the AI to use"
-              }
-            >
-              <div className="gsm-source-btn__icon" aria-hidden="true">
-                <Upload size={18} strokeWidth={1.8} />
-              </div>
-              <div className="gsm-source-btn__text">
-                <b>
-                  {referenceMaterial
-                    ? referenceMaterial.title
-                    : "Upload a reference PDF"}
-                </b>
-                <span>Add a document for AI to read</span>
-              </div>
-            </button>
-
-            <button
-              type="button"
-              className="gsm-source-btn"
-              onClick={onOpenMediaModal}
-              title="Images, links and videos for learners — not used by the AI generator"
-            >
-              <div className="gsm-source-btn__icon" aria-hidden="true">
-                <Link2 size={18} strokeWidth={1.8} />
-              </div>
-              <div className="gsm-source-btn__text">
-                <b>Linked resources</b>
-                <span>Already attached to this topic</span>
-              </div>
-              {nodeMediaCount > 0 && (
-                <span className="gsm-badge-count">
-                  {nodeMediaCount} linked
-                </span>
-              )}
-            </button>
-          </div>
+          <button
+            type="button"
+            className="gsm-source-btn"
+            onClick={onOpenRefModal}
+            title={
+              referenceMaterial
+                ? `Reference: ${referenceMaterial.title}`
+                : "Add a reference PDF for the AI to use"
+            }
+          >
+            <div className="gsm-source-btn__icon" aria-hidden="true">
+              <Upload size={18} strokeWidth={1.8} />
+            </div>
+            <div className="gsm-source-btn__text">
+              <b>
+                {referenceMaterial
+                  ? referenceMaterial.title
+                  : "Upload a reference PDF"}
+              </b>
+              <span>Add a document for AI to read</span>
+            </div>
+          </button>
         </div>
       )}
     </section>

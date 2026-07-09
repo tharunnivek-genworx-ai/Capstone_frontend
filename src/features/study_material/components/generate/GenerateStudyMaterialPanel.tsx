@@ -1,6 +1,6 @@
 // GenerateStudyMaterialPanel.tsx
 import { useCallback, useRef, useState } from "react";
-import { Shield } from "lucide-react";
+import ModalPortal from "../../../../components/ModalPortal";
 import "../../styles/generateStudyMaterial.css";
 import type { NodeTreeNode, EffectiveInstructionPart } from "../../../spaces/types/node.types";
 import type { UseStudyMaterialReturn } from "../../hooks/useStudyMaterial";
@@ -155,12 +155,6 @@ export default function GenerateStudyMaterialPanel({
     <div className="gsm-page">
       {instructionChangeBanner}
 
-      <div className="gsm-reassure">
-        <Shield size={18} strokeWidth={1.8} aria-hidden />
-        AI writes the first draft — nothing reaches your students until you&apos;ve
-        reviewed and published it.
-      </div>
-
       <div className="gsm-layout">
         <div className="gsm-main-col">
           <div ref={sectionDefaultRef}>
@@ -192,9 +186,7 @@ export default function GenerateStudyMaterialPanel({
 
           <SourcesCard
             referenceMaterial={sm.referenceMaterial}
-            nodeMediaCount={sm.nodeMedia.length}
             onOpenRefModal={onOpenRefModal}
-            onOpenMediaModal={onOpenMediaModal}
           />
 
           <InstructionPreviewAccordion
@@ -208,8 +200,7 @@ export default function GenerateStudyMaterialPanel({
 
         <GenerationRail
           nodeTitle={node.title}
-          mode={mode}
-          modeText={modeText}
+          nodeMediaCount={sm.nodeMedia.length}
           hasWorkspaceStudyMaterial={sm.hasWorkspaceStudyMaterial}
           canClearAllDrafts={sm.canClearAllDrafts}
           clearDraftsBlockReason={sm.clearDraftsBlockReason}
@@ -219,19 +210,19 @@ export default function GenerateStudyMaterialPanel({
           onOpenExisting={handleOpenExisting}
           onGenerate={handleGenerateClick}
           onRegenerate={handleRegenerate}
-          onScrollToApproach={scrollToApproach}
+          onOpenMediaModal={onOpenMediaModal}
         />
       </div>
 
       {showNoInstructionWarning && (
-        <>
+        <ModalPortal>
           <div
             onClick={() => setShowNoInstructionWarning(false)}
             style={{
               position: "fixed",
               inset: 0,
               background: "rgba(0,0,0,0.65)",
-              zIndex: 100,
+              zIndex: 120,
               backdropFilter: "blur(4px)",
             }}
           />
@@ -242,12 +233,15 @@ export default function GenerateStudyMaterialPanel({
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
-              zIndex: 110,
+              zIndex: 130,
               pointerEvents: "none",
             }}
           >
             <div
               className="animate-fade-in"
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="gsm-no-instruction-warning-title"
               style={{
                 pointerEvents: "auto",
                 width: "min(440px, 95vw)",
@@ -265,6 +259,7 @@ export default function GenerateStudyMaterialPanel({
                 }}
               >
                 <h2
+                  id="gsm-no-instruction-warning-title"
                   style={{
                     margin: 0,
                     fontSize: "1rem",
@@ -310,7 +305,7 @@ export default function GenerateStudyMaterialPanel({
               </div>
             </div>
           </div>
-        </>
+        </ModalPortal>
       )}
     </div>
   );

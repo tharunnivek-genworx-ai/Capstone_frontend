@@ -28,11 +28,11 @@ export default function SectionDefaultStyleCard({
   const hasValue = trimmed.length > 0;
 
   const emptyQuote = hasChildren
-    ? "No default style set yet — topics in this section will look for a style higher up in the tree."
+    ? "No default style set yet"
     : "If you add subtopics later, they'll inherit whatever you set here.";
 
   const collapsedHint = hasValue
-    ? "Default style set for this section"
+    ? "This teaching style would be followed by this topic and all of its subtopics"
     : "No default style set yet";
 
   const handleToggleEditor = () => {
@@ -71,7 +71,7 @@ export default function SectionDefaultStyleCard({
             {isCardOpen && (
               <p className="gsm-card__sub">
                 This is how AI teaches every topic in {sectionName}, unless a topic sets
-                its own instructions below.
+                its own instructions.
               </p>
             )}
           </div>

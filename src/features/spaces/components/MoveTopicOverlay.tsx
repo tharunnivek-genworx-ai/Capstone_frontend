@@ -79,7 +79,7 @@ const MoveTopicOverlay: React.FC<MoveTopicOverlayProps> = ({
           <path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z" />
         </svg>
         <span style={{ fontSize: "0.8125rem", fontWeight: 600, color: "var(--color-text-primary)" }}>
-          Make this topic an individual learning space
+          Make this topic a separate section
         </span>
       </button>
 
@@ -99,7 +99,7 @@ const MoveTopicOverlay: React.FC<MoveTopicOverlayProps> = ({
           ) : isTopicDestination ? (
             "OK — move here"
           ) : (
-            "OK — make individual learning space"
+            "OK — make separate section"
           )}
         </button>
       )}

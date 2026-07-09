@@ -38,25 +38,6 @@
 
 /* ─── Reassurance banner ───────────────────────────────────────────────────── */
 
-.gsm-reassure {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  background: var(--gsm-success-tint);
-  border: 1px solid #cdebdb;
-  color: #0e6b42;
-  border-radius: var(--gsm-r-md);
-  padding: 11px 16px;
-  font-size: 13px;
-  font-weight: 500;
-  margin-bottom: 26px;
-}
-
-.gsm-reassure svg {
-  stroke: #0e6b42;
-  flex-shrink: 0;
-}
-
 /* ─── Two-column layout ────────────────────────────────────────────────────── */
 
 .gsm-layout {
@@ -717,89 +698,19 @@
   gap: 6px;
 }
 
-/* ─── Rail: sticky note (clickable link to approach chooser) ───────────────── */
+/* ─── Rail: student reference card ─────────────────────────────────────────── */
 
-.gsm-sticky-note {
-  background: linear-gradient(180deg, #fffdf3 0%, #fffbea 100%);
-  border: 1px solid #f1e4b8;
-  border-radius: var(--gsm-r-lg);
-  box-shadow: var(--gsm-shadow-sm);
-  position: relative;
-  overflow: hidden;
+.gsm-student-ref-card {
+  border: 1px solid var(--gsm-border);
+  background: var(--color-bg-surface);
 }
 
-.gsm-sticky-note--link {
-  width: 100%;
-  display: block;
-  padding: 18px 18px 16px;
-  background: none;
-  border: none;
-  cursor: pointer;
-  text-align: left;
-  transition: border-color 0.15s, box-shadow 0.15s;
+.gsm-student-ref-card__sub {
+  margin-bottom: 14px;
 }
 
-.gsm-sticky-note--link:hover {
-  border-color: #e0cc7a;
-  box-shadow: var(--gsm-shadow-md);
-}
-
-.gsm-sticky-note--link:focus-visible {
-  outline: 2px solid #c9a84a;
-  outline-offset: 2px;
-}
-
-.gsm-sticky-note::before {
-  content: "";
-  position: absolute;
-  top: 0;
-  left: 22px;
-  width: 34px;
-  height: 10px;
-  border-radius: 0 0 6px 6px;
-  background: #f6e7b0;
-  box-shadow: var(--gsm-shadow-sm);
-  z-index: 1;
-  pointer-events: none;
-}
-
-.gsm-sticky-note__label {
-  font-size: 10.5px;
-  font-weight: 700;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: #8a6a12;
-  margin-bottom: 6px;
-}
-
-.gsm-sticky-note__summary {
-  font-size: 12.5px;
-  color: #6b5a1a;
-  line-height: 1.45;
-  margin: 0;
-}
-
-.gsm-sticky-note__foot {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-top: 12px;
-  padding-top: 12px;
-  border-top: 1px dashed #e9d791;
-}
-
-.gsm-sticky-note__foot span:first-child {
-  font-size: 11.5px;
-  color: #8a6a12;
-}
-
-.gsm-sticky-note__change {
-  color: #8a6a12;
-  font-weight: 700;
-  font-size: 11.5px;
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
+.gsm-student-ref-card__btn {
+  margin-top: 0;
 }
 
 /* ─── Rail: ready CTA card ─────────────────────────────────────────────────── */
