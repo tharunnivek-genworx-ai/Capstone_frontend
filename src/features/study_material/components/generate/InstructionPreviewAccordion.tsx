@@ -1,5 +1,3 @@
-// InstructionPreviewAccordion.tsx
-// Collapsed-by-default accordion that shows a live preview of what the AI will see.
 import { useState } from "react";
 import { ChevronDown, Eye, Shield } from "lucide-react";
 import type { EffectiveInstructionPart } from "../../../spaces/types/node.types";
@@ -12,6 +10,7 @@ interface InstructionPreviewAccordionProps {
   branchDefault: string;
   previewParts: EffectiveInstructionPart[];
   isRootTopic?: boolean;
+  embedded?: boolean;
 }
 
 export default function InstructionPreviewAccordion({
@@ -20,11 +19,61 @@ export default function InstructionPreviewAccordion({
   branchDefault,
   previewParts,
   isRootTopic = false,
+  embedded = false,
 }: InstructionPreviewAccordionProps) {
   const [isOpen, setIsOpen] = useState(false);
 
   const { defaultStyle: defaultStyleContent, topicNote: topicNoteContent, override: overrideContent } =
     buildInstructionPreviewRows(mode, modeText, branchDefault, previewParts, isRootTopic);
+
+  const previewBody = (
+    <div id="gsm-preview-body" className="gsm-preview__body" role="region">
+      <div className="gsm-preview__row">
+        <div className="gsm-preview__plabel">Default style (whole section)</div>
+        <div className="gsm-preview__pval">{defaultStyleContent}</div>
+      </div>
+      <div className="gsm-preview__row">
+        <div className="gsm-preview__plabel">Your note for this topic</div>
+        <div className="gsm-preview__pval">{topicNoteContent}</div>
+      </div>
+      <div className="gsm-preview__row">
+        <div className="gsm-preview__plabel">Custom override</div>
+        <div className="gsm-preview__pval">{overrideContent}</div>
+      </div>
+      <p className="gsm-preview__footnote">
+        <Shield size={13} strokeWidth={1.8} aria-hidden />
+        This is the exact instruction AI receives — nothing hidden, nothing extra.
+      </p>
+    </div>
+  );
+
+  if (embedded) {
+    return (
+      <details
+        className={`gsm-preview gsm-preview--embedded${isOpen ? " gsm-preview--open" : ""}`}
+        onToggle={(e) => setIsOpen((e.target as HTMLDetailsElement).open)}
+      >
+        <summary className="gsm-preview__head gsm-preview__head--embedded">
+          <div className="gsm-card__head-left">
+            <div className="gsm-card__icon gsm-card__icon--muted" aria-hidden="true">
+              <Eye size={16} strokeWidth={1.8} />
+            </div>
+            <div>
+              <span className="gsm-preview__summary-title">Preview what AI will use</span>
+              <span className="gsm-preview__acc-sub">Optional — for the curious</span>
+            </div>
+          </div>
+          <ChevronDown
+            size={16}
+            strokeWidth={1.8}
+            className="gsm-preview__chevron"
+            aria-hidden
+          />
+        </summary>
+        {previewBody}
+      </details>
+    );
+  }
 
   return (
     <section className={`gsm-card gsm-preview${isOpen ? " gsm-preview--open" : ""}`}>
@@ -52,26 +101,7 @@ export default function InstructionPreviewAccordion({
         />
       </button>
 
-      {isOpen && (
-        <div id="gsm-preview-body" className="gsm-preview__body" role="region">
-          <div className="gsm-preview__row">
-            <div className="gsm-preview__plabel">Default style (whole section)</div>
-            <div className="gsm-preview__pval">{defaultStyleContent}</div>
-          </div>
-          <div className="gsm-preview__row">
-            <div className="gsm-preview__plabel">Your note for this topic</div>
-            <div className="gsm-preview__pval">{topicNoteContent}</div>
-          </div>
-          <div className="gsm-preview__row">
-            <div className="gsm-preview__plabel">Custom override</div>
-            <div className="gsm-preview__pval">{overrideContent}</div>
-          </div>
-          <p className="gsm-preview__footnote">
-            <Shield size={13} strokeWidth={1.8} aria-hidden />
-            This is the exact instruction AI receives — nothing hidden, nothing extra.
-          </p>
-        </div>
-      )}
+      {isOpen && previewBody}
     </section>
   );
 }

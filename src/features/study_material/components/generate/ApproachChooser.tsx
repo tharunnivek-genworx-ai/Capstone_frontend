@@ -1,7 +1,6 @@
 import { forwardRef, useCallback } from "react";
-import { ChevronDown, Link2, Pencil, Sparkles, StickyNote } from "lucide-react";
+import { Link2, Pencil, StickyNote } from "lucide-react";
 import type { InstructionMode } from "./instructionMode.types";
-import { getApproachSummary } from "./instructionPreviewContent";
 
 interface ApproachOption {
   mode: InstructionMode;
@@ -46,8 +45,9 @@ interface ApproachChooserProps {
   isSaving: boolean;
   onSave: () => void;
   onDiscard: () => void;
-  isExpanded: boolean;
-  onExpandedChange: (expanded: boolean) => void;
+  embedded?: boolean;
+  isExpanded?: boolean;
+  onExpandedChange?: (expanded: boolean) => void;
 }
 
 const ApproachChooser = forwardRef<HTMLElement, ApproachChooserProps>(
@@ -62,8 +62,7 @@ const ApproachChooser = forwardRef<HTMLElement, ApproachChooserProps>(
       isSaving,
       onSave,
       onDiscard,
-      isExpanded,
-      onExpandedChange,
+      embedded = false,
     },
     ref
   ) {
@@ -92,171 +91,140 @@ const ApproachChooser = forwardRef<HTMLElement, ApproachChooserProps>(
       }
     };
 
-    const selectedSummary = getApproachSummary(mode);
-    const notePreview =
-      mode !== "inherit" && modeText.trim()
-        ? ` — "${modeText.trim().slice(0, 48)}${modeText.trim().length > 48 ? "…" : ""}"`
-        : "";
+    const body = (
+      <>
+        <div
+          className="gsm-approach-list"
+          role="radiogroup"
+          aria-label="Teaching approach for this topic"
+        >
+          {APPROACH_OPTIONS.map(({ mode: optionMode, Icon, title, caption, recommended }) => {
+            const isSelected = mode === optionMode;
+            return (
+              <div
+                key={optionMode}
+                className={`gsm-approach-card${isSelected ? " gsm-approach-card--selected" : ""}`}
+                role="radio"
+                aria-checked={isSelected}
+                tabIndex={0}
+                onClick={(e) => {
+                  if ((e.target as HTMLElement).tagName === "TEXTAREA") return;
+                  handleSelectMode(optionMode);
+                }}
+                onKeyDown={(e) => handleCardKeyDown(e, optionMode)}
+              >
+                <span className="gsm-radio-dot" aria-hidden="true" />
+                <span className="gsm-approach-icon" aria-hidden="true">
+                  <Icon size={16} strokeWidth={1.8} />
+                </span>
+                <div className="gsm-approach-body">
+                  <div className="gsm-approach-title-row">
+                    <b>{title}</b>
+                    {recommended && (
+                      <span className="gsm-pill-recommended">Recommended</span>
+                    )}
+                  </div>
+                  <p className="gsm-approach-caption">{caption}</p>
+
+                  {isSelected && optionMode === "extend" && (
+                    <div className="gsm-approach-extra">
+                      <label className="gsm-field-label" htmlFor="gsm-extend-textarea">
+                        Your note for {nodeTitle}
+                      </label>
+                      <textarea
+                        id="gsm-extend-textarea"
+                        className="gsm-field"
+                        rows={3}
+                        value={modeText}
+                        onChange={(e) => onModeTextChange(e.target.value)}
+                        placeholder="e.g. Include one real-world coding example to illustrate the concepts."
+                        onClick={(e) => e.stopPropagation()}
+                      />
+                      <p className="gsm-field-help">
+                        This note only applies to {nodeTitle} — it won&apos;t change
+                        other topics.
+                      </p>
+                    </div>
+                  )}
+
+                  {isSelected && optionMode === "replace" && (
+                    <div className="gsm-approach-extra">
+                      <label className="gsm-field-label" htmlFor="gsm-replace-textarea">
+                        Your custom instructions for this topic
+                      </label>
+                      <textarea
+                        id="gsm-replace-textarea"
+                        className="gsm-field"
+                        rows={4}
+                        value={modeText}
+                        onChange={(e) => onModeTextChange(e.target.value)}
+                        placeholder={`Describe exactly how AI should approach ${nodeTitle}…`}
+                        onClick={(e) => e.stopPropagation()}
+                      />
+                      <p className="gsm-field-help gsm-field-help--warn">
+                        Heads up — this replaces the default style for this topic only.
+                      </p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        <div
+          className={`gsm-save-bar${isApproachDirty ? " gsm-save-bar--visible" : ""}`}
+        >
+          <div className="gsm-unsaved-note">
+            <span className="gsm-unsaved-note__dot" aria-hidden="true" />
+            You have unsaved changes to this topic
+          </div>
+          <div className="gsm-save-bar__btns">
+            <button
+              type="button"
+              className="gsm-btn gsm-btn--ghost"
+              onClick={onDiscard}
+              disabled={isSaving}
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              className="gsm-btn gsm-btn--primary"
+              onClick={onSave}
+              disabled={isSaving}
+            >
+              {isSaving ? (
+                <>
+                  <span className="spinner" aria-hidden="true" />
+                  Saving…
+                </>
+              ) : (
+                "Save this approach"
+              )}
+            </button>
+          </div>
+        </div>
+      </>
+    );
+
+    if (embedded) {
+      return (
+        <div className="gsm-embedded-block" id="gsm-approach-card" ref={ref as React.RefObject<HTMLDivElement>}>
+          {body}
+        </div>
+      );
+    }
 
     return (
       <section
-        className={`gsm-card gsm-card--collapsible${isExpanded ? " gsm-card--open" : ""}`}
+        className="gsm-card gsm-card--collapsible gsm-card--open"
         id="gsm-approach-card"
         ref={ref}
       >
-        <button
-          type="button"
-          className="gsm-card__toggle"
-          onClick={() => onExpandedChange(!isExpanded)}
-          aria-expanded={isExpanded}
-          aria-controls="gsm-approach-body"
-        >
-          <div className="gsm-card__head-left">
-            <div className="gsm-card__icon" aria-hidden="true">
-              <Sparkles size={18} strokeWidth={1.8} />
-            </div>
-            <div>
-              <h3 className="gsm-card__title">Choose how AI should teach this topic</h3>
-              {!isExpanded && (
-                <p className="gsm-card__collapsed-hint">
-                  {selectedSummary}
-                  {notePreview}
-                  {isApproachDirty && (
-                    <span className="gsm-card__dirty-dot" title="Unsaved changes" />
-                  )}
-                </p>
-              )}
-              {isExpanded && (
-                <p className="gsm-card__sub">
-                  This shapes the tone, depth, and style of the lesson AI writes.
-                </p>
-              )}
-            </div>
-          </div>
-          <ChevronDown
-            size={16}
-            strokeWidth={1.8}
-            className="gsm-card__chevron"
-            aria-hidden
-          />
-        </button>
-
-        {isExpanded && (
-          <div id="gsm-approach-body" className="gsm-card__body">
-            <div
-              className="gsm-approach-list"
-              role="radiogroup"
-              aria-label="Teaching approach for this topic"
-            >
-              {APPROACH_OPTIONS.map(({ mode: optionMode, Icon, title, caption, recommended }) => {
-                const isSelected = mode === optionMode;
-                return (
-                  <div
-                    key={optionMode}
-                    className={`gsm-approach-card${isSelected ? " gsm-approach-card--selected" : ""}`}
-                    role="radio"
-                    aria-checked={isSelected}
-                    tabIndex={0}
-                    onClick={(e) => {
-                      if ((e.target as HTMLElement).tagName === "TEXTAREA") return;
-                      handleSelectMode(optionMode);
-                    }}
-                    onKeyDown={(e) => handleCardKeyDown(e, optionMode)}
-                  >
-                    <span className="gsm-radio-dot" aria-hidden="true" />
-                    <span className="gsm-approach-icon" aria-hidden="true">
-                      <Icon size={16} strokeWidth={1.8} />
-                    </span>
-                    <div className="gsm-approach-body">
-                      <div className="gsm-approach-title-row">
-                        <b>{title}</b>
-                        {recommended && (
-                          <span className="gsm-pill-recommended">Recommended</span>
-                        )}
-                      </div>
-                      <p className="gsm-approach-caption">{caption}</p>
-
-                      {isSelected && optionMode === "extend" && (
-                        <div className="gsm-approach-extra">
-                          <label className="gsm-field-label" htmlFor="gsm-extend-textarea">
-                            Your note for {nodeTitle}
-                          </label>
-                          <textarea
-                            id="gsm-extend-textarea"
-                            className="gsm-field"
-                            rows={3}
-                            value={modeText}
-                            onChange={(e) => onModeTextChange(e.target.value)}
-                            placeholder="e.g. Include one real-world coding example to illustrate the concepts."
-                            onClick={(e) => e.stopPropagation()}
-                          />
-                          <p className="gsm-field-help">
-                            This note only applies to {nodeTitle} — it won&apos;t change
-                            other topics.
-                          </p>
-                        </div>
-                      )}
-
-                      {isSelected && optionMode === "replace" && (
-                        <div className="gsm-approach-extra">
-                          <label className="gsm-field-label" htmlFor="gsm-replace-textarea">
-                            Your custom instructions for this topic
-                          </label>
-                          <textarea
-                            id="gsm-replace-textarea"
-                            className="gsm-field"
-                            rows={4}
-                            value={modeText}
-                            onChange={(e) => onModeTextChange(e.target.value)}
-                            placeholder={`Describe exactly how AI should approach ${nodeTitle}…`}
-                            onClick={(e) => e.stopPropagation()}
-                          />
-                          <p className="gsm-field-help gsm-field-help--warn">
-                            Heads up — this replaces the default style for this topic only.
-                          </p>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-
-            <div
-              className={`gsm-save-bar${isApproachDirty ? " gsm-save-bar--visible" : ""}`}
-            >
-              <div className="gsm-unsaved-note">
-                <span className="gsm-unsaved-note__dot" aria-hidden="true" />
-                You have unsaved changes to this topic
-              </div>
-              <div className="gsm-save-bar__btns">
-                <button
-                  type="button"
-                  className="gsm-btn gsm-btn--ghost"
-                  onClick={onDiscard}
-                  disabled={isSaving}
-                >
-                  Cancel
-                </button>
-                <button
-                  type="button"
-                  className="gsm-btn gsm-btn--primary"
-                  onClick={onSave}
-                  disabled={isSaving}
-                >
-                  {isSaving ? (
-                    <>
-                      <span className="spinner" aria-hidden="true" />
-                      Saving…
-                    </>
-                  ) : (
-                    "Save this approach"
-                  )}
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
+        <div id="gsm-approach-body" className="gsm-card__body gsm-embedded-block">
+          {body}
+        </div>
       </section>
     );
   }

@@ -1,15 +1,11 @@
 // GenerateStudyMaterialPanel.tsx
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useState } from "react";
 import ModalPortal from "../../../../components/ModalPortal";
 import "../../styles/generateStudyMaterial.css";
 import type { NodeTreeNode, EffectiveInstructionPart } from "../../../spaces/types/node.types";
 import type { UseStudyMaterialReturn } from "../../hooks/useStudyMaterial";
 import type { InstructionMode } from "./instructionMode.types";
-import SectionDefaultStyleCard from "./SectionDefaultStyleCard";
-import SourcesCard from "./SourcesCard";
-import ApproachChooser from "./ApproachChooser";
-import InstructionPreviewAccordion from "./InstructionPreviewAccordion";
-import GenerationRail from "./GenerationRail";
+import GenerateSetupPanel from "./GenerateSetupPanel";
 
 export interface GenerateStudyMaterialPanelProps {
   node: NodeTreeNode;
@@ -71,20 +67,10 @@ export default function GenerateStudyMaterialPanel({
   isWaitingForGenerateAll = false,
 }: GenerateStudyMaterialPanelProps) {
   const [showNoInstructionWarning, setShowNoInstructionWarning] = useState(false);
-  const [isApproachExpanded, setIsApproachExpanded] = useState(false);
-  const approachRef = useRef<HTMLElement>(null);
-  const sectionDefaultRef = useRef<HTMLDivElement>(null);
 
   const branchDefaultDirty =
     branchDefault.trim() !== (node.tree_default_instruction ?? "").trim();
   const approachDirty = isApproachDirty(node, mode, modeText);
-
-  const scrollToApproach = useCallback(() => {
-    setIsApproachExpanded(true);
-    setTimeout(() => {
-      approachRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
-    }, 50);
-  }, []);
 
   const handleOpenExisting = useCallback(() => sm.setCurrentPage(2), [sm]);
 
@@ -121,9 +107,12 @@ export default function GenerateStudyMaterialPanel({
     onModeChange("extend");
     setTimeout(() => {
       document.getElementById("gsm-extend-textarea")?.focus();
-      scrollToApproach();
+      document.getElementById("gsm-approach-card")?.scrollIntoView({
+        behavior: "smooth",
+        block: "center",
+      });
     }, 50);
-  }, [onModeChange, scrollToApproach]);
+  }, [onModeChange]);
 
   const instructionChangeBanner = sm.showInstructionChangeBanner ? (
     <div className="study-material-instruction-change-banner">
@@ -155,64 +144,34 @@ export default function GenerateStudyMaterialPanel({
     <div className="gsm-page">
       {instructionChangeBanner}
 
-      <div className="gsm-layout">
-        <div className="gsm-main-col">
-          <div ref={sectionDefaultRef}>
-            <SectionDefaultStyleCard
-              sectionName={node.title}
-              hasChildren={node.children.length > 0}
-              value={branchDefault}
-              onChange={onBranchDefaultChange}
-              onSave={onSave}
-              isSaving={isSaving}
-              isDirty={branchDefaultDirty}
-            />
-          </div>
-
-          <ApproachChooser
-            ref={approachRef}
-            nodeTitle={node.title}
-            mode={mode}
-            modeText={modeText}
-            onModeChange={onModeChange}
-            onModeTextChange={onModeTextChange}
-            isApproachDirty={approachDirty}
-            isSaving={isSaving}
-            onSave={onSave}
-            onDiscard={onDiscard}
-            isExpanded={isApproachExpanded}
-            onExpandedChange={setIsApproachExpanded}
-          />
-
-          <SourcesCard
-            referenceMaterial={sm.referenceMaterial}
-            onOpenRefModal={onOpenRefModal}
-          />
-
-          <InstructionPreviewAccordion
-            mode={mode}
-            modeText={modeText}
-            branchDefault={branchDefault}
-            previewParts={previewParts}
-            isRootTopic={!node.parent_id}
-          />
-        </div>
-
-        <GenerationRail
-          nodeTitle={node.title}
-          nodeMediaCount={sm.nodeMedia.length}
-          hasWorkspaceStudyMaterial={sm.hasWorkspaceStudyMaterial}
-          canClearAllDrafts={sm.canClearAllDrafts}
-          clearDraftsBlockReason={sm.clearDraftsBlockReason}
-          isGenerating={sm.isGenerating}
-          isDeletingDrafts={sm.isDeletingDrafts}
-          isWaitingForGenerateAll={isWaitingForGenerateAll && !sm.isGenerating}
-          onOpenExisting={handleOpenExisting}
-          onGenerate={handleGenerateClick}
-          onRegenerate={handleRegenerate}
-          onOpenMediaModal={onOpenMediaModal}
-        />
-      </div>
+      <GenerateSetupPanel
+        node={node}
+        mode={mode}
+        onModeChange={onModeChange}
+        modeText={modeText}
+        onModeTextChange={onModeTextChange}
+        branchDefault={branchDefault}
+        onBranchDefaultChange={onBranchDefaultChange}
+        previewParts={previewParts}
+        isSaving={isSaving}
+        onSave={onSave}
+        onDiscard={onDiscard}
+        branchDefaultDirty={branchDefaultDirty}
+        approachDirty={approachDirty}
+        referenceMaterial={sm.referenceMaterial}
+        nodeMediaCount={sm.nodeMedia.length}
+        hasWorkspaceStudyMaterial={sm.hasWorkspaceStudyMaterial}
+        canClearAllDrafts={sm.canClearAllDrafts}
+        clearDraftsBlockReason={sm.clearDraftsBlockReason}
+        isGenerating={sm.isGenerating}
+        isDeletingDrafts={sm.isDeletingDrafts}
+        isWaitingForGenerateAll={isWaitingForGenerateAll && !sm.isGenerating}
+        onOpenRefModal={onOpenRefModal}
+        onOpenMediaModal={onOpenMediaModal}
+        onOpenExisting={handleOpenExisting}
+        onGenerate={handleGenerateClick}
+        onRegenerate={handleRegenerate}
+      />
 
       {showNoInstructionWarning && (
         <ModalPortal>
