@@ -104,15 +104,14 @@ export default function GenerateStudyMaterialPanel({
 
   const handleAddInstructionFromWarning = useCallback(() => {
     setShowNoInstructionWarning(false);
-    onModeChange("extend");
     setTimeout(() => {
-      document.getElementById("gsm-extend-textarea")?.focus();
+      document.getElementById("gsm-topic-instruction-textarea")?.focus();
       document.getElementById("gsm-approach-card")?.scrollIntoView({
         behavior: "smooth",
         block: "center",
       });
     }, 50);
-  }, [onModeChange]);
+  }, []);
 
   const instructionChangeBanner = sm.showInstructionChangeBanner ? (
     <div className="study-material-instruction-change-banner">

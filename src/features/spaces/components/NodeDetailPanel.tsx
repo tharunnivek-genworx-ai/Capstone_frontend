@@ -236,16 +236,9 @@ const NodeDetailPanel: React.FC<NodeDetailPanelProps> = ({
     }
   };
 
-  const handleModeChange = useCallback(
-    (m: InstructionMode) => {
-      if (!node) return;
-      setMode(m);
-      if (m === "replace") setModeText(node.node_specific_instruction ?? "");
-      else if (m === "extend") setModeText(node.node_additive_instruction ?? "");
-      else setModeText("");
-    },
-    [node]
-  );
+  const handleModeChange = useCallback((m: InstructionMode) => {
+    setMode(m);
+  }, []);
 
   const resetFromNode = useCallback(() => {
     if (!node) return;
