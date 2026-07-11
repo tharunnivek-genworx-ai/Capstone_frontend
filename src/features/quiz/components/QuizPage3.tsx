@@ -30,6 +30,7 @@ import { isLlmRateLimited } from "../../study_material/utils/llmDiagnostics";
 import { shouldShowQcWarning } from "../../study_material/utils/qcDisplayUtils";
 import GenerationProgressPanel from "../../generation/components/GenerationProgressPanel";
 import { useGenerationProgress } from "../../generation/hooks/useGenerationProgress";
+import { useGenerationRunResume } from "../../generation/hooks/useGenerationRunResume";
 
 interface QuizPage3Props {
   nodeTitle: string;
@@ -48,9 +49,18 @@ const QuizPage3: React.FC<QuizPage3Props> = ({ nodeTitle, qz }) => {
   const [isSavingQuestion, setIsSavingQuestion] = useState(false);
   const [localQuestionIds, setLocalQuestionIds] = useState<string[] | null>(null);
   const [questionCountInput, setQuestionCountInput] = useState(String(qz.questionCount));
+  const showQuizGenerationUi =
+    qz.isGenerating ||
+    Boolean(qz.isRegeneratingQuestion) ||
+    (qz.generationRunFailed && qz.failedGenerationPipeline === "quiz");
   const generationProgress = useGenerationProgress(
     qz.generationProgressSessionId,
-    qz.isGenerating || Boolean(qz.isRegeneratingQuestion),
+    showQuizGenerationUi,
+  );
+  const quizRunResume = useGenerationRunResume(
+    qz.generationRunFailed && qz.failedGenerationPipeline === "quiz"
+      ? qz.activeGenerationRunId
+      : null,
   );
 
   const sensors = useSensors(
@@ -120,22 +130,23 @@ const QuizPage3: React.FC<QuizPage3Props> = ({ nodeTitle, qz }) => {
     );
   }
 
-  if (qz.isGenerating) {
+  if (showQuizGenerationUi) {
+    const isQuestionRework = Boolean(qz.isRegeneratingQuestion) && !qz.generationRunFailed;
     return (
       <GenerationProgressPanel
-        title="Generating quiz"
-        subtitle={`The AI is building quiz questions for "${nodeTitle}". This may take a minute.`}
+        title={isQuestionRework ? "Regenerating question" : "Generating quiz"}
+        subtitle={
+          isQuestionRework
+            ? `The AI is reworking a quiz question for "${nodeTitle}".`
+            : `The AI is building quiz questions for "${nodeTitle}". This may take a minute.`
+        }
         progress={generationProgress}
-      />
-    );
-  }
-
-  if (qz.isRegeneratingQuestion) {
-    return (
-      <GenerationProgressPanel
-        title="Regenerating question"
-        subtitle={`The AI is reworking a quiz question for "${nodeTitle}".`}
-        progress={generationProgress}
+        failedRunId={qz.generationRunFailed ? qz.activeGenerationRunId : null}
+        resumable={quizRunResume.resumable}
+        secondsUntilRetry={quizRunResume.secondsUntilRetry}
+        isResuming={qz.isResumingFailedGeneration}
+        onResume={qz.handleResumeFailedGeneration}
+        onDismissFailed={qz.handleDismissFailedGeneration}
       />
     );
   }

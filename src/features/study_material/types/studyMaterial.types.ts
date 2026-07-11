@@ -1,3 +1,5 @@
+import type { GenerationPipeline } from "../../generation/types/generationProgress.types";
+
 export type StudyMaterialGenerationType =
   | "generate"
   | "regenerate"
@@ -350,6 +352,8 @@ export interface NodeStudyStatePatch {
   isGeneratingHints?: boolean;
   generationProgressSessionId?: string | null;
   activeGenerationRunId?: string | null;
+  generationRunFailed?: boolean;
+  failedGenerationPipeline?: GenerationPipeline | null;
   referenceMaterial?: ReferenceMaterialOut | null;
   currentQuizId?: string | null;
 }
@@ -365,6 +369,8 @@ export interface NodeStudyState {
   isGeneratingHints: boolean;
   generationProgressSessionId: string | null;
   activeGenerationRunId: string | null;
+  generationRunFailed: boolean;
+  failedGenerationPipeline: GenerationPipeline | null;
   referenceMaterial: ReferenceMaterialOut | null;
   currentQuizId: string | null;
 }

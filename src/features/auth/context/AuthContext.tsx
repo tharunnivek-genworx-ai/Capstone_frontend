@@ -18,6 +18,11 @@ import React, {
   useState,
 } from "react";
 import { authService } from "../services/authService";
+import {
+  clearMentorDepartment,
+  normalizeMentorDepartment,
+  storeMentorDepartment,
+} from "../../spaces/utils/mentorDepartment";
 import type { TokenPayload, UserRole } from "../types/auth.types";
 
 // ─── JWT helpers ──────────────────────────────────────────────────────────────
@@ -80,6 +85,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
         localStorage.removeItem("refresh_token");
         localStorage.removeItem("user_role");
         localStorage.removeItem("user_id");
+        clearMentorDepartment();
         setAccessToken(null);
         setRole(null);
         return;
@@ -103,6 +109,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
         localStorage.removeItem("refresh_token");
         localStorage.removeItem("user_role");
         localStorage.removeItem("user_id");
+        clearMentorDepartment();
         setAccessToken(null);
         setRole(null);
       }
@@ -128,6 +135,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
 
       if (userRole) localStorage.setItem("user_role", userRole);
       if (userSub) localStorage.setItem("user_id", userSub);
+
+      const mentorDept = normalizeMentorDepartment(response);
+      if (userRole === "mentor" && mentorDept) {
+        storeMentorDepartment(mentorDept);
+      } else {
+        clearMentorDepartment();
+      }
 
       setAccessToken(response.access_token);
       setRole(userRole);
@@ -158,6 +172,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
     localStorage.removeItem("refresh_token");
     localStorage.removeItem("user_role");
     localStorage.removeItem("user_id");
+    clearMentorDepartment();
     setAccessToken(null);
     setRole(null);
     setError(null);

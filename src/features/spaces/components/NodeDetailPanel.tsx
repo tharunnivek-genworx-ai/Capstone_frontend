@@ -29,6 +29,8 @@ import QuizPage3 from "../../quiz/components/QuizPage3";
 import QuizPage4 from "../../quiz/components/QuizPage4";
 import GenerationProgressPanel from "../../generation/components/GenerationProgressPanel";
 import { useGenerationProgress } from "../../generation/hooks/useGenerationProgress";
+import { useGenerationRunResume } from "../../generation/hooks/useGenerationRunResume";
+import type { InstructionMode } from "../../study_material/components/generate/instructionMode.types";
 
 // Re-export for consumers that import from here
 export type { NodeStudyStatePatch };
@@ -37,8 +39,6 @@ function nonempty(s: string | null | undefined): string | null {
   const t = s?.trim();
   return t || null;
 }
-
-type InstructionMode = "inherit" | "extend" | "replace";
 
 function detectMode(node: NodeTreeNode): InstructionMode {
   if (nonempty(node.node_specific_instruction)) return "replace";
@@ -65,6 +65,8 @@ interface NodeDetailPanelProps {
   onStudyStateChange?: (nodeId: string, patch: NodeStudyStatePatch) => void;
   onMentorProgressRefresh?: () => void;
   contentRefreshToken?: number;
+  /** Block manual Generate while this node is still waiting in generate-all. */
+  isWaitingForGenerateAll?: boolean;
 }
 
 const NodeDetailPanel: React.FC<NodeDetailPanelProps> = ({
@@ -79,6 +81,7 @@ const NodeDetailPanel: React.FC<NodeDetailPanelProps> = ({
   onStudyStateChange,
   onMentorProgressRefresh,
   contentRefreshToken = 0,
+  isWaitingForGenerateAll = false,
 }) => {
   // ── Instruction editing state (stays local — not study material) ─────────
   const [isRenaming, setIsRenaming] = useState(false);
@@ -103,9 +106,17 @@ const NodeDetailPanel: React.FC<NodeDetailPanelProps> = ({
     contentRefreshToken,
   });
 
+  const showGenerationProgress =
+    sm.isGenerating ||
+    (sm.generationRunFailed && sm.failedGenerationPipeline === "study_material");
   const studyGenerationProgress = useGenerationProgress(
     sm.generationProgressSessionId,
-    sm.isGenerating,
+    showGenerationProgress,
+  );
+  const studyRunResume = useGenerationRunResume(
+    sm.generationRunFailed && sm.failedGenerationPipeline === "study_material"
+      ? sm.activeGenerationRunId
+      : null,
   );
 
   // ── Quiz hook ─────────────────────────────────────────────────────────────
@@ -119,6 +130,9 @@ const NodeDetailPanel: React.FC<NodeDetailPanelProps> = ({
     isGeneratingQuiz: studyState?.isGeneratingQuiz ?? false,
     isGeneratingHints: studyState?.isGeneratingHints ?? false,
     generationProgressSessionId: studyState?.generationProgressSessionId ?? null,
+    activeGenerationRunId: studyState?.activeGenerationRunId ?? null,
+    generationRunFailed: studyState?.generationRunFailed ?? false,
+    failedGenerationPipeline: studyState?.failedGenerationPipeline ?? null,
     onNodeStudyStateChange: onStudyStateChange,
     onPageChange: sm.setCurrentPage,
     onMentorProgressRefresh,
@@ -331,6 +345,11 @@ const NodeDetailPanel: React.FC<NodeDetailPanelProps> = ({
                 <p style={{ margin: "0.375rem 0 0", fontSize: "13px", color: "var(--color-text-secondary)", lineHeight: 1.4 }}>
                   {metadataParts.join(" · ")}
                 </p>
+                {sm.currentPage === 1 && (
+                  <p className="node-detail-panel__page1-subtitle">
+                    Set up how AI should teach this topic, then create the lesson.
+                  </p>
+                )}
               </>
             )}
           </div>
@@ -385,7 +404,7 @@ const NodeDetailPanel: React.FC<NodeDetailPanelProps> = ({
           <>
         {/* PAGE 1 — Generate / AI Draft */}
         {sm.currentPage === 1 && (
-          <div style={{ borderTop: "1px solid var(--color-border)", paddingTop: "1.25rem", flex: 1, minHeight: 0, overflowY: "auto" }}>
+          <div className="node-detail-panel__page1" style={{ flex: 1, minHeight: 0, overflowY: "auto" }}>
             <GenerateStudyMaterialPanel
               node={node}
               mode={mode}
@@ -403,6 +422,7 @@ const NodeDetailPanel: React.FC<NodeDetailPanelProps> = ({
               sm={sm}
               onOpenRefModal={() => sm.openRefModalManage()}
               onOpenMediaModal={() => sm.setShowNodeMediaModal(true)}
+              isWaitingForGenerateAll={isWaitingForGenerateAll}
             />
           </div>
         )}
@@ -411,11 +431,17 @@ const NodeDetailPanel: React.FC<NodeDetailPanelProps> = ({
         {sm.currentPage === 2 && (
           <div className="study-material-page">
             {instructionChangeBanner}
-            {sm.isGenerating ? (
+            {showGenerationProgress ? (
               <GenerationProgressPanel
                 title={sm.processingLabel ?? "Working on study material"}
                 subtitle={`The AI is updating study content for "${node.title}". This may take a minute.`}
                 progress={studyGenerationProgress}
+                failedRunId={sm.generationRunFailed ? sm.activeGenerationRunId : null}
+                resumable={studyRunResume.resumable}
+                secondsUntilRetry={studyRunResume.secondsUntilRetry}
+                isResuming={sm.isResumingFailedGeneration}
+                onResume={sm.handleResumeFailedGeneration}
+                onDismissFailed={sm.handleDismissFailedGeneration}
               />
             ) : sm.isHistoryHubView || sm.studyMaterialContent?.trim() ? (
               <>

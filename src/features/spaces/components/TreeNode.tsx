@@ -97,131 +97,95 @@ const TreeNode: React.FC<TreeNodeProps> = ({
   return (
     <div style={{ opacity: isMoveTargetExcluded && movePickMode ? 0.35 : 1 }}>
       <div
-        className={`tree-node${isCompact ? " tree-node--compact" : ""}`}
+        className={`tree-node${isCompact ? " tree-node--compact" : ""}${showActions && !movePickMode ? " tree-node--actions-visible" : ""}`}
         onMouseEnter={() => !movePickMode && setShowActions(true)}
         onMouseLeave={() => {
           setShowActions(false);
         }}
         style={{
-          display: "flex",
-          alignItems: "center",
-          gap: "0.375rem",
-          padding: "0.45rem 0.75rem 0.45rem 0.5rem",
-          borderRadius: "var(--radius-lg)",
           cursor: canPickAsParent ? "pointer" : movePickMode && isMoveTargetExcluded ? "not-allowed" : "pointer",
           background: rowBackground,
           border: `1.5px solid ${rowBorder}`,
-          transition: "background 0.12s, border-color 0.12s",
-          userSelect: "none",
-          position: "relative",
-          minWidth: 0,
         }}
-        onClick={handleRowClick}
       >
-        <button
-          onClick={(e) => {
-            e.stopPropagation();
-            if (hasChildren) setIsExpanded((v) => !v);
-          }}
-          style={{
-            background: "none",
-            border: "none",
-            cursor: hasChildren ? "pointer" : "default",
-            padding: "0.125rem",
-            borderRadius: "var(--radius-sm)",
-            color: hasChildren ? "var(--color-text-secondary)" : "transparent",
-            display: "flex",
-            alignItems: "center",
-            flexShrink: 0,
-          }}
-          aria-label={isExpanded ? "Collapse" : "Expand"}
-          tabIndex={hasChildren ? 0 : -1}
-        >
-          <svg
-            width="14"
-            height="14"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-            style={{ transform: isExpanded ? "rotate(90deg)" : "rotate(0deg)", transition: "transform 0.15s ease" }}
-          >
-            <polyline points="9 18 15 12 9 6" />
-          </svg>
-        </button>
-
-        <div
-          style={{
-            width: "18px",
-            height: "18px",
-            borderRadius: "5px",
-            background:
-              node.level === 1
-                ? "var(--color-primary)"
-                : node.level === 2
-                ? "var(--color-success)"
-                : "var(--color-bg-surface-alt)",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            flexShrink: 0,
-            border: node.level >= 3 ? "1px solid var(--color-border)" : "none",
-          }}
-        >
-          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke={node.level >= 3 ? "var(--color-text-muted)" : "#fff"} strokeWidth="2.5">
-            {node.level === 1 ? (
-              <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" />
-            ) : (
-              <circle cx="12" cy="12" r="8" />
-            )}
-          </svg>
-        </div>
-
-        <span
-          style={{
-            flex: 1,
-            fontSize: "0.875rem",
-            fontWeight: isSelected || isMoveTargetSelected ? 600 : 500,
-            color: isMoveTargetExcluded && movePickMode
-              ? "var(--color-text-muted)"
-              : isSelected || isMoveTargetSelected
-              ? "var(--color-text-primary)"
-              : "var(--color-text-secondary)",
-            overflow: "hidden",
-            textOverflow: "ellipsis",
-            whiteSpace: "nowrap",
-          }}
-          title={node.title}
-        >
-          {node.title}
-          {isMovingNode && (
-            <span style={{ marginLeft: "0.375rem", fontSize: "0.6875rem", color: "var(--color-warning)", fontWeight: 600 }}>
-              (moving)
-            </span>
-          )}
-        </span>
-
-        {hasChildren && !showActions && !movePickMode && (
-          <span
+        <div className="tree-node__track">
+          <div className="tree-node__select" onClick={handleRowClick}>
+          <button
+            className="tree-node__chevron"
+            onClick={(e) => {
+              e.stopPropagation();
+              if (hasChildren) setIsExpanded((v) => !v);
+            }}
             style={{
-              fontSize: "0.6875rem",
-              color: "var(--color-text-muted)",
-              background: "var(--color-bg-surface-alt)",
-              padding: "0.1rem 0.4rem",
-              borderRadius: "var(--radius-sm)",
-              flexShrink: 0,
-              fontWeight: 500,
+              cursor: hasChildren ? "pointer" : "default",
+              color: hasChildren ? "var(--color-text-secondary)" : "transparent",
+            }}
+            aria-label={isExpanded ? "Collapse" : "Expand"}
+            tabIndex={hasChildren ? 0 : -1}
+          >
+            <svg
+              width="14"
+              height="14"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              style={{ transform: isExpanded ? "rotate(90deg)" : "rotate(0deg)", transition: "transform 0.15s ease" }}
+            >
+              <polyline points="9 18 15 12 9 6" />
+            </svg>
+          </button>
+
+          <div
+            className="tree-node__icon"
+            style={{
+              background:
+                node.level === 1
+                  ? "var(--color-primary)"
+                  : node.level === 2
+                  ? "var(--color-success)"
+                  : "var(--color-bg-surface-alt)",
+              border: node.level >= 3 ? "1px solid var(--color-border)" : "none",
             }}
           >
-            {node.children.length}
-          </span>
-        )}
+            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke={node.level >= 3 ? "var(--color-text-muted)" : "#fff"} strokeWidth="2.5">
+              {node.level === 1 ? (
+                <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" />
+              ) : (
+                <circle cx="12" cy="12" r="8" />
+              )}
+            </svg>
+          </div>
 
-        {isMentor && showActions && !movePickMode && (
-          <div
-            style={{ display: "flex", alignItems: "center", gap: "0.125rem", flexShrink: 0, position: "relative" }}
-            onClick={(e) => e.stopPropagation()}
+          <span
+            className="tree-node__title"
+            style={{
+              fontWeight: isSelected || isMoveTargetSelected ? 600 : 500,
+              color: isMoveTargetExcluded && movePickMode
+                ? "var(--color-text-muted)"
+                : isSelected || isMoveTargetSelected
+                ? "var(--color-text-primary)"
+                : "var(--color-text-secondary)",
+            }}
+            title={node.title}
           >
+            {node.title}
+            {isMovingNode && (
+              <span style={{ marginLeft: "0.375rem", fontSize: "0.6875rem", color: "var(--color-warning)", fontWeight: 600 }}>
+                (moving)
+              </span>
+            )}
+          </span>
+
+          {hasChildren && !showActions && !movePickMode && (
+            <span className="tree-node__child-count">
+              {node.children.length}
+            </span>
+          )}
+          </div>
+
+          {isMentor && showActions && !movePickMode && (
+            <div className="tree-node__actions" onClick={(e) => e.stopPropagation()}>
             <button className="tree-action-btn" title="Add a topic inside this one" onClick={(e) => { e.stopPropagation(); onAddChild(node); }}>
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M12 5v14M5 12h14" /></svg>
               <span className="tree-action-btn__label">Add</span>
@@ -256,6 +220,7 @@ const TreeNode: React.FC<TreeNodeProps> = ({
             </button>
           </div>
         )}
+        </div>
       </div>
 
       {hasChildren && isExpanded && (

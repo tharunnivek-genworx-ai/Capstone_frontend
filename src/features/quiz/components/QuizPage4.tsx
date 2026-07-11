@@ -11,6 +11,7 @@ import QuizUnpublishConfirmModal from "./QuizUnpublishConfirmModal";
 import HintGenerationDiagnosticsPanel from "./HintGenerationDiagnosticsPanel";
 import GenerationProgressPanel from "../../generation/components/GenerationProgressPanel";
 import { useGenerationProgress } from "../../generation/hooks/useGenerationProgress";
+import { useGenerationRunResume } from "../../generation/hooks/useGenerationRunResume";
 
 interface QuizPage4Props {
   qz: UseQuizReturn;
@@ -24,9 +25,17 @@ const QuizPage4: React.FC<QuizPage4Props> = ({ qz, onPageChange }) => {
     questionText: string;
   } | null>(null);
   const [showRegenerateAllHintsModal, setShowRegenerateAllHintsModal] = useState(false);
+  const showHintGenerationUi =
+    qz.isGeneratingHints ||
+    (qz.generationRunFailed && qz.failedGenerationPipeline === "hint");
   const hintGenerationProgress = useGenerationProgress(
     qz.generationProgressSessionId,
-    qz.isGeneratingHints,
+    showHintGenerationUi,
+  );
+  const hintRunResume = useGenerationRunResume(
+    qz.generationRunFailed && qz.failedGenerationPipeline === "hint"
+      ? qz.activeGenerationRunId
+      : null,
   );
 
   if (qz.isLoadingQuiz || (qz.isViewingHistoryQuiz && qz.isLoadingHistoryQuiz)) {
@@ -37,22 +46,22 @@ const QuizPage4: React.FC<QuizPage4Props> = ({ qz, onPageChange }) => {
     );
   }
 
-  if (!qz.quiz && qz.isGeneratingHints) {
+  if (showHintGenerationUi) {
     return (
       <GenerationProgressPanel
         title="Generating hints"
-        subtitle="The AI is writing hints for your quiz questions. This may take a minute."
+        subtitle={
+          qz.isGeneratingHints && !qz.generationRunFailed
+            ? (qz.quiz ? "The AI is updating hints for your quiz questions." : "The AI is writing hints for your quiz questions. This may take a minute.")
+            : "Hint generation failed. You can resume from the last saved checkpoint."
+        }
         progress={hintGenerationProgress}
-      />
-    );
-  }
-
-  if (qz.isGeneratingHints) {
-    return (
-      <GenerationProgressPanel
-        title="Generating hints"
-        subtitle="The AI is updating hints for your quiz questions."
-        progress={hintGenerationProgress}
+        failedRunId={qz.generationRunFailed ? qz.activeGenerationRunId : null}
+        resumable={hintRunResume.resumable}
+        secondsUntilRetry={hintRunResume.secondsUntilRetry}
+        isResuming={qz.isResumingFailedGeneration}
+        onResume={qz.handleResumeFailedGeneration}
+        onDismissFailed={qz.handleDismissFailedGeneration}
       />
     );
   }

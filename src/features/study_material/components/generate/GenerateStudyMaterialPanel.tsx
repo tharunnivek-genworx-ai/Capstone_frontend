@@ -1,46 +1,52 @@
 // GenerateStudyMaterialPanel.tsx
 import { useCallback, useState } from "react";
-import { BookOpen } from "lucide-react";
+import ModalPortal from "../../../../components/ModalPortal";
 import "../../styles/generateStudyMaterial.css";
 import type { NodeTreeNode, EffectiveInstructionPart } from "../../../spaces/types/node.types";
 import type { UseStudyMaterialReturn } from "../../hooks/useStudyMaterial";
-import type { InstructionMode } from "./TeachingLineSelector";
-import SubtopicDefaultSection from "./SubtopicDefaultSection";
-import TeachingLineSelector from "./TeachingLineSelector";
-import InstructionContextPanel from "./InstructionContextPanel";
-import InstructionPreviewAccordion from "./InstructionPreviewAccordion";
-import GenerateActionBar from "./GenerateActionBar";
+import type { InstructionMode } from "./instructionMode.types";
+import GenerateSetupPanel from "./GenerateSetupPanel";
 
 export interface GenerateStudyMaterialPanelProps {
   node: NodeTreeNode;
-
-  // ── Instruction editing state (owned by NodeDetailPanel) ──────────────
   mode: InstructionMode;
   onModeChange: (m: InstructionMode) => void;
   modeText: string;
   onModeTextChange: (text: string) => void;
   branchDefault: string;
   onBranchDefaultChange: (val: string) => void;
-
-  // ── Derived / computed ────────────────────────────────────────────────
   previewParts: EffectiveInstructionPart[];
-
-  // ── Save / discard ────────────────────────────────────────────────────
   isSaving: boolean;
   showSavedConfirm: boolean;
   onSave: () => void;
-  /** Resets local instruction state back to the last-saved node values. */
   onDiscard: () => void;
-
-  // ── Navigation ────────────────────────────────────────────────────────
   onNavigateToNode: (nodeId: string) => void;
-
-  // ── Study material generation state + handlers ────────────────────────
   sm: UseStudyMaterialReturn;
-
-  // ── Modal openers ────────────────────────────────────────────────────
   onOpenRefModal: () => void;
   onOpenMediaModal: () => void;
+  isWaitingForGenerateAll?: boolean;
+}
+
+function detectSavedMode(node: NodeTreeNode): InstructionMode {
+  if ((node.node_specific_instruction ?? "").trim()) return "replace";
+  if ((node.node_additive_instruction ?? "").trim()) return "extend";
+  return "inherit";
+}
+
+function getSavedModeText(node: NodeTreeNode, savedMode: InstructionMode): string {
+  if (savedMode === "replace") return (node.node_specific_instruction ?? "").trim();
+  if (savedMode === "extend") return (node.node_additive_instruction ?? "").trim();
+  return "";
+}
+
+function isApproachDirty(
+  node: NodeTreeNode,
+  mode: InstructionMode,
+  modeText: string
+): boolean {
+  const savedMode = detectSavedMode(node);
+  if (mode !== savedMode) return true;
+  return modeText.trim() !== getSavedModeText(node, savedMode);
 }
 
 export default function GenerateStudyMaterialPanel({
@@ -53,42 +59,28 @@ export default function GenerateStudyMaterialPanel({
   onBranchDefaultChange,
   previewParts,
   isSaving,
-  showSavedConfirm,
   onSave,
   onDiscard,
-  onNavigateToNode,
   sm,
   onOpenRefModal,
   onOpenMediaModal,
+  isWaitingForGenerateAll = false,
 }: GenerateStudyMaterialPanelProps) {
-  const [isTeachingStyleExpanded, setIsTeachingStyleExpanded] = useState(true);
   const [showNoInstructionWarning, setShowNoInstructionWarning] = useState(false);
 
-  const handleOpenExisting = useCallback(() => sm.setCurrentPage(2), [sm]);
-  const handleRegenerate = useCallback(
-    () => sm.setShowRegenerateConfirmModal(true),
-    [sm]
-  );
+  const branchDefaultDirty =
+    branchDefault.trim() !== (node.tree_default_instruction ?? "").trim();
+  const approachDirty = isApproachDirty(node, mode, modeText);
 
-  const handleLocalModeChange = useCallback(
-    (m: InstructionMode) => {
-      onModeChange(m);
-      if (m === "extend" || m === "replace") {
-        setIsTeachingStyleExpanded(true);
-        setTimeout(() => {
-          const textareaId = m === "extend" ? "gsm-extend-textarea" : "gsm-replace-textarea";
-          document.getElementById(textareaId)?.focus();
-        }, 180);
-      }
-    },
-    [onModeChange]
-  );
+  const handleOpenExisting = useCallback(() => sm.setCurrentPage(2), [sm]);
 
   const handleGenerateClick = useCallback(() => {
+    if (isWaitingForGenerateAll && !sm.isGenerating) return;
     const hasInherited = previewParts.some(
       (p) => p.type === "inherited" || p.type === "branch-default"
     );
-    const hasLocal = (mode === "extend" || mode === "replace") && modeText.trim().length > 0;
+    const hasLocal =
+      (mode === "extend" || mode === "replace") && modeText.trim().length > 0;
     const hasBranchDefault = branchDefault.trim().length > 0;
     const hasAnyInstruction = hasInherited || hasLocal || hasBranchDefault;
 
@@ -97,24 +89,31 @@ export default function GenerateStudyMaterialPanel({
     } else {
       void sm.handleGenerateStudyMaterial();
     }
-  }, [previewParts, mode, modeText, branchDefault, sm]);
+  }, [previewParts, mode, modeText, branchDefault, sm, isWaitingForGenerateAll]);
 
   const handleContinueFromWarning = useCallback(() => {
+    if (isWaitingForGenerateAll && !sm.isGenerating) return;
     setShowNoInstructionWarning(false);
     void sm.handleGenerateStudyMaterial();
-  }, [sm]);
+  }, [sm, isWaitingForGenerateAll]);
+
+  const handleRegenerate = useCallback(() => {
+    if (isWaitingForGenerateAll && !sm.isGenerating) return;
+    sm.setShowRegenerateConfirmModal(true);
+  }, [sm, isWaitingForGenerateAll]);
 
   const handleAddInstructionFromWarning = useCallback(() => {
     setShowNoInstructionWarning(false);
     onModeChange("extend");
-    setIsTeachingStyleExpanded(true);
     setTimeout(() => {
       document.getElementById("gsm-extend-textarea")?.focus();
-    }, 180);
+      document.getElementById("gsm-approach-card")?.scrollIntoView({
+        behavior: "smooth",
+        block: "center",
+      });
+    }, 50);
   }, [onModeChange]);
 
-  // Instruction-change banner is shown whenever the node's effective
-  // instruction has shifted (e.g. after a tree-move).
   const instructionChangeBanner = sm.showInstructionChangeBanner ? (
     <div className="study-material-instruction-change-banner">
       <span>
@@ -143,168 +142,46 @@ export default function GenerateStudyMaterialPanel({
 
   return (
     <div className="gsm-page">
-      {/* Top-of-scroll instruction change banner */}
       {instructionChangeBanner}
 
-      {/* ── Main card ─────────────────────────────────────────────────── */}
-      <div className="gsm-card">
-
-        {/* Card header: title + reference pill + topic resources */}
-        <div className="gsm-card__head">
-          <div className="gsm-card__head-left">
-            <h3 className="gsm-card__title">Generate study material</h3>
-            <p className="gsm-card__subtitle">
-              AI will write a draft for this topic. You review and edit before
-              learners see anything.
-            </p>
-          </div>
-
-          <div className="gsm-card__head-right">
-            {/* Reference PDF pill */}
-            <button
-              type="button"
-              className="gsm-ref-pill"
-              onClick={onOpenRefModal}
-              title={
-                sm.referenceMaterial
-                  ? `Reference: ${sm.referenceMaterial.title}`
-                  : "Add a reference PDF for the AI to use"
-              }
-            >
-              {sm.referenceMaterial && (
-                <span className="gsm-ref-pill__dot" aria-hidden="true" />
-              )}
-              <span>
-                {sm.referenceMaterial
-                  ? sm.referenceMaterial.title
-                  : "Add reference PDF"}
-              </span>
-            </button>
-
-            {/* Topic resources quiet link */}
-            <button
-              type="button"
-              className="gsm-resources-link"
-              onClick={onOpenMediaModal}
-              title="Images, links and videos for learners — not used by the AI generator"
-            >
-              <BookOpen size={14} aria-hidden />
-              <span>
-                {sm.nodeMedia.length > 0
-                  ? `Topic resources (${sm.nodeMedia.length})`
-                  : "Topic resources"}
-              </span>
-            </button>
-          </div>
-        </div>
-
-        {/* ── Section 1: Subtopic default (above teaching line) ─────── */}
-        <div className="gsm-subtopic">
-          <SubtopicDefaultSection
-            nodeName={node.title}
-            hasChildren={node.children.length > 0}
-            value={branchDefault}
-            onChange={onBranchDefaultChange}
-            onClear={() => onBranchDefaultChange("")}
-            onSave={onSave}
-            isSaving={isSaving}
-            isDirty={
-              branchDefault.trim() !== (node.tree_default_instruction ?? "").trim()
-            }
-            showSavedConfirm={showSavedConfirm}
-          />
-        </div>
-
-        {/* ── Section 2 + 3: Teaching line + mode tray ──────────────── */}
-        <TeachingLineSelector
-          mode={mode}
-          onChange={handleLocalModeChange}
-          previewParts={previewParts}
-          isExpanded={isTeachingStyleExpanded}
-          onToggleExpanded={() => setIsTeachingStyleExpanded((v) => !v)}
-        />
-
-        {/* ── Section 4: Mode-specific context panel (hidden when collapsed) ─ */}
-        {isTeachingStyleExpanded && (
-          <InstructionContextPanel
-            id="gsm-teaching-style-context"
-            mode={mode}
-            modeText={modeText}
-            onChange={onModeTextChange}
-            previewParts={previewParts}
-            onNavigateToNode={onNavigateToNode}
-          />
-        )}
-
-        {/* ── Section 5: Save / Discard actions row ─────────────────── */}
-        <div className="gsm-card__actions">
-          <div className="gsm-card__actions-left">
-            {showSavedConfirm && (
-              <>
-                <span className="gsm-save-dot" aria-hidden="true" />
-                <span>Teaching style saved</span>
-              </>
-            )}
-          </div>
-
-          <button
-            type="button"
-            className="gsm-btn gsm-btn--ghost"
-            onClick={onDiscard}
-            disabled={isSaving}
-          >
-            Discard changes
-          </button>
-
-          <button
-            type="button"
-            className="gsm-btn gsm-btn--primary"
-            onClick={onSave}
-            disabled={isSaving}
-          >
-            {isSaving ? (
-              <>
-                <span className="spinner" aria-hidden="true" />
-                Saving…
-              </>
-            ) : (
-              "Save teaching style"
-            )}
-          </button>
-        </div>
-      </div>
-
-      {/* ── Section 6: Instruction preview accordion (above generate) ─ */}
-      <InstructionPreviewAccordion
+      <GenerateSetupPanel
+        node={node}
         mode={mode}
+        onModeChange={onModeChange}
         modeText={modeText}
+        onModeTextChange={onModeTextChange}
         branchDefault={branchDefault}
+        onBranchDefaultChange={onBranchDefaultChange}
         previewParts={previewParts}
-        isRootTopic={!node.parent_id}
-      />
-
-      {/* ── Section 7: Generate action bar ───────────────────────────── */}
-      <GenerateActionBar
+        isSaving={isSaving}
+        onSave={onSave}
+        onDiscard={onDiscard}
+        branchDefaultDirty={branchDefaultDirty}
+        approachDirty={approachDirty}
+        referenceMaterial={sm.referenceMaterial}
+        nodeMediaCount={sm.nodeMedia.length}
         hasWorkspaceStudyMaterial={sm.hasWorkspaceStudyMaterial}
         canClearAllDrafts={sm.canClearAllDrafts}
         clearDraftsBlockReason={sm.clearDraftsBlockReason}
         isGenerating={sm.isGenerating}
         isDeletingDrafts={sm.isDeletingDrafts}
+        isWaitingForGenerateAll={isWaitingForGenerateAll && !sm.isGenerating}
+        onOpenRefModal={onOpenRefModal}
+        onOpenMediaModal={onOpenMediaModal}
         onOpenExisting={handleOpenExisting}
         onGenerate={handleGenerateClick}
         onRegenerate={handleRegenerate}
       />
 
-      {/* No-Instruction Warning Modal */}
       {showNoInstructionWarning && (
-        <>
+        <ModalPortal>
           <div
             onClick={() => setShowNoInstructionWarning(false)}
             style={{
               position: "fixed",
               inset: 0,
               background: "rgba(0,0,0,0.65)",
-              zIndex: 100,
+              zIndex: 120,
               backdropFilter: "blur(4px)",
             }}
           />
@@ -315,12 +192,15 @@ export default function GenerateStudyMaterialPanel({
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
-              zIndex: 110,
+              zIndex: 130,
               pointerEvents: "none",
             }}
           >
             <div
               className="animate-fade-in"
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="gsm-no-instruction-warning-title"
               style={{
                 pointerEvents: "auto",
                 width: "min(440px, 95vw)",
@@ -337,14 +217,30 @@ export default function GenerateStudyMaterialPanel({
                   borderBottom: "1px solid var(--color-border)",
                 }}
               >
-                <h2 style={{ margin: 0, fontSize: "1rem", fontWeight: 700, color: "var(--color-text-primary)" }}>
+                <h2
+                  id="gsm-no-instruction-warning-title"
+                  style={{
+                    margin: 0,
+                    fontSize: "1rem",
+                    fontWeight: 700,
+                    color: "var(--color-text-primary)",
+                  }}
+                >
                   Generate without instructions?
                 </h2>
               </div>
 
               <div style={{ padding: "1.5rem" }}>
-                <p style={{ fontSize: "0.875rem", color: "var(--color-text-secondary)", margin: "0 0 1.5rem", lineHeight: 1.6 }}>
-                  You have not set any teaching style instructions for this topic or section. The AI will write a generic draft.
+                <p
+                  style={{
+                    fontSize: "0.875rem",
+                    color: "var(--color-text-secondary)",
+                    margin: "0 0 1.5rem",
+                    lineHeight: 1.6,
+                  }}
+                >
+                  You haven&apos;t set any teaching instructions for this topic or
+                  section. The AI will write a generic draft.
                 </p>
 
                 <div style={{ display: "flex", gap: "0.75rem" }}>
@@ -362,13 +258,13 @@ export default function GenerateStudyMaterialPanel({
                     className="btn-primary"
                     style={{ flex: 1 }}
                   >
-                    Add instruction
+                    Add a note
                   </button>
                 </div>
               </div>
             </div>
           </div>
-        </>
+        </ModalPortal>
       )}
     </div>
   );

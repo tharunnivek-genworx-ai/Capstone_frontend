@@ -452,6 +452,7 @@ const TopicTree: React.FC<TopicTreeProps> = ({
         style={{
           flex: 1,
           overflowY: "auto",
+          overflowX: "auto",
           padding: "0.625rem 0.5rem 1rem",
         }}
       >

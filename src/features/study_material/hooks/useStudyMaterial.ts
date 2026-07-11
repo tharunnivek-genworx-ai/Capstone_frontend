@@ -20,6 +20,17 @@ import type {
 import { studyMaterialService } from "../services/studyMaterialService";
 import { referenceMaterialService } from "../services/referenceMaterialService";
 import { generationJobService } from "../../generation/services/generationProgressService";
+import type { GenerationPipeline } from "../../generation/types/generationProgress.types";
+import {
+  patchClearFailedGenerationRun,
+  patchForGenerationJobFailure,
+  patchForGenerationJobStart,
+  patchForGenerationJobSuccess,
+} from "../../generation/utils/generationRunState";
+import {
+  extractResumeErrorDetail,
+  GenerationJobFailedError,
+} from "../../generation/utils/generationJobErrors";
 import {
   computeShouldShowHistoryHub,
   partitionHistoryVersions,
@@ -75,6 +86,10 @@ export interface UseStudyMaterialReturn {
   activeVersion: StudyMaterialVersionOut | null;
   isGenerating: boolean;
   generationProgressSessionId: string | null;
+  activeGenerationRunId: string | null;
+  generationRunFailed: boolean;
+  failedGenerationPipeline: GenerationPipeline | null;
+  isResumingFailedGeneration: boolean;
   referenceMaterial: ReferenceMaterialOut | null;
   nodeMedia: NodeMediaOut[];
   isLoadingGenerationSource: boolean;
@@ -170,6 +185,8 @@ export interface UseStudyMaterialReturn {
 
   // ── Handlers ─────────────────────────────────────────────────────────
   handleGenerateStudyMaterial: () => Promise<void>;
+  handleResumeFailedGeneration: () => Promise<void>;
+  handleDismissFailedGeneration: () => void;
   handleRegenerateStudyMaterialFresh: () => Promise<void>;
   runFeedbackAction: (mode: StudyMaterialFeedbackMode, feedback: string) => Promise<void>;
   handleManualEditSave: (content: string) => Promise<void>;
@@ -267,6 +284,7 @@ export function useStudyMaterial({
   }, []);
 
   const isViewingNode = (nodeId: string) => currentNodeIdRef.current === nodeId;
+  const [isResumingFailedGeneration, setIsResumingFailedGeneration] = useState(false);
   const refreshVersionHistoryRef = useRef<(nodeId: string) => Promise<VersionHistoryLists | null>>(
     async () => null,
   );
@@ -283,6 +301,9 @@ export function useStudyMaterial({
   const activeVersion = studyState?.activeVersion ?? null;
   const isGenerating = studyState?.isGenerating ?? false;
   const generationProgressSessionId = studyState?.generationProgressSessionId ?? null;
+  const activeGenerationRunId = studyState?.activeGenerationRunId ?? null;
+  const generationRunFailed = studyState?.generationRunFailed ?? false;
+  const failedGenerationPipeline = studyState?.failedGenerationPipeline ?? null;
   const referenceMaterial = studyState?.referenceMaterial ?? null;
   const currentEffectiveInstruction = node?.effective_instruction ?? "";
 
@@ -599,11 +620,15 @@ export function useStudyMaterial({
       .catch(() => {/* non-critical */ });
   }, [node?.node_id, currentPage, studyMaterialContent, isGenerating, isMentor, patchNodeStudyState]);
 
-  // Recover polling when returning to a node with an in-flight generation run.
+  // Detect an in-flight or resumable failed async generate for this node (manual click only).
   useEffect(() => {
-    if (!node || !isMentor || !isGenerating || currentPage !== 2) return;
+    if (!node || !isMentor) return;
     if (generatingNodeIds.has(node.node_id)) return;
-    if (generationProgressSessionId) return;
+    if (generationProgressSessionId && isGenerating) return;
+    if (generationRunFailed && failedGenerationPipeline === "study_material") return;
+    // After generate-all (inline) the draft is already in state — ignore stale
+    // RUNNING rows left by a race with manual /generate on the same node.
+    if (hasTriggeredGeneration && activeVersion) return;
     const nodeId = node.node_id;
     let cancelled = false;
     generationJobService
@@ -611,20 +636,41 @@ export function useStudyMaterial({
       .then(async (active) => {
         if (cancelled) return;
         if (!active?.run_id) {
+          if (isGenerating) {
+            patchNodeStudyState(nodeId, {
+              isGenerating: false,
+              ...patchClearFailedGenerationRun(),
+            });
+          }
+          return;
+        }
+        const runId = active.run_id;
+        if (active.status === "failed") {
           patchNodeStudyState(nodeId, {
-            isGenerating: false,
-            generationProgressSessionId: null,
-            activeGenerationRunId: null,
+            currentPage: 2,
+            hasTriggeredGeneration: true,
+            ...patchForGenerationJobFailure(
+              new GenerationJobFailedError("Generation failed.", runId),
+              runId,
+              "study_material",
+            ),
           });
           return;
         }
         patchNodeStudyState(nodeId, {
-          generationProgressSessionId: active.run_id,
-          activeGenerationRunId: active.run_id,
+          currentPage: 2,
+          isGenerating: true,
+          generationRunFailed: false,
+          failedGenerationPipeline: null,
+          generationProgressSessionId: runId,
+          activeGenerationRunId: runId,
+          hasTriggeredGeneration: true,
         });
+        setProcessingLabel("Generating study material");
+        let resumableFailure = false;
         try {
-          await generationJobService.waitForCompletion(active.run_id);
-          const result = await generationJobService.getResult(active.run_id);
+          await generationJobService.waitForCompletion(runId);
+          const result = await generationJobService.getResult(runId);
           if (result.study_material_generate) {
             applyVersion(
               nodeId,
@@ -640,16 +686,25 @@ export function useStudyMaterial({
             await refreshVersionHistory(nodeId);
             await refreshMentorUiStateRef.current(nodeId, null);
           }
-        } catch {
-          /* leave isGenerating cleared below */
+          patchNodeStudyState(nodeId, patchForGenerationJobSuccess());
+        } catch (err) {
+          const failure = patchForGenerationJobFailure(err, runId, "study_material");
+          if (failure.generationRunFailed) {
+            resumableFailure = true;
+            patchNodeStudyState(nodeId, {
+              currentPage: 2,
+              hasTriggeredGeneration: true,
+              ...failure,
+            });
+          }
         } finally {
           if (!cancelled) {
-            patchNodeStudyState(nodeId, {
-              isGenerating: false,
-              generationProgressSessionId: null,
-              activeGenerationRunId: null,
-              hasTriggeredGeneration: true,
-            });
+            if (!resumableFailure) {
+              patchNodeStudyState(nodeId, patchForGenerationJobSuccess());
+            }
+            if (isViewingNode(nodeId)) {
+              setProcessingLabel(null);
+            }
           }
         }
       })
@@ -657,7 +712,17 @@ export function useStudyMaterial({
     return () => {
       cancelled = true;
     };
-  }, [node?.node_id, isMentor, isGenerating, currentPage, generationProgressSessionId, patchNodeStudyState]);
+  }, [
+    node?.node_id,
+    isMentor,
+    isGenerating,
+    generationProgressSessionId,
+    generationRunFailed,
+    failedGenerationPipeline,
+    hasTriggeredGeneration,
+    activeVersion,
+    patchNodeStudyState,
+  ]);
 
   // Load version history on page 2 (once per node/page — not on every activeVersion change)
   useEffect(() => {
@@ -1008,20 +1073,22 @@ export function useStudyMaterial({
     if (!node || isGenerating) return;
     const nodeId = node.node_id;
     generatingNodeIds.add(nodeId);
+    let latestRunId: string | null = null;
     patchNodeStudyState(nodeId, {
       hasTriggeredGeneration: true,
       currentPage: 2,
       isGenerating: true,
-      generationProgressSessionId: null,
-      activeGenerationRunId: null,
+      ...patchForGenerationJobStart(),
     });
     setProcessingLabel("Generating study material");
     try {
+      await generationJobService.waitForResourceIdle(nodeId);
       const { result } = await generationJobService.runJob(
         () => studyMaterialService.startGenerate(nodeId, {
           reference_material_id: referenceMaterial?.material_id ?? null,
         }),
         (progress) => {
+          latestRunId = progress.session_id;
           patchNodeStudyState(nodeId, {
             generationProgressSessionId: progress.session_id,
             activeGenerationRunId: progress.session_id,
@@ -1035,21 +1102,24 @@ export function useStudyMaterial({
         await refreshVersionHistory(nodeId);
         await refreshMentorUiStateRef.current(nodeId, null);
       }
-      patchNodeStudyState(nodeId, {
-        isGenerating: false,
-        generationProgressSessionId: null,
-        activeGenerationRunId: null,
-      });
+      patchNodeStudyState(nodeId, patchForGenerationJobSuccess());
       toast.success(`Study material saved as ${version.display_label}.`);
     } catch (err) {
       toast.error(extractErrorDetail(err));
-      patchNodeStudyState(nodeId, {
-        currentPage: 1,
-        hasTriggeredGeneration: false,
-        isGenerating: false,
-        generationProgressSessionId: null,
-        activeGenerationRunId: null,
-      });
+      const failure = patchForGenerationJobFailure(err, latestRunId, "study_material");
+      if (failure.generationRunFailed) {
+        patchNodeStudyState(nodeId, {
+          currentPage: 2,
+          hasTriggeredGeneration: true,
+          ...failure,
+        });
+      } else {
+        patchNodeStudyState(nodeId, {
+          currentPage: 1,
+          hasTriggeredGeneration: false,
+          ...failure,
+        });
+      }
     } finally {
       generatingNodeIds.delete(nodeId);
       if (isViewingNode(nodeId)) {
@@ -1062,6 +1132,7 @@ export function useStudyMaterial({
     if (!node || isGenerating || isDeletingDrafts) return;
     const nodeId = node.node_id;
     generatingNodeIds.add(nodeId);
+    let latestRunId: string | null = null;
     setIsDeletingDrafts(true);
     setShowRegenerateConfirmModal(false);
     setFeedbackModalMode(null);
@@ -1082,17 +1153,18 @@ export function useStudyMaterial({
       isGenerating: true,
       studyMaterialContent: null,
       activeVersion: null,
-      generationProgressSessionId: null,
-      activeGenerationRunId: null,
+      ...patchForGenerationJobStart(),
     });
     setProcessingLabel("Generating study material");
     try {
+      await generationJobService.waitForResourceIdle(nodeId);
       await studyMaterialService.clearAllDrafts(nodeId);
       const { result } = await generationJobService.runJob(
         () => studyMaterialService.startGenerate(nodeId, {
           reference_material_id: referenceMaterial?.material_id ?? null,
         }),
         (progress) => {
+          latestRunId = progress.session_id;
           patchNodeStudyState(nodeId, {
             generationProgressSessionId: progress.session_id,
             activeGenerationRunId: progress.session_id,
@@ -1110,25 +1182,29 @@ export function useStudyMaterial({
         // button on the new version, which then 409s when clicked.
         await refreshMentorUiStateRef.current(nodeId, null);
       }
-      patchNodeStudyState(nodeId, {
-        isGenerating: false,
-        generationProgressSessionId: null,
-        activeGenerationRunId: null,
-      });
+      patchNodeStudyState(nodeId, patchForGenerationJobSuccess());
       toast.success(`Study material regenerated as ${version.display_label}.`);
     } catch (err) {
       toast.error(extractErrorDetail(err));
-      patchNodeStudyState(nodeId, {
-        currentPage: 1,
-        isGenerating: false,
-        generationProgressSessionId: null,
-        activeGenerationRunId: null,
-        hasTriggeredGeneration: false,
-        studyMaterialContent: null,
-        activeVersion: null,
-      });
-      if (isViewingNode(nodeId)) {
-        await refreshClearDraftsEligibility(nodeId);
+      const failure = patchForGenerationJobFailure(err, latestRunId, "study_material");
+      if (failure.generationRunFailed) {
+        patchNodeStudyState(nodeId, {
+          currentPage: 2,
+          hasTriggeredGeneration: true,
+          ...failure,
+        });
+      } else {
+        patchNodeStudyState(nodeId, {
+          currentPage: 1,
+          isGenerating: false,
+          hasTriggeredGeneration: false,
+          studyMaterialContent: null,
+          activeVersion: null,
+          ...failure,
+        });
+        if (isViewingNode(nodeId)) {
+          await refreshClearDraftsEligibility(nodeId);
+        }
       }
     } finally {
       generatingNodeIds.delete(nodeId);
@@ -1147,17 +1223,18 @@ export function useStudyMaterial({
     }
     const nodeId = node.node_id;
     generatingNodeIds.add(nodeId);
+    let latestRunId: string | null = null;
     patchNodeStudyState(nodeId, {
       isGenerating: true,
       currentPage: 2,
-      generationProgressSessionId: null,
-      activeGenerationRunId: null,
+      ...patchForGenerationJobStart(),
     });
     if (isViewingNode(nodeId)) {
       setFeedbackModalMode(null);
     }
     setProcessingLabel(mode === "regenerate" ? "Regenerating study material" : "Improving study material");
     try {
+      await generationJobService.waitForResourceIdle(nodeId);
       const { result } = await generationJobService.runJob(
         () => (mode === "regenerate"
           ? studyMaterialService.startRegenerate(nodeId, {
@@ -1167,6 +1244,7 @@ export function useStudyMaterial({
             mentor_feedback: feedback,
           })),
         (progress) => {
+          latestRunId = progress.session_id;
           patchNodeStudyState(nodeId, {
             generationProgressSessionId: progress.session_id,
             activeGenerationRunId: progress.session_id,
@@ -1197,19 +1275,89 @@ export function useStudyMaterial({
       if (isViewingNode(nodeId)) {
         setFeedbackModalMode(null);
       }
+      patchNodeStudyState(nodeId, patchForGenerationJobSuccess());
     } catch (err) {
       toast.error(extractErrorDetail(err));
+      const failure = patchForGenerationJobFailure(err, latestRunId, "study_material");
+      patchNodeStudyState(nodeId, failure.generationRunFailed
+        ? { currentPage: 2, hasTriggeredGeneration: true, ...failure }
+        : failure);
     } finally {
-      patchNodeStudyState(nodeId, {
-        isGenerating: false,
-        generationProgressSessionId: null,
-        activeGenerationRunId: null,
-      });
       generatingNodeIds.delete(nodeId);
       if (isViewingNode(nodeId)) {
         setProcessingLabel(null);
       }
     }
+  };
+
+  const applyStudyMaterialRunResult = async (
+    nodeId: string,
+    result: Awaited<ReturnType<typeof generationJobService.getResult>>,
+  ) => {
+    if (result.study_material_generate) {
+      const version = result.study_material_generate as unknown as StudyMaterialVersionOut;
+      applyVersion(nodeId, version);
+      if (isViewingNode(nodeId)) {
+        await refreshVersionHistory(nodeId);
+        await refreshMentorUiStateRef.current(nodeId, null);
+      }
+      toast.success(`Study material saved as ${version.display_label}.`);
+      return;
+    }
+    const res = result.study_material_feedback as StudyMaterialFeedbackResponse | null | undefined;
+    if (res?.new_version) {
+      applyVersion(nodeId, res.new_version);
+      if (isViewingNode(nodeId)) {
+        await refreshVersionHistory(nodeId);
+        await refreshMentorUiStateRef.current(nodeId, null);
+      }
+      toast.success(`Saved as ${res.new_version.display_label}.`);
+    }
+  };
+
+  const handleResumeFailedGeneration = async () => {
+    if (!node || isResumingFailedGeneration || failedGenerationPipeline !== "study_material") return;
+    const runId = activeGenerationRunId ?? generationProgressSessionId;
+    if (!runId) return;
+
+    const nodeId = node.node_id;
+    generatingNodeIds.add(nodeId);
+    setIsResumingFailedGeneration(true);
+    patchNodeStudyState(nodeId, {
+      generationRunFailed: false,
+      isGenerating: true,
+      generationProgressSessionId: runId,
+      activeGenerationRunId: runId,
+    });
+    setProcessingLabel("Resuming study material generation");
+    try {
+      const { result } = await generationJobService.resumeJob(runId, (progress) => {
+        patchNodeStudyState(nodeId, {
+          generationProgressSessionId: progress.session_id,
+          activeGenerationRunId: progress.session_id,
+        });
+      });
+      await applyStudyMaterialRunResult(nodeId, result);
+      patchNodeStudyState(nodeId, patchForGenerationJobSuccess());
+    } catch (err) {
+      toast.error(extractResumeErrorDetail(err));
+      patchNodeStudyState(nodeId, {
+        currentPage: 2,
+        hasTriggeredGeneration: true,
+        ...patchForGenerationJobFailure(err, runId, "study_material"),
+      });
+    } finally {
+      generatingNodeIds.delete(nodeId);
+      setIsResumingFailedGeneration(false);
+      if (isViewingNode(nodeId)) {
+        setProcessingLabel(null);
+      }
+    }
+  };
+
+  const handleDismissFailedGeneration = () => {
+    if (!node) return;
+    patchNodeStudyState(node.node_id, patchClearFailedGenerationRun());
   };
 
   const handleManualEditSave = async (content: string) => {
@@ -1324,30 +1472,58 @@ export function useStudyMaterial({
     setIsArchivingVersion(true);
     try {
       await studyMaterialService.archive(nodeId, versionId);
-      const wasActive = activeVersion?.version_id === versionId;
-      await refreshVersionHistory(nodeId);
-      if (wasActive) {
-        const nextActive = await studyMaterialService.getActiveVersion(nodeId);
-        if (nextActive) {
-          patchNodeStudyState(nodeId, {
-            activeVersion: nextActive,
-            studyMaterialContent: nextActive.content,
+      const versionLists = await refreshVersionHistory(nodeId);
+
+      setViewingVersionId(null);
+      setShowArchivedPanel(false);
+
+      if (!versionLists) {
+        await refreshMentorUiStateRef.current(nodeId, null);
+        toast.success("Draft moved to archive.");
+        return;
+      }
+
+      const uiState = await studyMaterialService.getMentorUiState(nodeId, null);
+      const willShowHistoryHub = computeShouldShowHistoryHub(
+        versionLists.history,
+        versionLists.archived,
+        uiState,
+      );
+
+      if (willShowHistoryHub) {
+        patchNodeStudyState(nodeId, {
+          activeVersion: null,
+          studyMaterialContent: null,
+        });
+      } else {
+        const partitions = partitionHistoryVersions(
+          versionLists.history,
+          versionLists.archived,
+        );
+        const remainingDrafts = partitions.workspaceDrafts.filter((v) => !v.is_archived);
+
+        let nextVersion = await studyMaterialService.getActiveVersion(nodeId);
+        if (!nextVersion && remainingDrafts.length > 0) {
+          nextVersion = await studyMaterialService.activate(nodeId, {
+            version_id: remainingDrafts[0].version_id,
           });
-          setViewingVersionId(null);
-          setShowArchivedPanel(false);
+          await refreshVersionHistory(nodeId);
+        }
+
+        if (nextVersion) {
+          patchNodeStudyState(nodeId, {
+            activeVersion: nextVersion,
+            studyMaterialContent: nextVersion.content,
+          });
         } else {
-          setViewingVersionId(null);
-          setShowArchivedPanel(false);
           patchNodeStudyState(nodeId, {
             activeVersion: null,
             studyMaterialContent: null,
           });
         }
-      } else if (viewingVersionId === versionId) {
-        setShowArchivedPanel(true);
-        patchNodeStudyState(nodeId, { studyMaterialContent: null });
       }
-      await refreshMentorUiStateRef.current(nodeId, wasActive ? versionId : viewingVersionId);
+
+      await refreshMentorUiStateRef.current(nodeId, null);
       toast.success("Draft moved to archive.");
     } catch (err) {
       toast.error(extractErrorDetail(err));
@@ -1588,6 +1764,10 @@ export function useStudyMaterial({
     activeVersion,
     isGenerating,
     generationProgressSessionId,
+    activeGenerationRunId,
+    generationRunFailed,
+    failedGenerationPipeline,
+    isResumingFailedGeneration,
     referenceMaterial,
     nodeMedia,
     isLoadingGenerationSource,
@@ -1683,6 +1863,8 @@ export function useStudyMaterial({
 
     // Handlers
     handleGenerateStudyMaterial,
+    handleResumeFailedGeneration,
+    handleDismissFailedGeneration,
     handleRegenerateStudyMaterialFresh,
     runFeedbackAction,
     handleManualEditSave,

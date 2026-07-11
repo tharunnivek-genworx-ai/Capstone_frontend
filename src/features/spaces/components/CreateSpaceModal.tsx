@@ -6,8 +6,13 @@
 
 import React, { useState, useEffect } from "react";
 import toast from "react-hot-toast";
-import { departmentService } from "../../department_creation/services/departmentService";
-import type { DepartmentOut } from "../../department_creation/types/department.types";
+import { mentorService } from "../services/mentorService";
+import {
+  formatDepartmentLabel,
+  readStoredMentorDepartment,
+  storeMentorDepartment,
+  type MentorDepartment,
+} from "../utils/mentorDepartment";
 import type { SpaceCreateRequest, SpaceResponse } from "../types/space.types";
 
 interface CreateSpaceModalProps {
@@ -23,28 +28,40 @@ const CreateSpaceModal: React.FC<CreateSpaceModalProps> = ({
 }) => {
   const [spaceName, setSpaceName] = useState("");
   const [description, setDescription] = useState("");
-  const [departmentId, setDepartmentId] = useState("");
-  const [departments, setDepartments] = useState<DepartmentOut[]>([]);
+  const [mentorDepartment, setMentorDepartment] = useState<MentorDepartment | null>(
+    () => readStoredMentorDepartment()
+  );
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [loadingDepts, setLoadingDepts] = useState(true);
+  const [loadingProfile, setLoadingProfile] = useState(true);
+  const [profileError, setProfileError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    const loadDepts = async () => {
+    const loadMentorDepartment = async () => {
+      setProfileError(null);
       try {
-        const res = await departmentService.listDepartments(1, 100);
-        setDepartments(res.items);
-        if (res.items.length > 0) {
-          setDepartmentId(res.items[0].departmentid);
-        }
+        const dept = await mentorService.getProfile();
+        storeMentorDepartment(dept);
+        setMentorDepartment(dept);
       } catch {
-        toast.error("Could not load departments.");
+        const cached = readStoredMentorDepartment();
+        if (cached) {
+          setMentorDepartment(cached);
+        } else {
+          setProfileError(
+            "Could not load your assigned department. Please sign out and sign in again."
+          );
+          toast.error("Could not load your department.");
+        }
       } finally {
-        setLoadingDepts(false);
+        setLoadingProfile(false);
       }
     };
-    loadDepts();
+    loadMentorDepartment();
   }, []);
+
+  const departmentId = mentorDepartment?.departmentid ?? "";
+  const departmentLabel = formatDepartmentLabel(mentorDepartment);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -201,12 +218,12 @@ const CreateSpaceModal: React.FC<CreateSpaceModalProps> = ({
             />
           </div>
 
-          {/* Department */}
+          {/* Department — read-only, mentor's assigned department only */}
           <div style={{ marginBottom: "1.5rem" }}>
             <label htmlFor="cs-dept" className="label">
-              Department <span style={{ color: "var(--color-danger)" }}>*</span>
+              Your Department <span style={{ color: "var(--color-danger)" }}>*</span>
             </label>
-            {loadingDepts ? (
+            {loadingProfile ? (
               <div
                 style={{
                   display: "flex",
@@ -218,28 +235,48 @@ const CreateSpaceModal: React.FC<CreateSpaceModalProps> = ({
                 }}
               >
                 <span className="spinner" style={{ borderTopColor: "var(--color-primary)", width: "1rem", height: "1rem" }} />
-                Loading departments…
+                Loading your department…
+              </div>
+            ) : profileError ? (
+              <div
+                style={{
+                  background: "rgba(239,68,68,0.1)",
+                  border: "1px solid rgba(239,68,68,0.3)",
+                  borderRadius: "var(--radius-md)",
+                  padding: "0.75rem 1rem",
+                  fontSize: "0.8125rem",
+                  color: "var(--color-danger)",
+                }}
+              >
+                {profileError}
               </div>
             ) : (
-              <select
-                id="cs-dept"
-                className="input-field"
-                value={departmentId}
-                onChange={(e) => setDepartmentId(e.target.value)}
-                required
-                style={{ cursor: "pointer" }}
-              >
-                {departments.length === 0 && (
-                  <option value="" disabled>
-                    No departments available
-                  </option>
-                )}
-                {departments.map((d) => (
-                  <option key={d.departmentid} value={d.departmentid}>
-                    {d.departmentname} ({d.departmentcode})
-                  </option>
-                ))}
-              </select>
+              <>
+                <div
+                  id="cs-dept"
+                  className="input-field"
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    minHeight: "2.75rem",
+                    cursor: "default",
+                    background: "var(--color-surface-1)",
+                    color: "var(--color-text-primary)",
+                    fontWeight: 600,
+                  }}
+                >
+                  {departmentLabel || "—"}
+                </div>
+                <p
+                  style={{
+                    margin: "0.5rem 0 0",
+                    fontSize: "0.75rem",
+                    color: "var(--color-text-muted)",
+                  }}
+                >
+                  Assigned by your administrator. You cannot create spaces in other departments.
+                </p>
+              </>
             )}
           </div>
 
@@ -283,7 +320,13 @@ const CreateSpaceModal: React.FC<CreateSpaceModalProps> = ({
               type="submit"
               className="btn-primary"
               style={{ flex: 2 }}
-              disabled={isSubmitting || !spaceName.trim() || !departmentId || loadingDepts}
+              disabled={
+                isSubmitting ||
+                !spaceName.trim() ||
+                !departmentId ||
+                loadingProfile ||
+                !!profileError
+              }
             >
               {isSubmitting ? (
                 <>
