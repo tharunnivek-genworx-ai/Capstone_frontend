@@ -2,8 +2,11 @@ import studyAgentClient from "../../../lib/studyAgentClient";
 import type { GenerationProgressOut } from "../types/generationProgress.types";
 import type {
   GenerationJobStartResponse,
+  GenerationRunActiveOut,
+  GenerationRunOut,
   GenerationRunResultOut,
 } from "../types/generationJob.types";
+import { GenerationJobFailedError } from "../utils/generationJobErrors";
 
 const POLL_INTERVAL_MS = 1200;
 const MAX_NOT_FOUND_RETRIES = 6;
@@ -32,10 +35,17 @@ export const generationJobService = {
   async getActiveRun(
     resourceId: string,
     pipeline: string,
-  ): Promise<{ run_id: string; pipeline: string; status: string; step_profile?: string | null } | null> {
-    const response = await studyAgentClient.get(
+  ): Promise<GenerationRunActiveOut | null> {
+    const response = await studyAgentClient.get<GenerationRunActiveOut | null>(
       "/generation-runs/active",
       { params: { resource_id: resourceId, pipeline } },
+    );
+    return response.data;
+  },
+
+  async getRun(runId: string): Promise<GenerationRunOut> {
+    const response = await studyAgentClient.get<GenerationRunOut>(
+      `/generation-runs/${runId}`,
     );
     return response.data;
   },
@@ -52,6 +62,19 @@ export const generationJobService = {
       `/generation-runs/${runId}/resume`,
     );
     return response.data;
+  },
+
+  async resumeJob(
+    runId: string,
+    onProgress?: (progress: GenerationProgressOut) => void,
+  ): Promise<{ runId: string; progress: GenerationProgressOut; result: GenerationRunResultOut }> {
+    await this.resumeRun(runId);
+    const progress = await this.waitForCompletion(runId, onProgress);
+    if (progress.status === "failed") {
+      throw new GenerationJobFailedError(progress.error ?? "Generation failed.", runId);
+    }
+    const result = await this.getResult(runId);
+    return { runId, progress, result };
   },
 
   async waitForCompletion(
@@ -100,7 +123,10 @@ export const generationJobService = {
     const started = await start();
     const progress = await this.waitForCompletion(started.run_id, onProgress);
     if (progress.status === "failed") {
-      throw new Error(progress.error ?? "Generation failed.");
+      throw new GenerationJobFailedError(
+        progress.error ?? "Generation failed.",
+        started.run_id,
+      );
     }
     const result = await this.getResult(started.run_id);
     return { runId: started.run_id, progress, result };

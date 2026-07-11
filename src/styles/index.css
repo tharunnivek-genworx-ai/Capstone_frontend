@@ -1174,6 +1174,66 @@ select.input-field option {
   color: var(--color-text-secondary);
 }
 
+.generation-progress--failed {
+  gap: 1rem;
+}
+
+.generation-progress__failed-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.5rem;
+  height: 2.5rem;
+  border-radius: 999px;
+  background: var(--color-warning-subtle, #fffbeb);
+  color: #b45309;
+  border: 2px solid #f59e0b;
+  font-weight: 700;
+  font-size: 1.25rem;
+  line-height: 1;
+}
+
+.generation-progress__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  justify-content: center;
+  margin-top: 0.25rem;
+}
+
+.generation-progress__action-btn {
+  min-width: 10rem;
+}
+
+.generation-progress__retry-note {
+  width: 100%;
+  margin: 0;
+  font-size: 0.8125rem;
+  color: var(--color-text-secondary);
+}
+
+.generation-progress--failed .generation-progress__subtitle {
+  color: #b45309;
+}
+
+.generation-progress__failed-prompt {
+  margin: 0;
+  font-size: 0.9375rem;
+  color: var(--color-text-primary);
+  text-align: center;
+  max-width: 28rem;
+}
+
+.generation-progress__step--interrupted .generation-progress__dot {
+  background: #fef3c7;
+  border-color: #f59e0b;
+}
+
+.generation-progress__step--interrupted .generation-progress__label {
+  color: #b45309;
+  font-weight: 600;
+}
+
 /* ─── Study material page 2 workspace ────────────────────────────── */
 .study-material-page {
   flex: 1;

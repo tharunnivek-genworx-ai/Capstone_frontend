@@ -29,6 +29,7 @@ import QuizPage3 from "../../quiz/components/QuizPage3";
 import QuizPage4 from "../../quiz/components/QuizPage4";
 import GenerationProgressPanel from "../../generation/components/GenerationProgressPanel";
 import { useGenerationProgress } from "../../generation/hooks/useGenerationProgress";
+import { useGenerationRunResume } from "../../generation/hooks/useGenerationRunResume";
 import type { InstructionMode } from "../../study_material/components/generate/instructionMode.types";
 
 // Re-export for consumers that import from here
@@ -105,10 +106,17 @@ const NodeDetailPanel: React.FC<NodeDetailPanelProps> = ({
     contentRefreshToken,
   });
 
-  const showGenerationProgress = sm.isGenerating;
+  const showGenerationProgress =
+    sm.isGenerating ||
+    (sm.generationRunFailed && sm.failedGenerationPipeline === "study_material");
   const studyGenerationProgress = useGenerationProgress(
     sm.generationProgressSessionId,
     showGenerationProgress,
+  );
+  const studyRunResume = useGenerationRunResume(
+    sm.generationRunFailed && sm.failedGenerationPipeline === "study_material"
+      ? sm.activeGenerationRunId
+      : null,
   );
 
   // ── Quiz hook ─────────────────────────────────────────────────────────────
@@ -122,6 +130,9 @@ const NodeDetailPanel: React.FC<NodeDetailPanelProps> = ({
     isGeneratingQuiz: studyState?.isGeneratingQuiz ?? false,
     isGeneratingHints: studyState?.isGeneratingHints ?? false,
     generationProgressSessionId: studyState?.generationProgressSessionId ?? null,
+    activeGenerationRunId: studyState?.activeGenerationRunId ?? null,
+    generationRunFailed: studyState?.generationRunFailed ?? false,
+    failedGenerationPipeline: studyState?.failedGenerationPipeline ?? null,
     onNodeStudyStateChange: onStudyStateChange,
     onPageChange: sm.setCurrentPage,
     onMentorProgressRefresh,
@@ -425,6 +436,12 @@ const NodeDetailPanel: React.FC<NodeDetailPanelProps> = ({
                 title={sm.processingLabel ?? "Working on study material"}
                 subtitle={`The AI is updating study content for "${node.title}". This may take a minute.`}
                 progress={studyGenerationProgress}
+                failedRunId={sm.generationRunFailed ? sm.activeGenerationRunId : null}
+                resumable={studyRunResume.resumable}
+                secondsUntilRetry={studyRunResume.secondsUntilRetry}
+                isResuming={sm.isResumingFailedGeneration}
+                onResume={sm.handleResumeFailedGeneration}
+                onDismissFailed={sm.handleDismissFailedGeneration}
               />
             ) : sm.isHistoryHubView || sm.studyMaterialContent?.trim() ? (
               <>
