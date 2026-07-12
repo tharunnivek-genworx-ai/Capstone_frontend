@@ -11,6 +11,7 @@ import {
 } from "../../study_material/hooks/useStudyMaterial";
 import { useQuiz } from "../../quiz/hooks/useQuiz";
 import type { NodeStudyState } from "../../study_material/types/studyMaterial.types";
+import type { BatchStepStatus } from "../../study_material/types/studyMaterialBatch.types";
 import StudentVisibilityBanner from "../../study_material/components/material/StudentVisibilityBanner";
 import StudyMaterialFeedbackModal from "../../study_material/components/material/StudyMaterialFeedbackModal";
 import StudyMaterialManualEditor from "../../study_material/components/material/StudyMaterialManualEditor";
@@ -65,7 +66,9 @@ interface NodeDetailPanelProps {
   onStudyStateChange?: (nodeId: string, patch: NodeStudyStatePatch) => void;
   onMentorProgressRefresh?: () => void;
   contentRefreshToken?: number;
-  /** Block manual Generate while this node is still waiting in generate-all. */
+  /** Batch step status for this node when part of an active generate-all job. */
+  batchStepStatus?: BatchStepStatus | null;
+  /** @deprecated Prefer batchStepStatus; kept for callers that only pass the waiting flag. */
   isWaitingForGenerateAll?: boolean;
 }
 
@@ -81,8 +84,13 @@ const NodeDetailPanel: React.FC<NodeDetailPanelProps> = ({
   onStudyStateChange,
   onMentorProgressRefresh,
   contentRefreshToken = 0,
+  batchStepStatus = null,
   isWaitingForGenerateAll = false,
 }) => {
+  const blockedByBatch =
+    isWaitingForGenerateAll ||
+    batchStepStatus === "pending" ||
+    batchStepStatus === "running";
   // ── Instruction editing state (stays local — not study material) ─────────
   const [isRenaming, setIsRenaming] = useState(false);
   const [renameValue, setRenameValue] = useState("");
@@ -415,7 +423,7 @@ const NodeDetailPanel: React.FC<NodeDetailPanelProps> = ({
               sm={sm}
               onOpenRefModal={() => sm.openRefModalManage()}
               onOpenMediaModal={() => sm.setShowNodeMediaModal(true)}
-              isWaitingForGenerateAll={isWaitingForGenerateAll}
+              isWaitingForGenerateAll={blockedByBatch}
             />
           </div>
         )}

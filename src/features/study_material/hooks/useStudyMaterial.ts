@@ -634,7 +634,7 @@ export function useStudyMaterial({
     if (generatingNodeIds.has(node.node_id)) return;
     if (generationProgressSessionId && isGenerating) return;
     if (generationRunFailed && failedGenerationPipeline === "study_material") return;
-    // After generate-all (inline) the draft is already in state — ignore stale
+    // After batch or manual generate the draft may already be in state — ignore stale
     // RUNNING rows left by a race with manual /generate on the same node.
     if (hasTriggeredGeneration && activeVersion) return;
     const nodeId = node.node_id;

@@ -1,58 +1,71 @@
 import studyAgentClient from "../../../lib/studyAgentClient";
 import type {
-  StudyMaterialBatchDetailOut,
-  StudyMaterialBatchEnqueueRequest,
-  StudyMaterialBatchPreviewRequest,
-  StudyMaterialBatchPreviewResponse,
-  StudyMaterialSpaceQueueOut,
+  BatchCancelResponse,
+  BatchCreateRequest,
+  BatchCreateResponse,
+  BatchDetailOut,
+  BatchPreviewRequest,
+  BatchPreviewResponse,
+  ExistingMaterialPolicy,
 } from "../types/studyMaterialBatch.types";
 
-/** Thin client for generate-all wizard. */
+function toBatchPolicy(policy: ExistingMaterialPolicy) {
+  return {
+    mode: policy === "skip" ? "skip_existing" : "regenerate_all",
+  } as const;
+}
+
+/** Thin client for poll-only generate-all batch jobs. */
 export const studyMaterialBatchService = {
   async preview(
     spaceId: string,
-    payload: StudyMaterialBatchPreviewRequest,
-  ): Promise<StudyMaterialBatchPreviewResponse> {
-    const response = await studyAgentClient.post<StudyMaterialBatchPreviewResponse>(
-      `/spaces/${spaceId}/study-material/generate-all/preview`,
+    payload: BatchPreviewRequest,
+  ): Promise<BatchPreviewResponse> {
+    const response = await studyAgentClient.post<BatchPreviewResponse>(
+      `/spaces/${spaceId}/batches/preview`,
       payload,
     );
     return response.data;
   },
 
-  async enqueue(
+  async createBatch(
     spaceId: string,
-    payload: StudyMaterialBatchEnqueueRequest,
-  ): Promise<StudyMaterialSpaceQueueOut> {
-    // Persist-only endpoint — must stay fast (Cloud Run cold start ~few seconds).
-    const response = await studyAgentClient.post<StudyMaterialSpaceQueueOut>(
-      `/spaces/${spaceId}/study-material/generate-all/enqueue`,
-      payload,
+    payload: {
+      root_node_ids: string[];
+      node_ids: string[];
+      policy: ExistingMaterialPolicy;
+    },
+  ): Promise<BatchCreateResponse> {
+    const body: BatchCreateRequest = {
+      root_node_ids: payload.root_node_ids,
+      node_ids: payload.node_ids,
+      policy: toBatchPolicy(payload.policy),
+    };
+    const response = await studyAgentClient.post<BatchCreateResponse>(
+      `/spaces/${spaceId}/batches`,
+      body,
       { timeout: 20000 },
     );
     return response.data;
   },
 
-  async getBatch(batchId: string): Promise<StudyMaterialBatchDetailOut> {
-    const response = await studyAgentClient.get<StudyMaterialBatchDetailOut>(
-      `/study-material-batches/${batchId}`,
+  async getBatch(batchId: string): Promise<BatchDetailOut> {
+    const response = await studyAgentClient.get<BatchDetailOut>(
+      `/batches/${batchId}`,
     );
     return response.data;
   },
 
-  /** Recovery / server-sequential: runs one full node inline, then returns. */
-  async advance(spaceId: string): Promise<StudyMaterialSpaceQueueOut> {
-    const response = await studyAgentClient.post<StudyMaterialSpaceQueueOut>(
-      `/spaces/${spaceId}/study-material/generation-queue/advance`,
-      undefined,
-      { timeout: 600000 },
+  async cancelBatch(batchId: string): Promise<BatchCancelResponse> {
+    const response = await studyAgentClient.post<BatchCancelResponse>(
+      `/batches/${batchId}/cancel`,
     );
     return response.data;
   },
 
-  async getQueue(spaceId: string): Promise<StudyMaterialSpaceQueueOut> {
-    const response = await studyAgentClient.get<StudyMaterialSpaceQueueOut>(
-      `/spaces/${spaceId}/study-material/generation-queue`,
+  async getActiveBatch(spaceId: string): Promise<BatchDetailOut | null> {
+    const response = await studyAgentClient.get<BatchDetailOut | null>(
+      `/spaces/${spaceId}/batches/active`,
     );
     return response.data;
   },

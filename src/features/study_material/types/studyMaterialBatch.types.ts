@@ -1,27 +1,33 @@
-export type BatchStatus = "queued" | "running" | "completed" | "failed" | "cancelled";
-
-export type BatchItemStatus =
-  | "queued"
+export type BatchJobStatus =
+  | "pending"
   | "running"
   | "completed"
   | "failed"
-  | "failed_retryable"
-  | "skipped"
   | "cancelled";
 
+export type BatchStepStatus =
+  | "pending"
+  | "running"
+  | "completed"
+  | "failed"
+  | "skipped";
+
+export type BatchPolicyMode = "skip_existing" | "regenerate_all";
+
+/** Wizard-facing policy labels (mapped to BatchPolicyMode in the service). */
 export type ExistingMaterialPolicy = "skip" | "regenerate";
 
-export interface StudyMaterialBatchPolicyIn {
-  existing_material_policy: ExistingMaterialPolicy;
-  failure_policy: "continue_on_error";
+export interface BatchPolicyIn {
+  mode: BatchPolicyMode;
   reference_material_id?: string | null;
 }
 
-export interface StudyMaterialBatchPreviewRequest {
+export interface BatchPreviewRequest {
   root_node_ids: string[];
+  node_ids?: string[];
 }
 
-export interface StudyMaterialBatchPreviewItem {
+export interface BatchPreviewItem {
   node_id: string;
   title: string;
   depth_level: number;
@@ -32,94 +38,89 @@ export interface StudyMaterialBatchPreviewItem {
   block_reason: string | null;
 }
 
-export interface StudyMaterialBatchPreviewWarningNode {
+export interface BatchPreviewWarningNode {
   node_id: string;
   title: string;
   path_titles?: string[];
 }
 
-export interface StudyMaterialBatchPreviewWarnings {
-  missing_instruction_nodes: StudyMaterialBatchPreviewWarningNode[];
-  inherits_section_default_nodes: StudyMaterialBatchPreviewWarningNode[];
+export interface BatchPreviewWarnings {
+  missing_instruction_nodes: BatchPreviewWarningNode[];
+  inherits_section_default_nodes: BatchPreviewWarningNode[];
   show_no_instruction_warning: boolean;
   show_inheritance_warning: boolean;
 }
 
-export interface StudyMaterialBatchPreviewRoot {
+export interface BatchPreviewRoot {
   node_id: string;
   title: string;
 }
 
-export interface StudyMaterialBatchPreviewResponse {
-  roots: StudyMaterialBatchPreviewRoot[];
-  items: StudyMaterialBatchPreviewItem[];
-  warnings: StudyMaterialBatchPreviewWarnings;
+export interface BatchPreviewResponse {
+  roots: BatchPreviewRoot[];
+  items: BatchPreviewItem[];
+  warnings: BatchPreviewWarnings;
 }
 
-export interface StudyMaterialBatchEnqueueRequest {
+export interface BatchCreateRequest {
   root_node_ids: string[];
-  policy: StudyMaterialBatchPolicyIn;
+  node_ids?: string[];
+  policy: BatchPolicyIn;
 }
 
-export interface BatchSummaryOut {
+export interface BatchJobOut {
   batch_id: string;
   space_id: string;
   mentor_id: string;
-  status: BatchStatus;
-  queue_position: number;
+  status: BatchJobStatus;
+  policy: BatchPolicyIn;
   selected_root_node_ids: string[];
-  total_items: number;
-  completed_items: number;
-  failed_items: number;
-  skipped_items: number;
-  current_item_id: string | null;
+  total_steps: number;
+  completed_steps: number;
+  failed_steps: number;
+  skipped_steps: number;
   created_at: string;
   updated_at: string;
+  started_at: string | null;
+  finished_at: string | null;
 }
 
-export interface BatchCurrentItemOut {
-  item_id: string;
+export interface BatchStepOut {
+  step_id: string;
+  batch_id: string;
+  position: number;
   node_id: string;
   node_title: string;
-  depth_level: number;
   path_titles: string[];
+  depth_level: number;
+  root_segment_node_id: string;
+  status: BatchStepStatus;
   generation_run_id: string | null;
   run_status: string | null;
-  status: BatchItemStatus;
   error_message?: string | null;
+  started_at: string | null;
+  completed_at: string | null;
 }
 
-export interface BatchRootSegmentProgressOut {
-  root_node_id: string;
-  root_title: string;
-  completed: number;
-  total: number;
+export interface BatchDetailOut {
+  batch: BatchJobOut;
+  steps: BatchStepOut[];
 }
 
-export interface BatchOverallProgressOut {
-  completed: number;
-  total: number;
-  failed: number;
-  skipped: number;
-}
-
-export interface StudyMaterialSpaceQueueOut {
-  running_batch: BatchSummaryOut | null;
-  recent_terminal_batch?: BatchSummaryOut | null;
-  queued_batches: BatchSummaryOut[];
-  needs_advance: boolean;
-  advance_deferred: boolean;
-  overall_progress: BatchOverallProgressOut;
-  current_root_segment: BatchRootSegmentProgressOut | null;
-  current_item: BatchCurrentItemOut | null;
-}
-
-export interface StudyMaterialBatchDetailOut {
-  batch: BatchSummaryOut;
-  items: BatchCurrentItemOut[];
-}
-
-export interface StudyMaterialBatchCancelResponse {
+export interface BatchCreateResponse {
   batch_id: string;
-  status: BatchStatus;
+  status: BatchJobStatus;
 }
+
+export interface BatchCancelResponse {
+  batch_id: string;
+  status: BatchJobStatus;
+}
+
+// Legacy aliases kept for wizard components during migration.
+export type StudyMaterialBatchPreviewRequest = BatchPreviewRequest;
+export type StudyMaterialBatchPreviewItem = BatchPreviewItem;
+export type StudyMaterialBatchPreviewWarningNode = BatchPreviewWarningNode;
+export type StudyMaterialBatchPreviewWarnings = BatchPreviewWarnings;
+export type StudyMaterialBatchPreviewRoot = BatchPreviewRoot;
+export type StudyMaterialBatchPreviewResponse = BatchPreviewResponse;
