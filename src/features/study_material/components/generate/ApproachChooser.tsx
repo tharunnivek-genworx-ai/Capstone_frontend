@@ -1,39 +1,9 @@
-import { forwardRef, useCallback } from "react";
-import { Link2, Pencil, StickyNote } from "lucide-react";
+import { forwardRef, useCallback, useEffect, useState } from "react";
 import type { InstructionMode } from "./instructionMode.types";
-
-interface ApproachOption {
-  mode: InstructionMode;
-  Icon: typeof Link2;
-  title: string;
-  caption: string;
-  recommended?: boolean;
-}
-
-const APPROACH_OPTIONS: ApproachOption[] = [
-  {
-    mode: "inherit",
-    Icon: Link2,
-    title: "Use the section's default style",
-    caption:
-      "Teaches this topic exactly the same way as the rest of this section.",
-    recommended: true,
-  },
-  {
-    mode: "extend",
-    Icon: StickyNote,
-    title: "Default style, plus a quick note",
-    caption:
-      "Keeps the default style, and adds one extra instruction just for this topic.",
-  },
-  {
-    mode: "replace",
-    Icon: Pencil,
-    title: "Write instructions just for this topic",
-    caption:
-      "Sets aside the default style and uses only what you write below, for this topic only.",
-  },
-];
+import {
+  applyDefaultFromMode,
+  deriveInstructionMode,
+} from "./instructionModeUtils";
 
 interface ApproachChooserProps {
   nodeTitle: string;
@@ -66,110 +36,83 @@ const ApproachChooser = forwardRef<HTMLElement, ApproachChooserProps>(
     },
     ref
   ) {
-    const handleSelectMode = useCallback(
-      (nextMode: InstructionMode) => {
-        onModeChange(nextMode);
-        if (nextMode === "extend" || nextMode === "replace") {
-          setTimeout(() => {
-            const textareaId =
-              nextMode === "extend" ? "gsm-extend-textarea" : "gsm-replace-textarea";
-            document.getElementById(textareaId)?.focus();
-          }, 50);
-        }
+    const [applyDefault, setApplyDefault] = useState(() =>
+      applyDefaultFromMode(mode)
+    );
+
+    useEffect(() => {
+      setApplyDefault(applyDefaultFromMode(mode));
+    }, [mode, nodeTitle]);
+
+    const syncMode = useCallback(
+      (nextApplyDefault: boolean, nextText: string) => {
+        onModeChange(deriveInstructionMode(nextApplyDefault, nextText));
       },
       [onModeChange]
     );
 
-    const handleCardKeyDown = (
-      e: React.KeyboardEvent,
-      nextMode: InstructionMode
-    ) => {
-      if (e.key === "Enter" || e.key === " ") {
-        if ((e.target as HTMLElement).tagName === "TEXTAREA") return;
-        e.preventDefault();
-        handleSelectMode(nextMode);
-      }
-    };
+    const handleToggleChange = useCallback(
+      (checked: boolean) => {
+        setApplyDefault(checked);
+        syncMode(checked, modeText);
+      },
+      [modeText, syncMode]
+    );
+
+    const handleTextChange = useCallback(
+      (text: string) => {
+        onModeTextChange(text);
+        syncMode(applyDefault, text);
+      },
+      [applyDefault, onModeTextChange, syncMode]
+    );
 
     const body = (
       <>
-        <div
-          className="gsm-approach-list"
-          role="radiogroup"
-          aria-label="Teaching approach for this topic"
-        >
-          {APPROACH_OPTIONS.map(({ mode: optionMode, Icon, title, caption, recommended }) => {
-            const isSelected = mode === optionMode;
-            return (
-              <div
-                key={optionMode}
-                className={`gsm-approach-card${isSelected ? " gsm-approach-card--selected" : ""}`}
-                role="radio"
-                aria-checked={isSelected}
-                tabIndex={0}
-                onClick={(e) => {
-                  if ((e.target as HTMLElement).tagName === "TEXTAREA") return;
-                  handleSelectMode(optionMode);
-                }}
-                onKeyDown={(e) => handleCardKeyDown(e, optionMode)}
-              >
-                <span className="gsm-radio-dot" aria-hidden="true" />
-                <span className="gsm-approach-icon" aria-hidden="true">
-                  <Icon size={16} strokeWidth={1.8} />
-                </span>
-                <div className="gsm-approach-body">
-                  <div className="gsm-approach-title-row">
-                    <b>{title}</b>
-                    {recommended && (
-                      <span className="gsm-pill-recommended">Recommended</span>
-                    )}
-                  </div>
-                  <p className="gsm-approach-caption">{caption}</p>
+        <div className="gsm-approach-simple">
+          <label className="gsm-approach-toggle-row">
+            <input
+              type="checkbox"
+              className="gsm-approach-toggle-input"
+              checked={applyDefault}
+              onChange={(e) => handleToggleChange(e.target.checked)}
+              aria-describedby="gsm-approach-toggle-hint"
+            />
+            <span className="gsm-approach-toggle-switch" aria-hidden="true" />
+            <span className="gsm-approach-toggle-text">
+              Apply the section&apos;s default instruction for this topic too
+            </span>
+          </label>
+          <p id="gsm-approach-toggle-hint" className="gsm-approach-toggle-hint">
+            {applyDefault
+              ? "The default style applies here. Add a note below to customize this topic only."
+              : "Only what you write below will be used for this topic — the section default is ignored."}
+          </p>
 
-                  {isSelected && optionMode === "extend" && (
-                    <div className="gsm-approach-extra">
-                      <label className="gsm-field-label" htmlFor="gsm-extend-textarea">
-                        Your note for {nodeTitle}
-                      </label>
-                      <textarea
-                        id="gsm-extend-textarea"
-                        className="gsm-field"
-                        rows={3}
-                        value={modeText}
-                        onChange={(e) => onModeTextChange(e.target.value)}
-                        placeholder="e.g. Include one real-world coding example to illustrate the concepts."
-                        onClick={(e) => e.stopPropagation()}
-                      />
-                      <p className="gsm-field-help">
-                        This note only applies to {nodeTitle} — it won&apos;t change
-                        other topics.
-                      </p>
-                    </div>
-                  )}
-
-                  {isSelected && optionMode === "replace" && (
-                    <div className="gsm-approach-extra">
-                      <label className="gsm-field-label" htmlFor="gsm-replace-textarea">
-                        Your custom instructions for this topic
-                      </label>
-                      <textarea
-                        id="gsm-replace-textarea"
-                        className="gsm-field"
-                        rows={4}
-                        value={modeText}
-                        onChange={(e) => onModeTextChange(e.target.value)}
-                        placeholder={`Describe exactly how AI should approach ${nodeTitle}…`}
-                        onClick={(e) => e.stopPropagation()}
-                      />
-                      <p className="gsm-field-help gsm-field-help--warn">
-                        Heads up — this replaces the default style for this topic only.
-                      </p>
-                    </div>
-                  )}
-                </div>
-              </div>
-            );
-          })}
+          <div className="gsm-approach-simple-field">
+            <label className="gsm-field-label" htmlFor="gsm-topic-instruction-textarea">
+              {applyDefault
+                ? `Additional instruction for ${nodeTitle}`
+                : `Custom instruction for ${nodeTitle}`}
+            </label>
+            <textarea
+              id="gsm-topic-instruction-textarea"
+              className="gsm-field"
+              rows={4}
+              value={modeText}
+              onChange={(e) => handleTextChange(e.target.value)}
+              placeholder={
+                applyDefault
+                  ? "e.g. Include one real-world coding example to illustrate the concepts."
+                  : `Describe exactly how AI should approach ${nodeTitle}…`
+              }
+            />
+            <p className="gsm-field-help">
+              {applyDefault
+                ? `This note only applies to ${nodeTitle} — it won't change other topics.`
+                : "This replaces the default style for this topic only."}
+            </p>
+          </div>
         </div>
 
         <div
@@ -200,7 +143,7 @@ const ApproachChooser = forwardRef<HTMLElement, ApproachChooserProps>(
                   Saving…
                 </>
               ) : (
-                "Save this approach"
+                "Save instruction"
               )}
             </button>
           </div>
@@ -210,7 +153,11 @@ const ApproachChooser = forwardRef<HTMLElement, ApproachChooserProps>(
 
     if (embedded) {
       return (
-        <div className="gsm-embedded-block" id="gsm-approach-card" ref={ref as React.RefObject<HTMLDivElement>}>
+        <div
+          className="gsm-embedded-block"
+          id="gsm-approach-card"
+          ref={ref as React.RefObject<HTMLDivElement>}
+        >
           {body}
         </div>
       );

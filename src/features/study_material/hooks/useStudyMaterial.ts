@@ -37,6 +37,10 @@ import {
   shouldSilentlyActivateOnSelect,
   type HistoryVersionPartitions,
 } from "../utils/versionHistoryPartitions";
+import {
+  loadInstructionBannerDismissals,
+  saveInstructionBannerDismissals,
+} from "../utils/instructionBannerDismissal";
 
 // Re-export for consumers that import from this hook
 export type { NodeStudyStatePatch, NodeStudyState };
@@ -245,7 +249,7 @@ export function useStudyMaterial({
   /** Per-node: effective instruction the user dismissed the change banner for. */
   const [instructionBannerDismissedByNode, setInstructionBannerDismissedByNode] = useState<
     Record<string, string>
-  >({});
+  >(() => loadInstructionBannerDismissals());
   const prevEffectiveInstructionByNodeRef = useRef<Record<string, string>>({});
   const [clearDraftsEligibility, setClearDraftsEligibility] =
     useState<StudyMaterialClearDraftsEligibilityOut | null>(null);
@@ -306,6 +310,10 @@ export function useStudyMaterial({
   const failedGenerationPipeline = studyState?.failedGenerationPipeline ?? null;
   const referenceMaterial = studyState?.referenceMaterial ?? null;
   const currentEffectiveInstruction = node?.effective_instruction ?? "";
+
+  useEffect(() => {
+    saveInstructionBannerDismissals(instructionBannerDismissedByNode);
+  }, [instructionBannerDismissedByNode]);
 
   const setCurrentPage = (p: TopicContentPage) => {
     if (!node) return;
@@ -626,7 +634,7 @@ export function useStudyMaterial({
     if (generatingNodeIds.has(node.node_id)) return;
     if (generationProgressSessionId && isGenerating) return;
     if (generationRunFailed && failedGenerationPipeline === "study_material") return;
-    // After generate-all (inline) the draft is already in state — ignore stale
+    // After batch or manual generate the draft may already be in state — ignore stale
     // RUNNING rows left by a race with manual /generate on the same node.
     if (hasTriggeredGeneration && activeVersion) return;
     const nodeId = node.node_id;

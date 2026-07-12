@@ -234,7 +234,7 @@ export default function GenerateSetupPanel({
             <div>
               <h4 className="gsm-setup-step__title">How AI teaches this topic</h4>
               <p className="gsm-setup-step__hint">
-                Pick an approach for {node.title} — most teachers keep the section default.
+                Add a note for {node.title}, or turn off the default to write custom instructions.
               </p>
             </div>
           </div>

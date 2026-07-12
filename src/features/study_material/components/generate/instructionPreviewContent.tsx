@@ -36,8 +36,8 @@ export function buildRailQuote(
 
 export function getApproachSummary(mode: InstructionMode): string {
   if (mode === "inherit") return "Using the section's default style";
-  if (mode === "extend") return "Default style, plus a quick note";
-  return "Write instructions just for this topic";
+  if (mode === "extend") return "Default style, plus a topic note";
+  return "Custom instruction for this topic only";
 }
 
 export function buildInstructionPreviewRows(

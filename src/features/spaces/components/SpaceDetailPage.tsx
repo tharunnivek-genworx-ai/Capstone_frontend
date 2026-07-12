@@ -4,7 +4,7 @@
  * Header shows space name, department, invite code copy, and publish toggle.
  */
 
-import React, { useEffect, useState, useCallback, useRef } from "react";
+import React, { useEffect, useState, useCallback, useRef, useMemo } from "react";
 import { useParams, useNavigate, useSearchParams } from "react-router-dom";
 import toast from "react-hot-toast";
 import { spaceService } from "../services/spaceService";
@@ -26,15 +26,14 @@ import EspaceRepublishChecklistModal from "./EspaceRepublishChecklistModal";
 import { useTraineeSpaceProgress } from "../../trainee_space_progress/hooks/useTraineeSpaceProgress";
 import SpaceProgressPanel from "../../trainee_space_progress/components/SpaceProgressPanel";
 import { useMentorSpaceProgress, MentorSpaceProgressPanel, mentorProgressService } from "../../mentor_progress_view";
-import GenerateAllRootPickerModal, {
-  type RootQueueBusyStatus,
-} from "../../study_material/components/queue/GenerateAllRootPickerModal";
+import GenerateAllRootPickerModal from "../../study_material/components/queue/GenerateAllRootPickerModal";
 import GenerateAllPolicyModal from "../../study_material/components/queue/GenerateAllPolicyModal";
 import GenerateAllInstructionWarningModal from "../../study_material/components/queue/GenerateAllInstructionWarningModal";
-import { logGenerateAllDebug } from "../../study_material/components/queue/GenerateAllDebugPanel";
+import BatchProgressPanel from "../../study_material/components/queue/BatchProgressPanel";
 import { studyMaterialBatchService } from "../../study_material/services/studyMaterialBatchService";
-import { runGenerateAllSequentially } from "../../study_material/services/runGenerateAllSequentially";
+import { useBatchJobPoll } from "../../study_material/hooks/useBatchJobPoll";
 import type {
+  BatchStepStatus,
   ExistingMaterialPolicy,
   StudyMaterialBatchPreviewResponse,
 } from "../../study_material/types/studyMaterialBatch.types";
@@ -78,19 +77,51 @@ const SpaceDetailPage: React.FC = () => {
   const [showRootPickerModal, setShowRootPickerModal] = useState(false);
   const [showPolicyModal, setShowPolicyModal] = useState(false);
   const [showWarningModal, setShowWarningModal] = useState(false);
-  const [selectedRootNodeIds, setSelectedRootNodeIds] = useState<string[]>([]);
+  const [selectedBatchNodeIds, setSelectedBatchNodeIds] = useState<string[]>([]);
   const [batchPreview, setBatchPreview] = useState<StudyMaterialBatchPreviewResponse | null>(null);
   const [existingPolicy, setExistingPolicy] = useState<ExistingMaterialPolicy>("skip");
   const [isSubmittingBatchFlow, setIsSubmittingBatchFlow] = useState(false);
-  /** Nodes still waiting in an active generate-all plan (Generate button blocked). */
-  const [generateAllBlockedNodeIds, setGenerateAllBlockedNodeIds] = useState<Set<string>>(
-    () => new Set(),
-  );
-  /** Selected roots marked running in the picker while generate-all is active. */
-  const [busyRootStatusById, setBusyRootStatusById] = useState<
-    Record<string, RootQueueBusyStatus | undefined>
-  >({});
-  const generateAllCancelRef = useRef<{ cancelled: boolean } | null>(null);
+  const [activeBatchId, setActiveBatchId] = useState<string | null>(null);
+  const [showBatchProgressPanel, setShowBatchProgressPanel] = useState(false);
+  const completedBatchStepIdsRef = useRef<Set<string>>(new Set());
+  const batchAutoOpenedMaterialNodeIdsRef = useRef<Set<string>>(new Set());
+  const {
+    batchDetail,
+    steps: batchSteps,
+    currentRunningStep,
+    isPolling: isBatchPolling,
+    cancel: cancelBatchJob,
+  } = useBatchJobPoll(activeBatchId, spaceId ?? null);
+
+  const batchStepStatusByNodeId = useMemo(() => {
+    const map: Record<string, BatchStepStatus> = {};
+    for (const step of batchSteps) {
+      map[step.node_id] = step.status;
+    }
+    return map;
+  }, [batchSteps]);
+
+  const busyNodeIds = useMemo(() => {
+    if (!batchDetail || !["pending", "running"].includes(batchDetail.batch.status)) {
+      return new Set<string>();
+    }
+    return new Set(
+      batchDetail.steps
+        .filter((step) => step.status === "pending" || step.status === "running")
+        .map((step) => step.node_id),
+    );
+  }, [batchDetail]);
+
+  // Resume in-flight batch after reload / space switch.
+  useEffect(() => {
+    if (!batchDetail) return;
+    const { batch_id: batchId, status } = batchDetail.batch;
+    if (status === "pending" || status === "running") {
+      setActiveBatchId((prev) => (prev === batchId ? prev : batchId));
+      setShowBatchProgressPanel(true);
+    }
+  }, [batchDetail]);
+
   const {
     progress: traineeSpaceProgress,
     isLoading: isLoadingTraineeSpaceProgress,
@@ -137,6 +168,7 @@ const SpaceDetailPage: React.FC = () => {
     },
     []
   );
+
 
   const handleStudyStateChange = useCallback(
     (nodeId: string, patch: NodeStudyStatePatch) => {
@@ -221,16 +253,14 @@ const SpaceDetailPage: React.FC = () => {
     setShowRootPickerModal(false);
     setShowPolicyModal(false);
     setShowWarningModal(false);
-    setSelectedRootNodeIds([]);
+    setSelectedBatchNodeIds([]);
     setBatchPreview(null);
     setExistingPolicy("skip");
     setIsSubmittingBatchFlow(false);
-    setGenerateAllBlockedNodeIds(new Set());
-    setBusyRootStatusById({});
-    if (generateAllCancelRef.current) {
-      generateAllCancelRef.current.cancelled = true;
-      generateAllCancelRef.current = null;
-    }
+    setActiveBatchId(null);
+    setShowBatchProgressPanel(false);
+    completedBatchStepIdsRef.current = new Set();
+    batchAutoOpenedMaterialNodeIdsRef.current = new Set();
 
     const load = async () => {
       setIsLoadingSpace(true);
@@ -457,6 +487,75 @@ const SpaceDetailPage: React.FC = () => {
     [roots, selectNode],
   );
 
+  // Sync batch step progress into per-node study state. Do not change the
+  // selected topic — users should browse freely while generate-all runs.
+  useEffect(() => {
+    if (!batchDetail || roots.length === 0) return;
+
+    for (const step of batchDetail.steps) {
+      if (step.status === "running") {
+        const runningPatch: Partial<NodeStudyState> = {
+          isGenerating: true,
+          generationProgressSessionId: step.generation_run_id,
+          activeGenerationRunId: step.generation_run_id,
+        };
+        if (selectedNode?.node_id === step.node_id) {
+          runningPatch.currentPage = 2;
+        }
+        updateNodeStudyState(step.node_id, runningPatch);
+      }
+
+      if (step.status === "completed" && !completedBatchStepIdsRef.current.has(step.step_id)) {
+        completedBatchStepIdsRef.current.add(step.step_id);
+        setNodeContentRefreshTokens((prev) => ({
+          ...prev,
+          [step.node_id]: (prev[step.node_id] ?? 0) + 1,
+        }));
+        const completedPatch: Partial<NodeStudyState> = {
+          isGenerating: false,
+          generationProgressSessionId: null,
+          activeGenerationRunId: null,
+          hasTriggeredGeneration: true,
+        };
+        updateNodeStudyState(step.node_id, completedPatch);
+
+        const shouldAutoOpenMaterial =
+          selectedNode?.node_id === step.node_id &&
+          !batchAutoOpenedMaterialNodeIdsRef.current.has(step.node_id);
+
+        if (shouldAutoOpenMaterial) {
+          batchAutoOpenedMaterialNodeIdsRef.current.add(step.node_id);
+          void studyMaterialService.getActiveVersion(step.node_id).then((version) => {
+            if (!version) {
+              updateNodeStudyState(step.node_id, { ...completedPatch, currentPage: 2 });
+              return;
+            }
+            updateNodeStudyState(step.node_id, {
+              ...completedPatch,
+              currentPage: 2,
+              studyMaterialContent: version.content,
+              activeVersion: version,
+            });
+          });
+        }
+
+        toast.success(`Draft ready: ${step.node_title}`);
+      }
+    }
+  }, [batchDetail, roots, selectedNode?.node_id, updateNodeStudyState]);
+
+  // Hide progress panel shortly after the batch finishes.
+  useEffect(() => {
+    if (!batchDetail) return;
+    const { status } = batchDetail.batch;
+    if (status !== "completed" && status !== "failed" && status !== "cancelled") return;
+
+    const timer = window.setTimeout(() => {
+      setShowBatchProgressPanel(false);
+    }, 3000);
+    return () => window.clearTimeout(timer);
+  }, [batchDetail?.batch.status, batchDetail?.batch.batch_id]);
+
   const handleNavigateFromSpaceProgress = useCallback(
     (nodeId: string) => {
       const node = findNodeInTree(roots, nodeId);
@@ -517,92 +616,46 @@ const SpaceDetailPage: React.FC = () => {
     setShowPolicyModal(false);
     setShowWarningModal(false);
     setBatchPreview(null);
-    setSelectedRootNodeIds([]);
+    setSelectedBatchNodeIds([]);
   }, []);
 
   const startGenerateAllFromWizard = useCallback(async (policy: ExistingMaterialPolicy) => {
-    if (!spaceId || selectedRootNodeIds.length === 0) return;
-    const rootIds = [...selectedRootNodeIds];
-    const plannedItems = batchPreview?.items ?? [];
-    const plannedNodeIds = plannedItems.map((item) => item.node_id);
-    if (plannedNodeIds.length === 0) {
-      toast.error("No topics to generate for the selected sections.");
-      return;
-    }
+    if (!spaceId || selectedBatchNodeIds.length === 0) return;
 
     setIsSubmittingBatchFlow(true);
     closeBatchWizard();
 
-    // Cancel any previous in-page runner (new Proceed supersedes).
-    if (generateAllCancelRef.current) {
-      generateAllCancelRef.current.cancelled = true;
-    }
-    const cancelToken = { cancelled: false };
-    generateAllCancelRef.current = cancelToken;
-
-    // Block Generate + mark roots running immediately (before network).
-    setGenerateAllBlockedNodeIds(new Set(plannedNodeIds));
-    const busy: Record<string, RootQueueBusyStatus | undefined> = {};
-    for (const rootId of rootIds) {
-      busy[rootId] = "running";
-    }
-    setBusyRootStatusById(busy);
-
-    logGenerateAllDebug("info", "Blocked Generate on planned nodes", {
-      count: plannedNodeIds.length,
-      titles: plannedItems.map((i) => i.title),
-      roots: rootIds,
-    });
-    toast.success(
-      "Generate-all started. Keep this tab open — topics run one at a time.",
-    );
-    setIsSubmittingBatchFlow(false);
-
     try {
-      await runGenerateAllSequentially({
-        items: plannedItems,
+      const created = await studyMaterialBatchService.createBatch(spaceId, {
+        root_node_ids: [],
+        node_ids: selectedBatchNodeIds,
         policy,
-        signal: cancelToken,
-        patchNodeStudyState: updateNodeStudyState,
-        onNodeStarted: (nodeId) => {
-          setGenerateAllBlockedNodeIds((prev) => {
-            if (!prev.has(nodeId)) return prev;
-            const next = new Set(prev);
-            next.delete(nodeId);
-            return next;
-          });
-        },
-        onNodeFinished: (nodeId) => {
-          setGenerateAllBlockedNodeIds((prev) => {
-            if (!prev.has(nodeId)) return prev;
-            const next = new Set(prev);
-            next.delete(nodeId);
-            return next;
-          });
-        },
-        onContentRefresh: (nodeId) => {
-          setNodeContentRefreshTokens((prev) => ({
-            ...prev,
-            [nodeId]: (prev[nodeId] ?? 0) + 1,
-          }));
-        },
       });
+      setActiveBatchId(created.batch_id);
+      setShowBatchProgressPanel(true);
+      completedBatchStepIdsRef.current = new Set();
+      batchAutoOpenedMaterialNodeIdsRef.current = new Set();
+      toast.success(
+        "Generate-all started. Progress continues in the background — you can close this tab.",
+      );
+    } catch (err) {
+      const e = err as { response?: { data?: { detail?: string } }; message?: string };
+      toast.error(e?.response?.data?.detail ?? e?.message ?? "Failed to start generate-all batch.");
     } finally {
-      if (generateAllCancelRef.current === cancelToken) {
-        generateAllCancelRef.current = null;
-      }
-      setGenerateAllBlockedNodeIds(new Set());
-      setBusyRootStatusById({});
+      setIsSubmittingBatchFlow(false);
     }
-  }, [spaceId, selectedRootNodeIds, batchPreview, closeBatchWizard, updateNodeStudyState]);
+  }, [spaceId, selectedBatchNodeIds, closeBatchWizard]);
 
-  const handleContinueRootPicker = useCallback(async (rootIds: string[]) => {
-    if (!spaceId || rootIds.length === 0) return;
+  const handleContinueRootPicker = useCallback(async (nodeIds: string[]) => {
+    if (!spaceId || nodeIds.length === 0) return;
     setIsSubmittingBatchFlow(true);
     try {
-      const preview = await studyMaterialBatchService.preview(spaceId, { root_node_ids: rootIds });
+      const preview = await studyMaterialBatchService.preview(spaceId, {
+        root_node_ids: [],
+        node_ids: nodeIds,
+      });
       setBatchPreview(preview);
-      setSelectedRootNodeIds(rootIds);
+      setSelectedBatchNodeIds(nodeIds);
       setShowRootPickerModal(false);
       setShowPolicyModal(true);
     } catch (err) {
@@ -1125,8 +1178,13 @@ const SpaceDetailPage: React.FC = () => {
                 }
                 isWaitingForGenerateAll={
                   Boolean(
-                    selectedNode && generateAllBlockedNodeIds.has(selectedNode.node_id),
+                    selectedNode &&
+                      (batchStepStatusByNodeId[selectedNode.node_id] === "pending" ||
+                        batchStepStatusByNodeId[selectedNode.node_id] === "running"),
                   )
+                }
+                batchStepStatus={
+                  selectedNode ? batchStepStatusByNodeId[selectedNode.node_id] ?? null : null
                 }
               />
             )
@@ -1199,11 +1257,11 @@ const SpaceDetailPage: React.FC = () => {
       {showRootPickerModal && (
         <GenerateAllRootPickerModal
           roots={roots}
-          initialSelectedRootIds={selectedRootNodeIds}
-          busyRootStatusById={busyRootStatusById}
+          initialSelectedNodeIds={selectedBatchNodeIds}
+          busyNodeIds={busyNodeIds}
           onClose={closeBatchWizard}
-          onContinue={(rootIds) => {
-            void handleContinueRootPicker(rootIds);
+          onContinue={(nodeIds) => {
+            void handleContinueRootPicker(nodeIds);
           }}
         />
       )}
@@ -1245,6 +1303,15 @@ const SpaceDetailPage: React.FC = () => {
               handleNavigateToNode(firstNodeId);
             }
           }}
+        />
+      )}
+
+      {showBatchProgressPanel && batchDetail && (
+        <BatchProgressPanel
+          batchDetail={batchDetail}
+          currentRunningStep={currentRunningStep}
+          isPolling={isBatchPolling}
+          onCancel={cancelBatchJob}
         />
       )}
     </div>
