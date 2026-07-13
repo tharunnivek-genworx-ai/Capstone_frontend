@@ -5,9 +5,12 @@ import { getGenerationJobFailedRunId } from "./generationJobErrors";
 export function patchForGenerationJobStart(): NodeStudyStatePatch {
   return {
     generationRunFailed: false,
+    generationRunPaused: false,
     failedGenerationPipeline: null,
     generationProgressSessionId: null,
     activeGenerationRunId: null,
+    isPausingGeneration: false,
+    isAbandoningGeneration: false,
   };
 }
 
@@ -17,9 +20,12 @@ export function patchForGenerationJobSuccess(): NodeStudyStatePatch {
     isGeneratingQuiz: false,
     isGeneratingHints: false,
     generationRunFailed: false,
+    generationRunPaused: false,
     failedGenerationPipeline: null,
     generationProgressSessionId: null,
     activeGenerationRunId: null,
+    isPausingGeneration: false,
+    isAbandoningGeneration: false,
   };
 }
 
@@ -37,15 +43,51 @@ export function patchForGenerationJobFailure(
     isGeneratingQuiz: false,
     isGeneratingHints: false,
     generationRunFailed: true,
+    generationRunPaused: false,
     failedGenerationPipeline: pipeline,
     generationProgressSessionId: runId,
     activeGenerationRunId: runId,
+    isPausingGeneration: false,
+    isAbandoningGeneration: false,
+  };
+}
+
+export function patchForGenerationJobPaused(
+  runId: string,
+  pipeline: GenerationPipeline,
+): NodeStudyStatePatch {
+  return {
+    isGenerating: false,
+    isGeneratingQuiz: false,
+    isGeneratingHints: false,
+    generationRunFailed: false,
+    generationRunPaused: true,
+    failedGenerationPipeline: pipeline,
+    generationProgressSessionId: runId,
+    activeGenerationRunId: runId,
+    isPausingGeneration: false,
+  };
+}
+
+export function patchForGenerationJobAbandoned(): NodeStudyStatePatch {
+  return {
+    isGenerating: false,
+    isGeneratingQuiz: false,
+    isGeneratingHints: false,
+    generationRunFailed: false,
+    generationRunPaused: false,
+    failedGenerationPipeline: null,
+    generationProgressSessionId: null,
+    activeGenerationRunId: null,
+    isPausingGeneration: false,
+    isAbandoningGeneration: false,
   };
 }
 
 export function patchClearFailedGenerationRun(): NodeStudyStatePatch {
   return {
     generationRunFailed: false,
+    generationRunPaused: false,
     failedGenerationPipeline: null,
     generationProgressSessionId: null,
     activeGenerationRunId: null,

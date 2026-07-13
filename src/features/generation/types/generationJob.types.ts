@@ -16,6 +16,19 @@ export interface GenerationRunActiveOut {
   seconds_until_retry?: number | null;
 }
 
+export interface GenerationRunPauseContextOut {
+  headline: string;
+  interrupted_step_label?: string | null;
+  last_completed_node?: string | null;
+}
+
+export interface GenerationRunActionsOut {
+  can_pause: boolean;
+  can_resume: boolean;
+  can_abandon: boolean;
+  pause_context?: GenerationRunPauseContextOut | null;
+}
+
 export interface GenerationRunOut {
   run_id: string;
   pipeline: GenerationPipeline;
@@ -25,6 +38,7 @@ export interface GenerationRunOut {
   resumable: boolean;
   seconds_until_retry?: number | null;
   attempt_count?: number;
+  actions?: GenerationRunActionsOut | null;
 }
 
 export interface GenerationRunResultOut {

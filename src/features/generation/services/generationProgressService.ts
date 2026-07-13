@@ -64,6 +64,20 @@ export const generationJobService = {
     return response.data;
   },
 
+  async pauseRun(runId: string): Promise<GenerationRunOut> {
+    const response = await studyAgentClient.post<GenerationRunOut>(
+      `/generation-runs/${runId}/pause`,
+    );
+    return response.data;
+  },
+
+  async abandonRun(runId: string): Promise<GenerationRunOut> {
+    const response = await studyAgentClient.post<GenerationRunOut>(
+      `/generation-runs/${runId}/abandon`,
+    );
+    return response.data;
+  },
+
   async resumeJob(
     runId: string,
     onProgress?: (progress: GenerationProgressOut) => void,
@@ -88,8 +102,32 @@ export const generationJobService = {
         const progress = await generationProgressService.get(runId);
         notFoundRetries = 0;
         onProgress?.(progress);
-        if (progress.status === "completed" || progress.status === "failed") {
+        if (
+          progress.status === "completed"
+          || progress.status === "failed"
+          || progress.status === "paused"
+        ) {
           return progress;
+        }
+
+        // Progress polling can lag behind the durable run row — reconcile.
+        try {
+          const run = await this.getRun(runId);
+          if (run.status === "completed") {
+            return { ...progress, status: "completed" };
+          }
+          if (run.status === "paused") {
+            return { ...progress, status: "paused" };
+          }
+          if (run.status === "failed" || run.status === "abandoned" || run.status === "cancelled") {
+            return {
+              ...progress,
+              status: "failed",
+              error: progress.error ?? run.error_message ?? "Generation failed.",
+            };
+          }
+        } catch {
+          // Keep polling progress when run metadata is temporarily unavailable.
         }
       } catch (error) {
         if (isNotFoundError(error) && notFoundRetries < MAX_NOT_FOUND_RETRIES) {
@@ -97,6 +135,23 @@ export const generationJobService = {
         } else {
           throw error;
         }
+      }
+      await sleep(POLL_INTERVAL_MS);
+    }
+  },
+
+  async waitForPaused(
+    runId: string,
+    onProgress?: (progress: GenerationProgressOut) => void,
+  ): Promise<GenerationProgressOut> {
+    while (true) {
+      const progress = await generationProgressService.get(runId);
+      onProgress?.(progress);
+      if (progress.status === "paused") {
+        return progress;
+      }
+      if (progress.status === "completed" || progress.status === "failed") {
+        return progress;
       }
       await sleep(POLL_INTERVAL_MS);
     }
@@ -122,6 +177,9 @@ export const generationJobService = {
   ): Promise<{ runId: string; progress: GenerationProgressOut; result: GenerationRunResultOut }> {
     const started = await start();
     const progress = await this.waitForCompletion(started.run_id, onProgress);
+    if (progress.status === "paused") {
+      return { runId: started.run_id, progress, result: null as unknown as GenerationRunResultOut };
+    }
     if (progress.status === "failed") {
       throw new GenerationJobFailedError(
         progress.error ?? "Generation failed.",

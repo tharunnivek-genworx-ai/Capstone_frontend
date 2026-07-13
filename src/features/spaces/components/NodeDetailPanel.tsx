@@ -116,16 +116,17 @@ const NodeDetailPanel: React.FC<NodeDetailPanelProps> = ({
 
   const showGenerationProgress =
     sm.isGenerating ||
+    sm.isPausingGeneration ||
+    (sm.generationRunPaused && sm.failedGenerationPipeline === "study_material") ||
     (sm.generationRunFailed && sm.failedGenerationPipeline === "study_material");
   const studyGenerationProgress = useGenerationProgress(
     sm.generationProgressSessionId,
     showGenerationProgress,
   );
-  const studyRunResume = useGenerationRunResume(
-    sm.generationRunFailed && sm.failedGenerationPipeline === "study_material"
-      ? sm.activeGenerationRunId
-      : null,
-  );
+  const studyRunMetaRunId =
+    sm.activeGenerationRunId
+    ?? (showGenerationProgress ? sm.generationProgressSessionId : null);
+  const studyRunResume = useGenerationRunResume(studyRunMetaRunId);
 
   // ── Quiz hook ─────────────────────────────────────────────────────────────
   const qz = useQuiz({
@@ -438,11 +439,17 @@ const NodeDetailPanel: React.FC<NodeDetailPanelProps> = ({
                 subtitle={`The AI is updating study content for "${node.title}". This may take a minute.`}
                 progress={studyGenerationProgress}
                 failedRunId={sm.generationRunFailed ? sm.activeGenerationRunId : null}
+                pausedRunId={sm.generationRunPaused ? sm.activeGenerationRunId : null}
                 resumable={studyRunResume.resumable}
                 secondsUntilRetry={studyRunResume.secondsUntilRetry}
                 isResuming={sm.isResumingFailedGeneration}
+                isPausing={sm.isPausingGeneration}
+                isAbandoning={sm.isAbandoningGeneration}
+                canPause={studyRunResume.canPause || sm.isGenerating}
+                pauseContext={studyRunResume.pauseContext}
+                onPause={sm.handlePauseGeneration}
                 onResume={sm.handleResumeFailedGeneration}
-                onDismissFailed={sm.handleDismissFailedGeneration}
+                onAbandon={sm.handleAbandonGeneration}
               />
             ) : sm.isHistoryHubView || sm.studyMaterialContent?.trim() ? (
               <>

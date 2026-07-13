@@ -157,7 +157,10 @@ const SpaceDetailPage: React.FC = () => {
           generationProgressSessionId: null,
           activeGenerationRunId: null,
           generationRunFailed: false,
+          generationRunPaused: false,
           failedGenerationPipeline: null,
+          isPausingGeneration: false,
+          isAbandoningGeneration: false,
           referenceMaterial: null,
           currentQuizId: null,
         };

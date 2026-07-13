@@ -1,6 +1,6 @@
 export type GenerationPipeline = "study_material" | "quiz" | "hint";
 
-export type GenerationJobStatus = "running" | "completed" | "failed";
+export type GenerationJobStatus = "running" | "completed" | "failed" | "paused";
 
 export type GenerationStepStatus = "pending" | "active" | "completed";
 
@@ -17,4 +17,5 @@ export interface GenerationProgressOut {
   current_step_index: number;
   steps: GenerationProgressStep[];
   error?: string | null;
+  pause_reason?: string | null;
 }
