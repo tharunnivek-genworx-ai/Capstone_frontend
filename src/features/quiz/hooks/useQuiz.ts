@@ -19,7 +19,9 @@ import { generationJobService } from "../../generation/services/generationProgre
 import type { GenerationPipeline } from "../../generation/types/generationProgress.types";
 import {
   patchClearFailedGenerationRun,
+  patchForGenerationJobAbandoned,
   patchForGenerationJobFailure,
+  patchForGenerationJobPaused,
   patchForGenerationJobStart,
   patchForGenerationJobSuccess,
 } from "../../generation/utils/generationRunState";
@@ -45,7 +47,10 @@ interface UseQuizParams {
   generationProgressSessionId: string | null;
   activeGenerationRunId: string | null;
   generationRunFailed: boolean;
+  generationRunPaused?: boolean;
   failedGenerationPipeline: GenerationPipeline | null;
+  isPausingGeneration?: boolean;
+  isAbandoningGeneration?: boolean;
   onNodeStudyStateChange?: (nodeId: string, patch: NodeStudyStatePatch) => void;
   onPageChange: (page: TopicContentPage) => void;
   onMentorProgressRefresh?: () => void;
@@ -60,8 +65,11 @@ export interface UseQuizReturn {
   generationProgressSessionId: string | null;
   activeGenerationRunId: string | null;
   generationRunFailed: boolean;
+  generationRunPaused: boolean;
   failedGenerationPipeline: GenerationPipeline | null;
   isResumingFailedGeneration: boolean;
+  isPausingGeneration: boolean;
+  isAbandoningGeneration: boolean;
   isPublishing: boolean;
   isUnpublishing: boolean;
   isDeletingDraft: boolean;
@@ -111,8 +119,9 @@ export interface UseQuizReturn {
 
   // handlers
   handleGenerate: () => Promise<void>;
+  handlePauseGeneration: () => Promise<void>;
+  handleAbandonGeneration: () => Promise<void>;
   handleResumeFailedGeneration: () => Promise<void>;
-  handleDismissFailedGeneration: () => void;
   handleRegenerate: (feedback: string, questionCountOverride?: number) => Promise<void>;
   handleDeleteDraft: () => Promise<void>;
   handleDeleteHintsDraft: () => Promise<void>;
@@ -213,7 +222,10 @@ export function useQuiz({
   generationProgressSessionId,
   activeGenerationRunId = null,
   generationRunFailed = false,
+  generationRunPaused = false,
   failedGenerationPipeline = null,
+  isPausingGeneration = false,
+  isAbandoningGeneration = false,
   onNodeStudyStateChange,
   onPageChange,
   onMentorProgressRefresh,
@@ -288,6 +300,20 @@ export function useQuiz({
   const patchNodeStudyState = useCallback((nodeId: string, patch: NodeStudyStatePatch) => {
     onNodeStudyStateChangeRef.current?.(nodeId, patch);
   }, []);
+
+  const settlePausedProgress = useCallback((
+    progress: { status: string; session_id: string },
+    pipeline: "quiz" | "hint",
+    nodeId: string,
+  ): boolean => {
+    if (progress.status !== "paused") return false;
+    patchNodeStudyState(
+      nodeId,
+      patchForGenerationJobPaused(progress.session_id, pipeline),
+    );
+    setIsRegeneratingQuestion(null);
+    return true;
+  }, [patchNodeStudyState]);
 
   const setResolvedQuizIdForNode = useCallback((nodeId: string, quizId: string | null) => {
     patchNodeStudyState(nodeId, { currentQuizId: quizId });
@@ -452,6 +478,24 @@ export function useQuiz({
     }
   }, [handleMutationError, setResolvedQuizIdForNode]);
 
+  const applyCompletedRunResult = useCallback(async (
+    nodeId: string,
+    pipeline: "quiz" | "hint",
+    runId: string,
+  ) => {
+    const result = await generationJobService.getResult(runId);
+    const updated = result.quiz as QuizOut | null | undefined;
+    if (!updated) throw new Error("Generation completed without a quiz result.");
+    if (pipeline === "quiz") {
+      setResolvedQuizIdForNode(nodeId, updated.quiz_id);
+    }
+    patchNodeStudyState(nodeId, patchForGenerationJobSuccess());
+    if (isViewingNode(nodeId)) {
+      setQuiz(updated);
+      await refreshQuiz(nodeId, updated.quiz_id);
+    }
+  }, [patchNodeStudyState, refreshQuiz, setResolvedQuizIdForNode]);
+
   // Refresh after content is published from the espace republish checklist modal.
   useEffect(() => {
     if (!node || !isMentor || contentRefreshToken === 0) return;
@@ -465,6 +509,7 @@ export function useQuiz({
     if (generatingQuizNodeIds.has(node.node_id)) return;
     if (generationProgressSessionId && isGeneratingQuiz) return;
     if (generationRunFailed && failedGenerationPipeline === "quiz") return;
+    if (generationRunPaused && failedGenerationPipeline === "quiz") return;
 
     const nodeId = node.node_id;
     const resourceId = currentQuizId ?? nodeId;
@@ -494,6 +539,13 @@ export function useQuiz({
           });
           return;
         }
+        if (active.status === "paused") {
+          patchNodeStudyState(
+            nodeId,
+            patchForGenerationJobPaused(runId, "quiz"),
+          );
+          return;
+        }
         patchNodeStudyState(nodeId, {
           isGeneratingQuiz: true,
           generationRunFailed: false,
@@ -503,7 +555,11 @@ export function useQuiz({
         });
         let resumableFailure = false;
         try {
-          await generationJobService.waitForCompletion(runId);
+          const progress = await generationJobService.waitForCompletion(runId);
+          if (settlePausedProgress(progress, "quiz", nodeId)) {
+            resumableFailure = true;
+            return;
+          }
           const result = await generationJobService.getResult(runId);
           const generated = result.quiz as QuizOut | null | undefined;
           if (generated) {
@@ -539,9 +595,11 @@ export function useQuiz({
     currentQuizId,
     generationProgressSessionId,
     generationRunFailed,
+    generationRunPaused,
     failedGenerationPipeline,
     patchNodeStudyState,
     refreshQuiz,
+    settlePausedProgress,
     setResolvedQuizIdForNode,
   ]);
 
@@ -552,6 +610,7 @@ export function useQuiz({
     if (generatingHintsNodeIds.has(node.node_id)) return;
     if (generationProgressSessionId && isGeneratingHints) return;
     if (generationRunFailed && failedGenerationPipeline === "hint") return;
+    if (generationRunPaused && failedGenerationPipeline === "hint") return;
     if (!currentQuizId) return;
 
     const nodeId = node.node_id;
@@ -582,6 +641,13 @@ export function useQuiz({
           });
           return;
         }
+        if (active.status === "paused") {
+          patchNodeStudyState(
+            nodeId,
+            patchForGenerationJobPaused(runId, "hint"),
+          );
+          return;
+        }
         patchNodeStudyState(nodeId, {
           isGeneratingHints: true,
           generationRunFailed: false,
@@ -591,7 +657,11 @@ export function useQuiz({
         });
         let resumableFailure = false;
         try {
-          await generationJobService.waitForCompletion(runId);
+          const progress = await generationJobService.waitForCompletion(runId);
+          if (settlePausedProgress(progress, "hint", nodeId)) {
+            resumableFailure = true;
+            return;
+          }
           const result = await generationJobService.getResult(runId);
           const updated = result.quiz as QuizOut | null | undefined;
           if (updated && isViewingNode(nodeId)) {
@@ -624,13 +694,15 @@ export function useQuiz({
     currentQuizId,
     generationProgressSessionId,
     generationRunFailed,
+    generationRunPaused,
     failedGenerationPipeline,
     patchNodeStudyState,
     refreshQuiz,
+    settlePausedProgress,
   ]);
 
   const handleGenerate = useCallback(async () => {
-    if (!node || isGeneratingQuiz || !canGenerateQuiz) return;
+    if (!node || isGeneratingQuiz || generationRunPaused || !canGenerateQuiz) return;
     const nodeId = node.node_id;
     generatingQuizNodeIds.add(nodeId);
     let latestRunId: string | null = null;
@@ -639,7 +711,7 @@ export function useQuiz({
       ...patchForGenerationJobStart(),
     });
     try {
-      const { result } = await generationJobService.runJob(
+      const { result, progress, runId } = await generationJobService.runJob(
         () => quizService.startGenerate(nodeId, {
           difficulty,
           question_count: questionCount,
@@ -653,6 +725,9 @@ export function useQuiz({
           });
         },
       );
+      if (settlePausedProgress(progress, "quiz", nodeId)) return;
+      if (!result) throw new Error("Quiz generation completed without a result.");
+      latestRunId = runId;
       const generated = result.quiz as QuizOut | null | undefined;
       if (!generated) throw new Error("Quiz generation returned no quiz.");
       setResolvedQuizIdForNode(nodeId, generated.quiz_id);
@@ -668,10 +743,10 @@ export function useQuiz({
     } finally {
       generatingQuizNodeIds.delete(nodeId);
     }
-  }, [node, canGenerateQuiz, difficulty, questionCount, isGeneratingQuiz, refreshQuiz, patchNodeStudyState, setResolvedQuizIdForNode, handleMutationError]);
+  }, [node, canGenerateQuiz, difficulty, questionCount, isGeneratingQuiz, generationRunPaused, refreshQuiz, patchNodeStudyState, settlePausedProgress, setResolvedQuizIdForNode, handleMutationError]);
 
   const handleRegenerate = useCallback(async (feedback: string, questionCountOverride?: number) => {
-    if (!node || !quiz || isGeneratingQuiz || !canGenerateQuiz) return;
+    if (!node || !quiz || isGeneratingQuiz || generationRunPaused || !canGenerateQuiz) return;
     const finalQuestionCount = questionCountOverride ?? questionCount;
     if (questionCountOverride !== undefined) {
       setQuestionCount(questionCountOverride);
@@ -688,7 +763,7 @@ export function useQuiz({
       setShowRegenerateModal(false);
     }
     try {
-      const { result } = await generationJobService.runJob(
+      const { result, progress, runId } = await generationJobService.runJob(
         () => quizService.startGenerate(nodeId, {
           difficulty,
           question_count: finalQuestionCount,
@@ -704,6 +779,9 @@ export function useQuiz({
           });
         },
       );
+      if (settlePausedProgress(progress, "quiz", nodeId)) return;
+      if (!result) throw new Error("Quiz regeneration completed without a result.");
+      latestRunId = runId;
       const generated = result.quiz as QuizOut | null | undefined;
       if (!generated) throw new Error("Quiz regeneration returned no quiz.");
       setResolvedQuizIdForNode(nodeId, generated.quiz_id);
@@ -719,7 +797,7 @@ export function useQuiz({
     } finally {
       generatingQuizNodeIds.delete(nodeId);
     }
-  }, [node, canGenerateQuiz, quiz, questionCount, difficulty, isGeneratingQuiz, refreshQuiz, patchNodeStudyState, setResolvedQuizIdForNode, handleMutationError]);
+  }, [node, canGenerateQuiz, quiz, questionCount, difficulty, isGeneratingQuiz, generationRunPaused, refreshQuiz, patchNodeStudyState, settlePausedProgress, setResolvedQuizIdForNode, handleMutationError]);
 
   const handleDeleteDraft = useCallback(async () => {
     if (!node || !quiz || isDeletingDraft) return;
@@ -872,7 +950,7 @@ export function useQuiz({
   }, [node?.node_id, quiz, isDeletingQuestion, handleMutationError]);
 
   const handleRegenerateQuestion = useCallback(async (questionId: string, feedback: string) => {
-    if (!node || !quiz || isRegeneratingQuestion || !canEditQuestions || quiz.is_published) return;
+    if (!node || !quiz || isRegeneratingQuestion || generationRunPaused || !canEditQuestions || quiz.is_published) return;
     const trimmedFeedback = feedback.trim();
     if (trimmedFeedback.length < 10) return;
 
@@ -882,7 +960,7 @@ export function useQuiz({
     let latestRunId: string | null = null;
     patchNodeStudyState(nodeId, patchForGenerationJobStart());
     try {
-      const { result } = await generationJobService.runJob(
+      const { result, progress, runId } = await generationJobService.runJob(
         () => quizService.startRegenerateQuestions(nodeId, quizId, {
           question_ids: [questionId],
           mentor_feedback: trimmedFeedback,
@@ -895,6 +973,9 @@ export function useQuiz({
           });
         },
       );
+      if (settlePausedProgress(progress, "quiz", nodeId)) return;
+      if (!result) throw new Error("Question regeneration completed without a result.");
+      latestRunId = runId;
       const updated = result.quiz as QuizOut | null | undefined;
       if (!updated) throw new Error("Question regeneration returned no quiz.");
       if (isViewingNode(nodeId)) {
@@ -915,7 +996,7 @@ export function useQuiz({
     } finally {
       setIsRegeneratingQuestion(null);
     }
-  }, [node, quiz, isRegeneratingQuestion, canEditQuestions, refreshQuiz, handleMutationError, patchNodeStudyState]);
+  }, [node, quiz, isRegeneratingQuestion, generationRunPaused, canEditQuestions, refreshQuiz, handleMutationError, patchNodeStudyState, settlePausedProgress]);
 
   const handleCreateQuestion = useCallback(async (data: QuizQuestionCreateRequest) => {
     if (!node || !quiz) return;
@@ -958,7 +1039,7 @@ export function useQuiz({
   }, [node?.node_id, quiz]);
 
   const handleGenerateHints = useCallback(async () => {
-    if (!node || !quiz || isGeneratingHints || !canGenerateHints) return;
+    if (!node || !quiz || isGeneratingHints || generationRunPaused || !canGenerateHints) return;
     const nodeId = node.node_id;
     const quizId = quiz.quiz_id;
     generatingHintsNodeIds.add(nodeId);
@@ -968,7 +1049,7 @@ export function useQuiz({
       ...patchForGenerationJobStart(),
     });
     try {
-      const { result } = await generationJobService.runJob(
+      const { result, progress, runId } = await generationJobService.runJob(
         () => quizService.startGenerateHints(nodeId, quizId),
         (progress) => {
           latestRunId = progress.session_id;
@@ -978,6 +1059,9 @@ export function useQuiz({
           });
         },
       );
+      if (settlePausedProgress(progress, "hint", nodeId)) return;
+      if (!result) throw new Error("Hint generation completed without a result.");
+      latestRunId = runId;
       const updated = result.quiz as QuizOut | null | undefined;
       if (!updated) throw new Error("Hint generation returned no quiz.");
       patchNodeStudyState(nodeId, patchForGenerationJobSuccess());
@@ -992,10 +1076,10 @@ export function useQuiz({
     } finally {
       generatingHintsNodeIds.delete(nodeId);
     }
-  }, [node, quiz, isGeneratingHints, canGenerateHints, refreshQuiz, patchNodeStudyState, handleMutationError]);
+  }, [node, quiz, isGeneratingHints, generationRunPaused, canGenerateHints, refreshQuiz, patchNodeStudyState, settlePausedProgress, handleMutationError]);
 
   const handleRegenerateAllHints = useCallback(async (feedback: string) => {
-    if (!node || !quiz || isGeneratingHints || !canRegenerateHints) return;
+    if (!node || !quiz || isGeneratingHints || generationRunPaused || !canRegenerateHints) return;
     const trimmedFeedback = feedback.trim();
     if (trimmedFeedback.length < 10) return;
 
@@ -1008,7 +1092,7 @@ export function useQuiz({
       ...patchForGenerationJobStart(),
     });
     try {
-      const { result } = await generationJobService.runJob(
+      const { result, progress, runId } = await generationJobService.runJob(
         () => quizService.startRegenerateHints(nodeId, quizId, {
           scope: "all",
           mentor_feedback: trimmedFeedback,
@@ -1021,6 +1105,9 @@ export function useQuiz({
           });
         },
       );
+      if (settlePausedProgress(progress, "hint", nodeId)) return;
+      if (!result) throw new Error("Hint regeneration completed without a result.");
+      latestRunId = runId;
       const updated = result.quiz as QuizOut | null | undefined;
       if (!updated) throw new Error("Hint regeneration returned no quiz.");
       patchNodeStudyState(nodeId, patchForGenerationJobSuccess());
@@ -1035,10 +1122,10 @@ export function useQuiz({
     } finally {
       generatingHintsNodeIds.delete(nodeId);
     }
-  }, [node, quiz, isGeneratingHints, canRegenerateHints, refreshQuiz, patchNodeStudyState, handleMutationError]);
+  }, [node, quiz, isGeneratingHints, generationRunPaused, canRegenerateHints, refreshQuiz, patchNodeStudyState, settlePausedProgress, handleMutationError]);
 
   const handleRegenerateHints = useCallback(async (questionId: string, feedback?: string) => {
-    if (!node || !quiz || isGeneratingHints || hintsLocked) return;
+    if (!node || !quiz || isGeneratingHints || generationRunPaused || hintsLocked) return;
     const nodeId = node.node_id;
     const quizId = quiz.quiz_id;
     generatingHintsNodeIds.add(nodeId);
@@ -1048,7 +1135,7 @@ export function useQuiz({
       ...patchForGenerationJobStart(),
     });
     try {
-      const { result } = await generationJobService.runJob(
+      const { result, progress, runId } = await generationJobService.runJob(
         () => quizService.startRegenerateHints(nodeId, quizId, {
           scope: "selective",
           question_ids: [questionId],
@@ -1062,6 +1149,9 @@ export function useQuiz({
           });
         },
       );
+      if (settlePausedProgress(progress, "hint", nodeId)) return;
+      if (!result) throw new Error("Hint regeneration completed without a result.");
+      latestRunId = runId;
       const updated = result.quiz as QuizOut | null | undefined;
       if (!updated) throw new Error("Hint regeneration returned no quiz.");
       patchNodeStudyState(nodeId, patchForGenerationJobSuccess());
@@ -1076,10 +1166,113 @@ export function useQuiz({
     } finally {
       generatingHintsNodeIds.delete(nodeId);
     }
-  }, [node, quiz, isGeneratingHints, hintsLocked, refreshQuiz, patchNodeStudyState, handleMutationError]);
+  }, [node, quiz, isGeneratingHints, generationRunPaused, hintsLocked, refreshQuiz, patchNodeStudyState, settlePausedProgress, handleMutationError]);
+
+  const resolveActivePipeline = useCallback((): "quiz" | "hint" | null => {
+    if (failedGenerationPipeline === "quiz" || isGeneratingQuiz || isRegeneratingQuestion) {
+      return "quiz";
+    }
+    if (failedGenerationPipeline === "hint" || isGeneratingHints) return "hint";
+    return null;
+  }, [
+    failedGenerationPipeline,
+    isGeneratingHints,
+    isGeneratingQuiz,
+    isRegeneratingQuestion,
+  ]);
+
+  const handlePauseGeneration = useCallback(async () => {
+    if (!node || isPausingGeneration || isAbandoningGeneration) return;
+    const runId = activeGenerationRunId ?? generationProgressSessionId;
+    const pipeline = resolveActivePipeline();
+    if (!runId || !pipeline) return;
+
+    const nodeId = node.node_id;
+    patchNodeStudyState(nodeId, { isPausingGeneration: true });
+    try {
+      await generationJobService.pauseRun(runId);
+      const progress = await generationJobService.waitForPaused(runId, (update) => {
+        patchNodeStudyState(nodeId, {
+          generationProgressSessionId: update.session_id,
+          activeGenerationRunId: update.session_id,
+        });
+      });
+      if (settlePausedProgress(progress, pipeline, nodeId)) return;
+      if (progress.status === "completed") {
+        await applyCompletedRunResult(nodeId, pipeline, runId);
+        return;
+      }
+      patchNodeStudyState(
+        nodeId,
+        patchForGenerationJobFailure(
+          new GenerationJobFailedError(
+            progress.error ?? "Generation failed.",
+            runId,
+          ),
+          runId,
+          pipeline,
+        ),
+      );
+    } catch (err) {
+      handleMutationError(err);
+      patchNodeStudyState(nodeId, { isPausingGeneration: false });
+    } finally {
+      generatingQuizNodeIds.delete(nodeId);
+      generatingHintsNodeIds.delete(nodeId);
+    }
+  }, [
+    activeGenerationRunId,
+    applyCompletedRunResult,
+    generationProgressSessionId,
+    handleMutationError,
+    isAbandoningGeneration,
+    isPausingGeneration,
+    node,
+    patchNodeStudyState,
+    resolveActivePipeline,
+    settlePausedProgress,
+  ]);
+
+  const handleAbandonGeneration = useCallback(async () => {
+    if (!node || isAbandoningGeneration) return;
+    const runId = activeGenerationRunId ?? generationProgressSessionId;
+    const pipeline = resolveActivePipeline();
+    if (!runId || !pipeline) return;
+
+    const nodeId = node.node_id;
+    const resourceId = pipeline === "hint"
+      ? currentQuizId
+      : (currentQuizId ?? nodeId);
+    if (!resourceId) return;
+
+    patchNodeStudyState(nodeId, { isAbandoningGeneration: true });
+    try {
+      await generationJobService.abandonRun(runId);
+      await generationJobService.waitForResourceIdle(resourceId, pipeline);
+      patchNodeStudyState(nodeId, patchForGenerationJobAbandoned());
+      setIsRegeneratingQuestion(null);
+      generatingQuizNodeIds.delete(nodeId);
+      generatingHintsNodeIds.delete(nodeId);
+      await refreshQuiz(nodeId, currentQuizId);
+    } catch (err) {
+      handleMutationError(err);
+      patchNodeStudyState(nodeId, { isAbandoningGeneration: false });
+    }
+  }, [
+    activeGenerationRunId,
+    currentQuizId,
+    generationProgressSessionId,
+    handleMutationError,
+    isAbandoningGeneration,
+    node,
+    patchNodeStudyState,
+    refreshQuiz,
+    resolveActivePipeline,
+  ]);
 
   const handleResumeFailedGeneration = useCallback(async () => {
     if (!node || isResumingFailedGeneration || !failedGenerationPipeline) return;
+    if (!generationRunFailed && !generationRunPaused) return;
     const pipeline = failedGenerationPipeline;
     if (pipeline !== "quiz" && pipeline !== "hint") return;
     const runId = activeGenerationRunId ?? generationProgressSessionId;
@@ -1093,6 +1286,7 @@ export function useQuiz({
 
     patchNodeStudyState(nodeId, {
       generationRunFailed: false,
+      generationRunPaused: false,
       isGeneratingQuiz: pipeline === "quiz",
       isGeneratingHints: pipeline === "hint",
       generationProgressSessionId: runId,
@@ -1100,12 +1294,14 @@ export function useQuiz({
     });
 
     try {
-      const { result } = await generationJobService.resumeJob(runId, (progress) => {
+      const { result, progress } = await generationJobService.resumeJob(runId, (progressUpdate) => {
         patchNodeStudyState(nodeId, {
-          generationProgressSessionId: progress.session_id,
-          activeGenerationRunId: progress.session_id,
+          generationProgressSessionId: progressUpdate.session_id,
+          activeGenerationRunId: progressUpdate.session_id,
         });
       });
+      if (settlePausedProgress(progress, pipeline, nodeId)) return;
+      if (!result) throw new Error("Resume completed without a quiz result.");
       const updated = result.quiz as QuizOut | null | undefined;
       if (!updated) throw new Error("Resume returned no quiz.");
       if (pipeline === "quiz") {
@@ -1131,19 +1327,16 @@ export function useQuiz({
     quiz,
     currentQuizId,
     isResumingFailedGeneration,
+    generationRunFailed,
+    generationRunPaused,
     failedGenerationPipeline,
     activeGenerationRunId,
     generationProgressSessionId,
     patchNodeStudyState,
     refreshQuiz,
+    settlePausedProgress,
     setResolvedQuizIdForNode,
   ]);
-
-  const handleDismissFailedGeneration = useCallback(() => {
-    if (!node) return;
-    patchNodeStudyState(node.node_id, patchClearFailedGenerationRun());
-    setIsRegeneratingQuestion(null);
-  }, [node, patchNodeStudyState]);
 
   const handleProceedToHints = useCallback(() => {
     if (!quiz) return;
@@ -1214,8 +1407,11 @@ export function useQuiz({
     generationProgressSessionId,
     activeGenerationRunId,
     generationRunFailed,
+    generationRunPaused,
     failedGenerationPipeline,
     isResumingFailedGeneration,
+    isPausingGeneration,
+    isAbandoningGeneration,
     isPublishing,
     isUnpublishing,
     isDeletingDraft,
@@ -1259,8 +1455,9 @@ export function useQuiz({
     quizUnpublishPreview,
     closeUnpublishQuizModal,
     handleGenerate,
+    handlePauseGeneration,
+    handleAbandonGeneration,
     handleResumeFailedGeneration,
-    handleDismissFailedGeneration,
     handleRegenerate,
     handleDeleteDraft,
     handleDeleteHintsDraft,

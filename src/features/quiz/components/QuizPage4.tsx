@@ -27,13 +27,15 @@ const QuizPage4: React.FC<QuizPage4Props> = ({ qz, onPageChange }) => {
   const [showRegenerateAllHintsModal, setShowRegenerateAllHintsModal] = useState(false);
   const showHintGenerationUi =
     qz.isGeneratingHints ||
+    qz.isPausingGeneration ||
+    (qz.generationRunPaused && qz.failedGenerationPipeline === "hint") ||
     (qz.generationRunFailed && qz.failedGenerationPipeline === "hint");
   const hintGenerationProgress = useGenerationProgress(
     qz.generationProgressSessionId,
     showHintGenerationUi,
   );
   const hintRunResume = useGenerationRunResume(
-    qz.generationRunFailed && qz.failedGenerationPipeline === "hint"
+    qz.failedGenerationPipeline === "hint"
       ? qz.activeGenerationRunId
       : null,
   );
@@ -57,11 +59,17 @@ const QuizPage4: React.FC<QuizPage4Props> = ({ qz, onPageChange }) => {
         }
         progress={hintGenerationProgress}
         failedRunId={qz.generationRunFailed ? qz.activeGenerationRunId : null}
+        pausedRunId={qz.generationRunPaused ? qz.activeGenerationRunId : null}
         resumable={hintRunResume.resumable}
         secondsUntilRetry={hintRunResume.secondsUntilRetry}
         isResuming={qz.isResumingFailedGeneration}
+        isPausing={qz.isPausingGeneration}
+        isAbandoning={qz.isAbandoningGeneration}
+        canPause={hintRunResume.canPause || qz.isGeneratingHints}
+        pauseContext={hintRunResume.pauseContext}
+        onPause={qz.handlePauseGeneration}
         onResume={qz.handleResumeFailedGeneration}
-        onDismissFailed={qz.handleDismissFailedGeneration}
+        onAbandon={qz.handleAbandonGeneration}
       />
     );
   }

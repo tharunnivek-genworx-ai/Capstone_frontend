@@ -116,16 +116,22 @@ const NodeDetailPanel: React.FC<NodeDetailPanelProps> = ({
 
   const showGenerationProgress =
     sm.isGenerating ||
+    sm.isPausingGeneration ||
+    (sm.generationRunPaused && sm.failedGenerationPipeline === "study_material") ||
     (sm.generationRunFailed && sm.failedGenerationPipeline === "study_material");
+  // A paused study-material run still holds the topic's generation slot. Block the
+  // Generate page's actions (Generate / Open draft / Regenerate) until the mentor
+  // resumes or deletes it, so an accidental re-generate can't spawn a conflicting run.
+  const studyRunPaused =
+    sm.generationRunPaused && sm.failedGenerationPipeline === "study_material";
   const studyGenerationProgress = useGenerationProgress(
     sm.generationProgressSessionId,
     showGenerationProgress,
   );
-  const studyRunResume = useGenerationRunResume(
-    sm.generationRunFailed && sm.failedGenerationPipeline === "study_material"
-      ? sm.activeGenerationRunId
-      : null,
-  );
+  const studyRunMetaRunId =
+    sm.activeGenerationRunId
+    ?? (showGenerationProgress ? sm.generationProgressSessionId : null);
+  const studyRunResume = useGenerationRunResume(studyRunMetaRunId);
 
   // ── Quiz hook ─────────────────────────────────────────────────────────────
   const qz = useQuiz({
@@ -140,7 +146,10 @@ const NodeDetailPanel: React.FC<NodeDetailPanelProps> = ({
     generationProgressSessionId: studyState?.generationProgressSessionId ?? null,
     activeGenerationRunId: studyState?.activeGenerationRunId ?? null,
     generationRunFailed: studyState?.generationRunFailed ?? false,
+    generationRunPaused: studyState?.generationRunPaused ?? false,
     failedGenerationPipeline: studyState?.failedGenerationPipeline ?? null,
+    isPausingGeneration: studyState?.isPausingGeneration ?? false,
+    isAbandoningGeneration: studyState?.isAbandoningGeneration ?? false,
     onNodeStudyStateChange: onStudyStateChange,
     onPageChange: sm.setCurrentPage,
     onMentorProgressRefresh,
@@ -424,6 +433,7 @@ const NodeDetailPanel: React.FC<NodeDetailPanelProps> = ({
               onOpenRefModal={() => sm.openRefModalManage()}
               onOpenMediaModal={() => sm.setShowNodeMediaModal(true)}
               isWaitingForGenerateAll={blockedByBatch}
+              runPaused={studyRunPaused}
             />
           </div>
         )}
@@ -438,11 +448,17 @@ const NodeDetailPanel: React.FC<NodeDetailPanelProps> = ({
                 subtitle={`The AI is updating study content for "${node.title}". This may take a minute.`}
                 progress={studyGenerationProgress}
                 failedRunId={sm.generationRunFailed ? sm.activeGenerationRunId : null}
+                pausedRunId={sm.generationRunPaused ? sm.activeGenerationRunId : null}
                 resumable={studyRunResume.resumable}
                 secondsUntilRetry={studyRunResume.secondsUntilRetry}
                 isResuming={sm.isResumingFailedGeneration}
+                isPausing={sm.isPausingGeneration}
+                isAbandoning={sm.isAbandoningGeneration}
+                canPause={studyRunResume.canPause || sm.isGenerating}
+                pauseContext={studyRunResume.pauseContext}
+                onPause={sm.handlePauseGeneration}
                 onResume={sm.handleResumeFailedGeneration}
-                onDismissFailed={sm.handleDismissFailedGeneration}
+                onAbandon={sm.handleAbandonGeneration}
               />
             ) : sm.isHistoryHubView || sm.studyMaterialContent?.trim() ? (
               <>

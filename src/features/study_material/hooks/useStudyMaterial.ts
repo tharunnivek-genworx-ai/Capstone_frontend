@@ -23,7 +23,9 @@ import { generationJobService } from "../../generation/services/generationProgre
 import type { GenerationPipeline } from "../../generation/types/generationProgress.types";
 import {
   patchClearFailedGenerationRun,
+  patchForGenerationJobAbandoned,
   patchForGenerationJobFailure,
+  patchForGenerationJobPaused,
   patchForGenerationJobStart,
   patchForGenerationJobSuccess,
 } from "../../generation/utils/generationRunState";
@@ -70,6 +72,7 @@ function isSourcePdfDeleted(
 
 /** Nodes with an in-flight generate/regenerate/improve request (survives node switches). */
 const generatingNodeIds = new Set<string>();
+const recoveringRunIds = new Set<string>();
 
 interface UseStudyMaterialParams {
   node: NodeTreeNode | null;
@@ -92,8 +95,11 @@ export interface UseStudyMaterialReturn {
   generationProgressSessionId: string | null;
   activeGenerationRunId: string | null;
   generationRunFailed: boolean;
+  generationRunPaused: boolean;
   failedGenerationPipeline: GenerationPipeline | null;
   isResumingFailedGeneration: boolean;
+  isPausingGeneration: boolean;
+  isAbandoningGeneration: boolean;
   referenceMaterial: ReferenceMaterialOut | null;
   nodeMedia: NodeMediaOut[];
   isLoadingGenerationSource: boolean;
@@ -189,8 +195,9 @@ export interface UseStudyMaterialReturn {
 
   // ── Handlers ─────────────────────────────────────────────────────────
   handleGenerateStudyMaterial: () => Promise<void>;
+  handlePauseGeneration: () => Promise<void>;
+  handleAbandonGeneration: () => Promise<void>;
   handleResumeFailedGeneration: () => Promise<void>;
-  handleDismissFailedGeneration: () => void;
   handleRegenerateStudyMaterialFresh: () => Promise<void>;
   runFeedbackAction: (mode: StudyMaterialFeedbackMode, feedback: string) => Promise<void>;
   handleManualEditSave: (content: string) => Promise<void>;
@@ -307,7 +314,10 @@ export function useStudyMaterial({
   const generationProgressSessionId = studyState?.generationProgressSessionId ?? null;
   const activeGenerationRunId = studyState?.activeGenerationRunId ?? null;
   const generationRunFailed = studyState?.generationRunFailed ?? false;
+  const generationRunPaused = studyState?.generationRunPaused ?? false;
   const failedGenerationPipeline = studyState?.failedGenerationPipeline ?? null;
+  const isPausingGeneration = studyState?.isPausingGeneration ?? false;
+  const isAbandoningGeneration = studyState?.isAbandoningGeneration ?? false;
   const referenceMaterial = studyState?.referenceMaterial ?? null;
   const currentEffectiveInstruction = node?.effective_instruction ?? "";
 
@@ -448,6 +458,44 @@ export function useStudyMaterial({
 
   refreshVersionHistoryRef.current = refreshVersionHistory;
 
+  const resetStudyMaterialAfterAbandon = useCallback(async (nodeId: string) => {
+    await refreshVersionHistoryRef.current(nodeId);
+    await refreshMentorUiStateRef.current(nodeId, null);
+    const active = await studyMaterialService.getActiveVersion(nodeId);
+    if (active) {
+      patchNodeStudyState(nodeId, {
+        ...patchForGenerationJobAbandoned(),
+        currentPage: 2,
+        hasTriggeredGeneration: true,
+        studyMaterialContent: active.content,
+        activeVersion: active,
+      });
+      return;
+    }
+
+    const history = await studyMaterialService.listVersions(nodeId, { archived: false });
+    const latestSummary = history.versions[0];
+    if (latestSummary) {
+      const version = await studyMaterialService.getVersion(nodeId, latestSummary.version_id);
+      patchNodeStudyState(nodeId, {
+        ...patchForGenerationJobAbandoned(),
+        currentPage: 2,
+        hasTriggeredGeneration: true,
+        studyMaterialContent: version.content,
+        activeVersion: version,
+      });
+      return;
+    }
+
+    patchNodeStudyState(nodeId, {
+      ...patchForGenerationJobAbandoned(),
+      currentPage: 1,
+      hasTriggeredGeneration: false,
+      studyMaterialContent: null,
+      activeVersion: null,
+    });
+  }, [patchNodeStudyState]);
+
   const allVersionSummaries = useCallback(
     () => [...versionHistory, ...archivedVersionHistory],
     [versionHistory, archivedVersionHistory]
@@ -582,6 +630,17 @@ export function useStudyMaterial({
   // explicit redirect in handleClearAllDrafts.
   useEffect(() => {
     if (!node || !isMentor || currentPage !== 2 || isGenerating) return;
+    // Keep the mentor on Material while a study-material run is pausing, paused,
+    // or failed — the progress panel (Continue / Delete run) lives here. A paused
+    // or failed *first* run has no persisted version yet, so the emptiness check
+    // below would otherwise fling the user back to page 1 and hide those controls.
+    if (
+      isPausingGeneration ||
+      ((generationRunPaused || generationRunFailed) &&
+        failedGenerationPipeline === "study_material")
+    ) {
+      return;
+    }
     if (mentorUiState === null) return;
     const hasAnyMaterial =
       mentorUiState.has_versions ||
@@ -596,6 +655,10 @@ export function useStudyMaterial({
     isMentor,
     currentPage,
     isGenerating,
+    isPausingGeneration,
+    generationRunPaused,
+    generationRunFailed,
+    failedGenerationPipeline,
     mentorUiState,
     versionHistory.length,
     archivedVersionHistory.length,
@@ -632,13 +695,15 @@ export function useStudyMaterial({
   useEffect(() => {
     if (!node || !isMentor) return;
     if (generatingNodeIds.has(node.node_id)) return;
-    if (generationProgressSessionId && isGenerating) return;
+    if (recoveringRunIds.has(node.node_id)) return;
     if (generationRunFailed && failedGenerationPipeline === "study_material") return;
+    if (generationRunPaused && failedGenerationPipeline === "study_material") return;
     // After batch or manual generate the draft may already be in state — ignore stale
     // RUNNING rows left by a race with manual /generate on the same node.
     if (hasTriggeredGeneration && activeVersion) return;
     const nodeId = node.node_id;
     let cancelled = false;
+    recoveringRunIds.add(nodeId);
     generationJobService
       .getActiveRun(nodeId, "study_material")
       .then(async (active) => {
@@ -665,19 +730,35 @@ export function useStudyMaterial({
           });
           return;
         }
+        if (active.status === "paused") {
+          patchNodeStudyState(nodeId, {
+            currentPage: 2,
+            hasTriggeredGeneration: true,
+            ...patchForGenerationJobPaused(runId, "study_material"),
+          });
+          return;
+        }
         patchNodeStudyState(nodeId, {
           currentPage: 2,
           isGenerating: true,
           generationRunFailed: false,
+          generationRunPaused: false,
           failedGenerationPipeline: null,
           generationProgressSessionId: runId,
           activeGenerationRunId: runId,
           hasTriggeredGeneration: true,
         });
         setProcessingLabel("Generating study material");
-        let resumableFailure = false;
         try {
-          await generationJobService.waitForCompletion(runId);
+          const progress = await generationJobService.waitForCompletion(runId);
+          if (progress.status === "paused") {
+            patchNodeStudyState(nodeId, {
+              currentPage: 2,
+              hasTriggeredGeneration: true,
+              ...patchForGenerationJobPaused(runId, "study_material"),
+            });
+            return;
+          }
           const result = await generationJobService.getResult(runId);
           if (result.study_material_generate) {
             applyVersion(
@@ -698,7 +779,6 @@ export function useStudyMaterial({
         } catch (err) {
           const failure = patchForGenerationJobFailure(err, runId, "study_material");
           if (failure.generationRunFailed) {
-            resumableFailure = true;
             patchNodeStudyState(nodeId, {
               currentPage: 2,
               hasTriggeredGeneration: true,
@@ -706,27 +786,25 @@ export function useStudyMaterial({
             });
           }
         } finally {
-          if (!cancelled) {
-            if (!resumableFailure) {
-              patchNodeStudyState(nodeId, patchForGenerationJobSuccess());
-            }
-            if (isViewingNode(nodeId)) {
-              setProcessingLabel(null);
-            }
+          if (!cancelled && isViewingNode(nodeId)) {
+            setProcessingLabel(null);
           }
         }
       })
-      .catch(() => {/* non-critical */});
+      .catch(() => {/* non-critical */})
+      .finally(() => {
+        recoveringRunIds.delete(nodeId);
+      });
     return () => {
       cancelled = true;
+      recoveringRunIds.delete(nodeId);
     };
   }, [
     node?.node_id,
     isMentor,
-    isGenerating,
-    generationProgressSessionId,
     generationRunFailed,
     failedGenerationPipeline,
+    generationRunPaused,
     hasTriggeredGeneration,
     activeVersion,
     patchNodeStudyState,
@@ -1077,6 +1155,32 @@ export function useStudyMaterial({
 
   // ── Handlers ──────────────────────────────────────────────────────────────
 
+  // Backend-truth guard: a paused run holds this topic's generation slot and must be
+  // resumed or deleted explicitly — never silently superseded by a fresh generate.
+  // Returns true (and routes the mentor to the paused run's Continue / Delete UI) when
+  // a paused run exists, so callers abort. Closes the race where a mentor clicks
+  // Generate on page 1 right after a reload, before recovery rehydrates paused state.
+  const routeToPausedRunIfAny = async (nodeId: string): Promise<boolean> => {
+    try {
+      const active = await generationJobService.getActiveRun(nodeId, "study_material");
+      if (active?.run_id && active.status === "paused") {
+        generatingNodeIds.delete(nodeId);
+        patchNodeStudyState(nodeId, {
+          currentPage: 2,
+          hasTriggeredGeneration: true,
+          ...patchForGenerationJobPaused(active.run_id, "study_material"),
+        });
+        if (isViewingNode(nodeId)) {
+          setProcessingLabel(null);
+        }
+        return true;
+      }
+    } catch {
+      /* non-critical — fall through and let the normal generate path proceed */
+    }
+    return false;
+  };
+
   const handleGenerateStudyMaterial = async () => {
     if (!node || isGenerating) return;
     const nodeId = node.node_id;
@@ -1090,19 +1194,32 @@ export function useStudyMaterial({
     });
     setProcessingLabel("Generating study material");
     try {
+      if (await routeToPausedRunIfAny(nodeId)) return;
       await generationJobService.waitForResourceIdle(nodeId);
-      const { result } = await generationJobService.runJob(
+      // Re-check: a run that was still winding down (RUNNING) may have settled to
+      // PAUSED while we waited. Never supersede it — route the mentor to resume/delete.
+      if (await routeToPausedRunIfAny(nodeId)) return;
+      const { result, progress } = await generationJobService.runJob(
         () => studyMaterialService.startGenerate(nodeId, {
           reference_material_id: referenceMaterial?.material_id ?? null,
         }),
-        (progress) => {
-          latestRunId = progress.session_id;
+        (progressUpdate) => {
+          latestRunId = progressUpdate.session_id;
           patchNodeStudyState(nodeId, {
-            generationProgressSessionId: progress.session_id,
-            activeGenerationRunId: progress.session_id,
+            generationProgressSessionId: progressUpdate.session_id,
+            activeGenerationRunId: progressUpdate.session_id,
           });
         },
       );
+      if (progress.status === "paused") {
+        patchNodeStudyState(nodeId, {
+          currentPage: 2,
+          hasTriggeredGeneration: true,
+          ...patchForGenerationJobPaused(progress.session_id, "study_material"),
+        });
+        return;
+      }
+      if (!result) throw new Error("Study material generation completed without a result.");
       const version = result.study_material_generate as StudyMaterialVersionOut | null | undefined;
       if (!version) throw new Error("Study material generation returned no version.");
       applyVersion(nodeId, version);
@@ -1165,20 +1282,33 @@ export function useStudyMaterial({
     });
     setProcessingLabel("Generating study material");
     try {
+      // The finally below resets isDeletingDrafts; just abort if a paused run exists.
+      if (await routeToPausedRunIfAny(nodeId)) return;
       await generationJobService.waitForResourceIdle(nodeId);
+      // Re-check after the wait: a winding-down run may have just settled to PAUSED.
+      if (await routeToPausedRunIfAny(nodeId)) return;
       await studyMaterialService.clearAllDrafts(nodeId);
-      const { result } = await generationJobService.runJob(
+      const { result, progress } = await generationJobService.runJob(
         () => studyMaterialService.startGenerate(nodeId, {
           reference_material_id: referenceMaterial?.material_id ?? null,
         }),
-        (progress) => {
-          latestRunId = progress.session_id;
+        (progressUpdate) => {
+          latestRunId = progressUpdate.session_id;
           patchNodeStudyState(nodeId, {
-            generationProgressSessionId: progress.session_id,
-            activeGenerationRunId: progress.session_id,
+            generationProgressSessionId: progressUpdate.session_id,
+            activeGenerationRunId: progressUpdate.session_id,
           });
         },
       );
+      if (progress.status === "paused") {
+        patchNodeStudyState(nodeId, {
+          currentPage: 2,
+          hasTriggeredGeneration: true,
+          ...patchForGenerationJobPaused(progress.session_id, "study_material"),
+        });
+        return;
+      }
+      if (!result) throw new Error("Study material generation completed without a result.");
       const version = result.study_material_generate as StudyMaterialVersionOut | null | undefined;
       if (!version) throw new Error("Study material generation returned no version.");
       applyVersion(nodeId, version);
@@ -1243,7 +1373,7 @@ export function useStudyMaterial({
     setProcessingLabel(mode === "regenerate" ? "Regenerating study material" : "Improving study material");
     try {
       await generationJobService.waitForResourceIdle(nodeId);
-      const { result } = await generationJobService.runJob(
+      const { result, progress } = await generationJobService.runJob(
         () => (mode === "regenerate"
           ? studyMaterialService.startRegenerate(nodeId, {
             mentor_regeneration_goal: feedback,
@@ -1251,14 +1381,23 @@ export function useStudyMaterial({
           : studyMaterialService.startImprove(nodeId, {
             mentor_feedback: feedback,
           })),
-        (progress) => {
-          latestRunId = progress.session_id;
+        (progressUpdate) => {
+          latestRunId = progressUpdate.session_id;
           patchNodeStudyState(nodeId, {
-            generationProgressSessionId: progress.session_id,
-            activeGenerationRunId: progress.session_id,
+            generationProgressSessionId: progressUpdate.session_id,
+            activeGenerationRunId: progressUpdate.session_id,
           });
         },
       );
+      if (progress.status === "paused") {
+        patchNodeStudyState(nodeId, {
+          currentPage: 2,
+          hasTriggeredGeneration: true,
+          ...patchForGenerationJobPaused(progress.session_id, "study_material"),
+        });
+        return;
+      }
+      if (!result) throw new Error("Study material feedback completed without a result.");
       const res = result.study_material_feedback as StudyMaterialFeedbackResponse | null | undefined;
       if (!res) throw new Error("Study material feedback returned no result.");
       if (!res.has_new_version) {
@@ -1325,6 +1464,7 @@ export function useStudyMaterial({
 
   const handleResumeFailedGeneration = async () => {
     if (!node || isResumingFailedGeneration || failedGenerationPipeline !== "study_material") return;
+    if (!generationRunFailed && !generationRunPaused) return;
     const runId = activeGenerationRunId ?? generationProgressSessionId;
     if (!runId) return;
 
@@ -1333,18 +1473,24 @@ export function useStudyMaterial({
     setIsResumingFailedGeneration(true);
     patchNodeStudyState(nodeId, {
       generationRunFailed: false,
+      generationRunPaused: false,
       isGenerating: true,
       generationProgressSessionId: runId,
       activeGenerationRunId: runId,
     });
     setProcessingLabel("Resuming study material generation");
     try {
-      const { result } = await generationJobService.resumeJob(runId, (progress) => {
+      const { result, progress } = await generationJobService.resumeJob(runId, (update) => {
         patchNodeStudyState(nodeId, {
-          generationProgressSessionId: progress.session_id,
-          activeGenerationRunId: progress.session_id,
+          generationProgressSessionId: update.session_id,
+          activeGenerationRunId: update.session_id,
         });
       });
+      if (progress.status === "paused") {
+        patchPausedGenerationState(nodeId, runId);
+        return;
+      }
+      if (!result) throw new Error("Resume completed without a study material result.");
       await applyStudyMaterialRunResult(nodeId, result);
       patchNodeStudyState(nodeId, patchForGenerationJobSuccess());
     } catch (err) {
@@ -1363,9 +1509,79 @@ export function useStudyMaterial({
     }
   };
 
-  const handleDismissFailedGeneration = () => {
-    if (!node) return;
-    patchNodeStudyState(node.node_id, patchClearFailedGenerationRun());
+  const patchPausedGenerationState = useCallback((nodeId: string, runId: string) => {
+    generatingNodeIds.delete(nodeId);
+    patchNodeStudyState(nodeId, {
+      currentPage: 2,
+      hasTriggeredGeneration: true,
+      ...patchForGenerationJobPaused(runId, "study_material"),
+    });
+    if (isViewingNode(nodeId)) {
+      setProcessingLabel(null);
+    }
+  }, [patchNodeStudyState]);
+
+  const handlePauseGeneration = async () => {
+    if (!node || isPausingGeneration || isAbandoningGeneration) return;
+    const runId = activeGenerationRunId ?? generationProgressSessionId;
+    if (!runId) return;
+
+    const nodeId = node.node_id;
+    patchNodeStudyState(nodeId, { isPausingGeneration: true });
+    try {
+      await generationJobService.pauseRun(runId);
+      // The run row is PAUSED (resumable) the instant pauseRun returns. Show the
+      // paused / resume UI immediately instead of polling until the worker winds
+      // down the current step (which can take 10-20s). This keeps the mentor on
+      // Material with Continue / Delete run and blocks an accidental re-generate.
+      patchPausedGenerationState(nodeId, runId);
+    } catch (pauseErr) {
+      // Pause fails when the run already settled (completed) or was paused by a
+      // concurrent poller — reconcile from the run row before surfacing an error.
+      try {
+        const run = await generationJobService.getRun(runId);
+        if (run.status === "completed") {
+          const result = await generationJobService.getResult(runId);
+          await applyStudyMaterialRunResult(nodeId, result);
+          patchNodeStudyState(nodeId, patchForGenerationJobSuccess());
+          return;
+        }
+        if (run.status === "paused") {
+          patchPausedGenerationState(nodeId, runId);
+          return;
+        }
+      } catch {
+        /* fall through to the error toast below */
+      }
+      toast.error(extractErrorDetail(pauseErr));
+      patchNodeStudyState(nodeId, { isPausingGeneration: false });
+    } finally {
+      generatingNodeIds.delete(nodeId);
+      if (isViewingNode(nodeId)) {
+        setProcessingLabel(null);
+      }
+    }
+  };
+
+  const handleAbandonGeneration = async () => {
+    if (!node || isAbandoningGeneration) return;
+    const runId = activeGenerationRunId ?? generationProgressSessionId;
+    if (!runId) return;
+
+    const nodeId = node.node_id;
+    patchNodeStudyState(nodeId, { isAbandoningGeneration: true });
+    try {
+      await generationJobService.abandonRun(runId);
+      await generationJobService.waitForResourceIdle(nodeId);
+      await resetStudyMaterialAfterAbandon(nodeId);
+    } catch (err) {
+      toast.error(extractErrorDetail(err));
+      patchNodeStudyState(nodeId, { isAbandoningGeneration: false });
+    } finally {
+      if (isViewingNode(nodeId)) {
+        setProcessingLabel(null);
+      }
+    }
   };
 
   const handleManualEditSave = async (content: string) => {
@@ -1775,7 +1991,10 @@ export function useStudyMaterial({
     activeGenerationRunId,
     generationRunFailed,
     failedGenerationPipeline,
+    generationRunPaused,
     isResumingFailedGeneration,
+    isPausingGeneration,
+    isAbandoningGeneration,
     referenceMaterial,
     nodeMedia,
     isLoadingGenerationSource,
@@ -1871,8 +2090,9 @@ export function useStudyMaterial({
 
     // Handlers
     handleGenerateStudyMaterial,
+    handlePauseGeneration,
+    handleAbandonGeneration,
     handleResumeFailedGeneration,
-    handleDismissFailedGeneration,
     handleRegenerateStudyMaterialFresh,
     runFeedbackAction,
     handleManualEditSave,

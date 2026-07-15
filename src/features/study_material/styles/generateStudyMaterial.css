@@ -1078,6 +1078,14 @@
   color: var(--gsm-success);
 }
 
+.gsm-ready-status--paused .gsm-ready-status__dot {
+  background: #f59e0b;
+}
+
+.gsm-ready-status--paused .gsm-ready-status__text {
+  color: #f59e0b;
+}
+
 .gsm-ready-title {
   font-size: 15.5px;
   font-weight: 600;

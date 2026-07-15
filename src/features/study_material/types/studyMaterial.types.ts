@@ -353,7 +353,10 @@ export interface NodeStudyStatePatch {
   generationProgressSessionId?: string | null;
   activeGenerationRunId?: string | null;
   generationRunFailed?: boolean;
+  generationRunPaused?: boolean;
   failedGenerationPipeline?: GenerationPipeline | null;
+  isPausingGeneration?: boolean;
+  isAbandoningGeneration?: boolean;
   referenceMaterial?: ReferenceMaterialOut | null;
   currentQuizId?: string | null;
 }
@@ -370,7 +373,10 @@ export interface NodeStudyState {
   generationProgressSessionId: string | null;
   activeGenerationRunId: string | null;
   generationRunFailed: boolean;
+  generationRunPaused: boolean;
   failedGenerationPipeline: GenerationPipeline | null;
+  isPausingGeneration: boolean;
+  isAbandoningGeneration: boolean;
   referenceMaterial: ReferenceMaterialOut | null;
   currentQuizId: string | null;
 }
