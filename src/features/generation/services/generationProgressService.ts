@@ -81,9 +81,16 @@ export const generationJobService = {
   async resumeJob(
     runId: string,
     onProgress?: (progress: GenerationProgressOut) => void,
-  ): Promise<{ runId: string; progress: GenerationProgressOut; result: GenerationRunResultOut }> {
+  ): Promise<{
+    runId: string;
+    progress: GenerationProgressOut;
+    result: GenerationRunResultOut | null;
+  }> {
     await this.resumeRun(runId);
     const progress = await this.waitForCompletion(runId, onProgress);
+    if (progress.status === "paused") {
+      return { runId, progress, result: null };
+    }
     if (progress.status === "failed") {
       throw new GenerationJobFailedError(progress.error ?? "Generation failed.", runId);
     }
@@ -119,7 +126,7 @@ export const generationJobService = {
           if (run.status === "paused") {
             return { ...progress, status: "paused" };
           }
-          if (run.status === "failed" || run.status === "abandoned" || run.status === "cancelled") {
+          if (run.status === "failed" || run.status === "abandoned") {
             return {
               ...progress,
               status: "failed",
@@ -157,28 +164,39 @@ export const generationJobService = {
     }
   },
 
-  /** Wait until no study-material run is active for this node (lock released server-side). */
+  /**
+   * Wait until no *running* study-material run holds this node (server-side lock).
+   *
+   * Only a RUNNING run holds the advisory lock. Failed/paused runs are resumable
+   * and remain "active" indefinitely — waiting on them would stall a fresh
+   * generate for the full retry budget. A new /generate supersedes them server-side.
+   */
   async waitForResourceIdle(
     resourceId: string,
     pipeline = "study_material",
   ): Promise<void> {
     for (let attempt = 0; attempt < ACTIVE_RUN_CLEAR_MAX_ATTEMPTS; attempt += 1) {
       const active = await this.getActiveRun(resourceId, pipeline);
-      if (!active?.run_id) {
+      if (!active?.run_id || active.status !== "running") {
         return;
       }
       await sleep(ACTIVE_RUN_CLEAR_INTERVAL_MS);
     }
+    throw new Error("The previous generation run is still stopping. Please try again.");
   },
 
   async runJob(
     start: () => Promise<GenerationJobStartResponse>,
     onProgress?: (progress: GenerationProgressOut) => void,
-  ): Promise<{ runId: string; progress: GenerationProgressOut; result: GenerationRunResultOut }> {
+  ): Promise<{
+    runId: string;
+    progress: GenerationProgressOut;
+    result: GenerationRunResultOut | null;
+  }> {
     const started = await start();
     const progress = await this.waitForCompletion(started.run_id, onProgress);
     if (progress.status === "paused") {
-      return { runId: started.run_id, progress, result: null as unknown as GenerationRunResultOut };
+      return { runId: started.run_id, progress, result: null };
     }
     if (progress.status === "failed") {
       throw new GenerationJobFailedError(

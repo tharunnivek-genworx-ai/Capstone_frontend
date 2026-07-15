@@ -51,14 +51,16 @@ const QuizPage3: React.FC<QuizPage3Props> = ({ nodeTitle, qz }) => {
   const [questionCountInput, setQuestionCountInput] = useState(String(qz.questionCount));
   const showQuizGenerationUi =
     qz.isGenerating ||
+    qz.isPausingGeneration ||
     Boolean(qz.isRegeneratingQuestion) ||
+    (qz.generationRunPaused && qz.failedGenerationPipeline === "quiz") ||
     (qz.generationRunFailed && qz.failedGenerationPipeline === "quiz");
   const generationProgress = useGenerationProgress(
     qz.generationProgressSessionId,
     showQuizGenerationUi,
   );
   const quizRunResume = useGenerationRunResume(
-    qz.generationRunFailed && qz.failedGenerationPipeline === "quiz"
+    qz.failedGenerationPipeline === "quiz"
       ? qz.activeGenerationRunId
       : null,
   );
@@ -142,11 +144,17 @@ const QuizPage3: React.FC<QuizPage3Props> = ({ nodeTitle, qz }) => {
         }
         progress={generationProgress}
         failedRunId={qz.generationRunFailed ? qz.activeGenerationRunId : null}
+        pausedRunId={qz.generationRunPaused ? qz.activeGenerationRunId : null}
         resumable={quizRunResume.resumable}
         secondsUntilRetry={quizRunResume.secondsUntilRetry}
         isResuming={qz.isResumingFailedGeneration}
+        isPausing={qz.isPausingGeneration}
+        isAbandoning={qz.isAbandoningGeneration}
+        canPause={quizRunResume.canPause || qz.isGenerating || Boolean(qz.isRegeneratingQuestion)}
+        pauseContext={quizRunResume.pauseContext}
+        onPause={qz.handlePauseGeneration}
         onResume={qz.handleResumeFailedGeneration}
-        onDismissFailed={qz.handleDismissFailedGeneration}
+        onAbandon={qz.handleAbandonGeneration}
       />
     );
   }

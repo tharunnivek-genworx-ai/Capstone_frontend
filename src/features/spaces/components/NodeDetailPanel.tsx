@@ -119,6 +119,11 @@ const NodeDetailPanel: React.FC<NodeDetailPanelProps> = ({
     sm.isPausingGeneration ||
     (sm.generationRunPaused && sm.failedGenerationPipeline === "study_material") ||
     (sm.generationRunFailed && sm.failedGenerationPipeline === "study_material");
+  // A paused study-material run still holds the topic's generation slot. Block the
+  // Generate page's actions (Generate / Open draft / Regenerate) until the mentor
+  // resumes or deletes it, so an accidental re-generate can't spawn a conflicting run.
+  const studyRunPaused =
+    sm.generationRunPaused && sm.failedGenerationPipeline === "study_material";
   const studyGenerationProgress = useGenerationProgress(
     sm.generationProgressSessionId,
     showGenerationProgress,
@@ -141,7 +146,10 @@ const NodeDetailPanel: React.FC<NodeDetailPanelProps> = ({
     generationProgressSessionId: studyState?.generationProgressSessionId ?? null,
     activeGenerationRunId: studyState?.activeGenerationRunId ?? null,
     generationRunFailed: studyState?.generationRunFailed ?? false,
+    generationRunPaused: studyState?.generationRunPaused ?? false,
     failedGenerationPipeline: studyState?.failedGenerationPipeline ?? null,
+    isPausingGeneration: studyState?.isPausingGeneration ?? false,
+    isAbandoningGeneration: studyState?.isAbandoningGeneration ?? false,
     onNodeStudyStateChange: onStudyStateChange,
     onPageChange: sm.setCurrentPage,
     onMentorProgressRefresh,
@@ -425,6 +433,7 @@ const NodeDetailPanel: React.FC<NodeDetailPanelProps> = ({
               onOpenRefModal={() => sm.openRefModalManage()}
               onOpenMediaModal={() => sm.setShowNodeMediaModal(true)}
               isWaitingForGenerateAll={blockedByBatch}
+              runPaused={studyRunPaused}
             />
           </div>
         )}

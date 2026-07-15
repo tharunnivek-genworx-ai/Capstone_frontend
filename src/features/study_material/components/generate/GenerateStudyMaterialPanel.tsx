@@ -25,6 +25,8 @@ export interface GenerateStudyMaterialPanelProps {
   onOpenRefModal: () => void;
   onOpenMediaModal: () => void;
   isWaitingForGenerateAll?: boolean;
+  /** A study-material run is paused (resumable). Blocks new generation until resumed/deleted. */
+  runPaused?: boolean;
 }
 
 function detectSavedMode(node: NodeTreeNode): InstructionMode {
@@ -65,6 +67,7 @@ export default function GenerateStudyMaterialPanel({
   onOpenRefModal,
   onOpenMediaModal,
   isWaitingForGenerateAll = false,
+  runPaused = false,
 }: GenerateStudyMaterialPanelProps) {
   const [showNoInstructionWarning, setShowNoInstructionWarning] = useState(false);
 
@@ -75,6 +78,7 @@ export default function GenerateStudyMaterialPanel({
   const handleOpenExisting = useCallback(() => sm.setCurrentPage(2), [sm]);
 
   const handleGenerateClick = useCallback(() => {
+    if (runPaused) return;
     if (isWaitingForGenerateAll && !sm.isGenerating) return;
     const hasInherited = previewParts.some(
       (p) => p.type === "inherited" || p.type === "branch-default"
@@ -89,18 +93,20 @@ export default function GenerateStudyMaterialPanel({
     } else {
       void sm.handleGenerateStudyMaterial();
     }
-  }, [previewParts, mode, modeText, branchDefault, sm, isWaitingForGenerateAll]);
+  }, [previewParts, mode, modeText, branchDefault, sm, isWaitingForGenerateAll, runPaused]);
 
   const handleContinueFromWarning = useCallback(() => {
+    if (runPaused) return;
     if (isWaitingForGenerateAll && !sm.isGenerating) return;
     setShowNoInstructionWarning(false);
     void sm.handleGenerateStudyMaterial();
-  }, [sm, isWaitingForGenerateAll]);
+  }, [sm, isWaitingForGenerateAll, runPaused]);
 
   const handleRegenerate = useCallback(() => {
+    if (runPaused) return;
     if (isWaitingForGenerateAll && !sm.isGenerating) return;
     sm.setShowRegenerateConfirmModal(true);
-  }, [sm, isWaitingForGenerateAll]);
+  }, [sm, isWaitingForGenerateAll, runPaused]);
 
   const handleAddInstructionFromWarning = useCallback(() => {
     setShowNoInstructionWarning(false);
@@ -165,6 +171,7 @@ export default function GenerateStudyMaterialPanel({
         isGenerating={sm.isGenerating}
         isDeletingDrafts={sm.isDeletingDrafts}
         isWaitingForGenerateAll={isWaitingForGenerateAll && !sm.isGenerating}
+        runPaused={runPaused}
         onOpenRefModal={onOpenRefModal}
         onOpenMediaModal={onOpenMediaModal}
         onOpenExisting={handleOpenExisting}

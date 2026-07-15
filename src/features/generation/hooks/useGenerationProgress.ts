@@ -14,43 +14,46 @@ export function useGenerationProgress(
   sessionId: string | null | undefined,
   isActive: boolean,
 ): GenerationProgressOut | null {
-  const [progress, setProgress] = useState<GenerationProgressOut | null>(null);
+  const [loaded, setLoaded] = useState<{
+    sessionId: string;
+    progress: GenerationProgressOut | null;
+  } | null>(null);
+  const progress =
+    isActive && loaded && loaded.sessionId === sessionId ? loaded.progress : null;
 
   useEffect(() => {
-    if (!sessionId || !isActive) {
-      setProgress(null);
-      return;
-    }
+    if (!sessionId || !isActive) return;
 
     let cancelled = false;
     let notFoundRetries = 0;
+    let timeoutId: number | null = null;
 
     const poll = async () => {
+      let shouldContinue = true;
       try {
         const next = await generationProgressService.get(sessionId);
-        if (!cancelled) {
-          notFoundRetries = 0;
-          setProgress(next);
-        }
+        if (cancelled) return;
+        notFoundRetries = 0;
+        setLoaded({ sessionId, progress: next });
+        shouldContinue = next.status === "running";
       } catch (error) {
         if (isNotFoundError(error) && notFoundRetries < MAX_NOT_FOUND_RETRIES) {
           notFoundRetries += 1;
-          return;
+        } else {
+          shouldContinue = false;
+          if (!cancelled) setLoaded({ sessionId, progress: null });
         }
-        if (!cancelled) {
-          setProgress(null);
-        }
+      }
+      if (!cancelled && shouldContinue) {
+        timeoutId = window.setTimeout(() => void poll(), POLL_INTERVAL_MS);
       }
     };
 
     void poll();
-    const intervalId = window.setInterval(() => {
-      void poll();
-    }, POLL_INTERVAL_MS);
 
     return () => {
       cancelled = true;
-      window.clearInterval(intervalId);
+      if (timeoutId !== null) window.clearTimeout(timeoutId);
     };
   }, [sessionId, isActive]);
 

@@ -1,4 +1,4 @@
-import { FileText, Link2, RefreshCw, Sparkles, Upload } from "lucide-react";
+import { FileText, Link2, Pause, RefreshCw, Sparkles, Upload } from "lucide-react";
 import type { NodeTreeNode, EffectiveInstructionPart } from "../../../spaces/types/node.types";
 import type { ReferenceMaterialOut } from "../../types/studyMaterial.types";
 import type { InstructionMode } from "./instructionMode.types";
@@ -28,6 +28,8 @@ interface GenerateSetupPanelProps {
   isGenerating: boolean;
   isDeletingDrafts: boolean;
   isWaitingForGenerateAll?: boolean;
+  /** A study-material run is paused (resumable) — block new generation until resumed/deleted. */
+  runPaused?: boolean;
   onOpenRefModal: () => void;
   onOpenMediaModal: () => void;
   onOpenExisting: () => void;
@@ -57,6 +59,7 @@ export default function GenerateSetupPanel({
   isGenerating,
   isDeletingDrafts,
   isWaitingForGenerateAll = false,
+  runPaused = false,
   onOpenRefModal,
   onOpenMediaModal,
   onOpenExisting,
@@ -64,34 +67,45 @@ export default function GenerateSetupPanel({
   onRegenerate,
 }: GenerateSetupPanelProps) {
   const isWorking = isGenerating || isDeletingDrafts;
-  const blockManualGenerate = isWorking || isWaitingForGenerateAll;
+  const blockManualGenerate = isWorking || isWaitingForGenerateAll || runPaused;
+  const pausedTitle =
+    "Generation is paused. Resume or delete it from the Material tab before creating a new draft.";
 
   return (
     <div className="gsm-setup">
       <section className="gsm-setup-hero" aria-labelledby="gsm-setup-hero-title">
         <div className="gsm-setup-hero__layout">
           <div className="gsm-setup-hero__main">
-            {hasWorkspaceStudyMaterial && (
+            {runPaused ? (
+              <div className="gsm-ready-status gsm-ready-status--paused">
+                <span className="gsm-ready-status__dot" aria-hidden="true" />
+                <span className="gsm-ready-status__text">Generation paused</span>
+              </div>
+            ) : hasWorkspaceStudyMaterial ? (
               <div className="gsm-ready-status">
                 <span className="gsm-ready-status__dot" aria-hidden="true" />
                 <span className="gsm-ready-status__text">Draft ready to review</span>
               </div>
-            )}
+            ) : null}
 
             <p className="gsm-setup-hero__eyebrow">Start here</p>
             <h2 id="gsm-setup-hero-title" className="gsm-setup-hero__title">
               {isWaitingForGenerateAll
                 ? "Waiting in generate-all"
-                : hasWorkspaceStudyMaterial
-                  ? "Your lesson draft is ready"
-                  : "Generate your lesson draft"}
+                : runPaused
+                  ? "Generation paused"
+                  : hasWorkspaceStudyMaterial
+                    ? "Your lesson draft is ready"
+                    : "Generate your lesson draft"}
             </h2>
             <p className="gsm-setup-hero__sub">
               {isWaitingForGenerateAll
                 ? "This topic will start automatically after earlier sections finish."
-                : hasWorkspaceStudyMaterial
-                  ? `${node.title} already has a draft. Open it to review, or create a new version below.`
-                  : "Click below when you're ready. You can customize how AI teaches first — or skip straight to a draft."}
+                : runPaused
+                  ? "This topic has a paused generation run. Resume or delete it from the Material tab before starting a new draft."
+                  : hasWorkspaceStudyMaterial
+                    ? `${node.title} already has a draft. Open it to review, or create a new version below.`
+                    : "Click below when you're ready. You can customize how AI teaches first — or skip straight to a draft."}
             </p>
 
             {isWaitingForGenerateAll && !isGenerating && (
@@ -99,7 +113,27 @@ export default function GenerateSetupPanel({
             )}
 
             <div className="gsm-setup-hero__actions">
-              {hasWorkspaceStudyMaterial ? (
+              {runPaused ? (
+                <>
+                  <button
+                    type="button"
+                    className="gsm-btn gsm-btn--primary gsm-btn--block gsm-btn--lg"
+                    onClick={onOpenExisting}
+                  >
+                    <Pause size={16} strokeWidth={1.8} aria-hidden />
+                    Go to paused run
+                  </button>
+                  <button
+                    type="button"
+                    className="gsm-btn gsm-btn--outline-primary gsm-btn--block"
+                    disabled
+                    title={pausedTitle}
+                  >
+                    <Sparkles size={14} strokeWidth={1.8} aria-hidden />
+                    Run paused
+                  </button>
+                </>
+              ) : hasWorkspaceStudyMaterial ? (
                 <>
                   <button
                     type="button"

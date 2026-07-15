@@ -22,8 +22,6 @@ interface GenerationProgressPanelProps {
   onPause?: () => void;
   onResume?: () => void;
   onAbandon?: () => void;
-  /** @deprecated Use onAbandon — kept for backward compatibility during migration. */
-  onDismissFailed?: () => void;
 }
 
 function formatRetryCountdown(seconds: number): string {
@@ -50,19 +48,20 @@ const GenerationProgressPanel: React.FC<GenerationProgressPanelProps> = ({
   onPause,
   onResume,
   onAbandon,
-  onDismissFailed,
 }) => {
   const steps = progress?.steps ?? [];
   const progressStatus = progress?.status;
+  // A non-null pausedRunId is authoritative: the caller only sets it once the run
+  // row is PAUSED (resumable). Trust it even if the progress poll still reports
+  // "running" for a moment, so the paused UI appears immediately after Cancel.
   const isUserPaused = progressStatus === "paused"
-    || Boolean(pausedRunId && onResume && progressStatus !== "running");
+    || Boolean(pausedRunId && onResume);
   const isFailed =
     !isUserPaused
     && (progressStatus === "failed" || Boolean(failedRunId && onResume));
   const isRunning = !isUserPaused && !isFailed && progressStatus !== "completed";
   const showResumeActions = Boolean((isUserPaused || isFailed) && (pausedRunId || failedRunId) && onResume);
-  const abandonHandler = onAbandon ?? onDismissFailed;
-  const showAbandon = Boolean(abandonHandler && (isUserPaused || isFailed));
+  const showAbandon = Boolean(onAbandon && (isUserPaused || isFailed));
   const showPause = Boolean(isRunning && onPause && (canPause || isPausing));
   const resumeDisabled =
     isResuming || isAbandoning || !resumable || (secondsUntilRetry != null && secondsUntilRetry > 0);
@@ -146,7 +145,7 @@ const GenerationProgressPanel: React.FC<GenerationProgressPanelProps> = ({
             <button
               type="button"
               className="btn-secondary generation-progress__action-btn"
-              onClick={abandonHandler}
+              onClick={onAbandon}
               disabled={isResuming || isPausing || isAbandoning}
             >
               {isAbandoning ? "Deleting…" : "Delete run"}
