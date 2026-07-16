@@ -1,4 +1,5 @@
 import React from "react";
+import { AlertTriangle, BookOpen, FileQuestion, Trash2 } from "lucide-react";
 import type { NodeDeletePreviewOut } from "../../mentor_progress_view/types/mentorProgress.types";
 
 interface NodeDeleteConfirmModalProps {
@@ -25,148 +26,84 @@ const NodeDeleteConfirmModal: React.FC<NodeDeleteConfirmModalProps> = ({
     <>
       <div
         onClick={isSubmitting ? undefined : onClose}
-        style={{
-          position: "fixed",
-          inset: 0,
-          background: "rgba(0,0,0,0.65)",
-          zIndex: 50,
-          backdropFilter: "blur(4px)",
-        }}
+        className="topic-tree-modal__backdrop topic-tree-modal__backdrop--strong"
       />
-      <div
-        style={{
-          position: "fixed",
-          inset: 0,
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          zIndex: 60,
-          pointerEvents: "none",
-        }}
-      >
+      <div className="topic-tree-modal__layer topic-tree-modal__layer--front">
         <div
-          className="animate-fade-in"
-          style={{
-            pointerEvents: "auto",
-            width: "min(520px, 95vw)",
-            background: "var(--color-surface-2)",
-            border: "1px solid var(--color-border)",
-            borderRadius: "var(--radius-xl)",
-            boxShadow: "0 24px 80px rgba(0,0,0,0.6)",
-            overflow: "hidden",
-          }}
+          className="topic-delete-modal animate-fade-in"
+          role="alertdialog"
+          aria-modal="true"
+          aria-labelledby="delete-topic-title"
+          aria-describedby="delete-topic-description"
         >
-          <div
-            style={{
-              padding: "1.25rem 1.5rem",
-              borderBottom: "1px solid var(--color-border)",
-              display: "flex",
-              alignItems: "center",
-              gap: "0.75rem",
-            }}
-          >
-            <div
-              style={{
-                width: "40px",
-                height: "40px",
-                borderRadius: "10px",
-                background: "rgba(239,68,68,0.15)",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                flexShrink: 0,
-              }}
-            >
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--color-danger)" strokeWidth="2">
-                <polyline points="3 6 5 6 21 6" />
-                <path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6" />
-                <path d="M10 11v6M14 11v6" />
-                <path d="M9 6V4a1 1 0 011-1h4a1 1 0 011 1v2" />
-              </svg>
+          <div className="topic-delete-modal__header">
+            <div className="topic-delete-modal__icon">
+              <Trash2 size={21} />
             </div>
             <div>
-              <h2 style={{ margin: 0, fontSize: "1.125rem", fontWeight: 700, color: "var(--color-text-primary)" }}>
+              <span className="topic-tree-modal__eyebrow">Delete from outline</span>
+              <h2 id="delete-topic-title" className="topic-delete-modal__title">
                 Delete this topic?
               </h2>
-              <p
-                style={{
-                  margin: "0.125rem 0 0",
-                  fontSize: "0.875rem",
-                  color: "var(--color-text-muted)",
-                  overflow: "hidden",
-                  textOverflow: "ellipsis",
-                  whiteSpace: "nowrap",
-                  maxWidth: "380px",
-                }}
-              >
+              <p className="topic-delete-modal__topic" title={nodeTitle}>
                 &ldquo;{nodeTitle}&rdquo;
               </p>
             </div>
           </div>
 
-          <div style={{ padding: "1.5rem", display: "flex", flexDirection: "column", gap: "1.25rem" }}>
-            <p style={{ margin: 0, fontSize: "0.9375rem", color: "var(--color-text-secondary)", lineHeight: 1.6 }}>
+          <div className="topic-delete-modal__body">
+            <p id="delete-topic-description" className="topic-delete-modal__description">
               Students will no longer be able to see live content on{" "}
               {preview.topic_count === 1 ? "this topic" : `these ${preview.topic_count} ${topicNoun}`}.
               {preview.topic_count > 1 ? " All subtopics will be deleted as well." : null}
             </p>
 
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.75rem" }}>
-              <div
-                style={{
-                  background: "var(--color-surface-3, var(--color-surface))",
-                  border: "1px solid var(--color-border)",
-                  borderRadius: "var(--radius-md)",
-                  padding: "1rem 1.125rem",
-                }}
-              >
-                <p style={{ margin: "0 0 0.375rem", fontSize: "0.75rem", fontWeight: 600, color: "var(--color-text-muted)", textTransform: "uppercase", letterSpacing: "0.04em" }}>
+            <div className="topic-delete-modal__impact-grid">
+              <div className="topic-delete-modal__impact">
+                <BookOpen size={18} aria-hidden="true" />
+                <p className="topic-delete-modal__impact-label">
                   Live study material
                 </p>
-                <p style={{ margin: 0, fontSize: "1.75rem", fontWeight: 700, color: "var(--color-text-primary)", lineHeight: 1.1 }}>
+                <p className="topic-delete-modal__impact-count">
                   {preview.live_study_material_count}
                 </p>
-                <p style={{ margin: "0.375rem 0 0", fontSize: "0.8125rem", color: "var(--color-text-secondary)" }}>
+                <p className="topic-delete-modal__impact-copy">
                   published {materialNoun}
                 </p>
               </div>
 
-              <div
-                style={{
-                  background: "var(--color-surface-3, var(--color-surface))",
-                  border: "1px solid var(--color-border)",
-                  borderRadius: "var(--radius-md)",
-                  padding: "1rem 1.125rem",
-                }}
-              >
-                <p style={{ margin: "0 0 0.375rem", fontSize: "0.75rem", fontWeight: 600, color: "var(--color-text-muted)", textTransform: "uppercase", letterSpacing: "0.04em" }}>
+              <div className="topic-delete-modal__impact">
+                <FileQuestion size={18} aria-hidden="true" />
+                <p className="topic-delete-modal__impact-label">
                   Live quizzes
                 </p>
-                <p style={{ margin: 0, fontSize: "1.75rem", fontWeight: 700, color: "var(--color-text-primary)", lineHeight: 1.1 }}>
+                <p className="topic-delete-modal__impact-count">
                   {preview.live_quiz_count}
                 </p>
-                <p style={{ margin: "0.375rem 0 0", fontSize: "0.8125rem", color: "var(--color-text-secondary)" }}>
+                <p className="topic-delete-modal__impact-copy">
                   published {quizNoun}
                 </p>
               </div>
             </div>
 
             {(preview.live_study_material_count > 0 || preview.live_quiz_count > 0) && (
-              <p style={{ margin: 0, fontSize: "0.8125rem", color: "var(--color-warning, #d97706)", lineHeight: 1.5 }}>
-                This will remove {preview.live_study_material_count} live {materialNoun} and{" "}
-                {preview.live_quiz_count} live {quizNoun} from student view immediately.
-              </p>
+              <div className="topic-delete-modal__warning">
+                <AlertTriangle size={17} aria-hidden="true" />
+                <p>
+                  This will remove {preview.live_study_material_count} live {materialNoun} and{" "}
+                  {preview.live_quiz_count} live {quizNoun} from student view immediately.
+                </p>
+              </div>
             )}
 
-            <div style={{ display: "flex", gap: "0.75rem" }}>
-              <button type="button" onClick={onClose} className="btn-secondary" style={{ flex: 1 }} disabled={isSubmitting}>
+            <div className="topic-delete-modal__actions">
+              <button type="button" onClick={onClose} className="btn-secondary" disabled={isSubmitting}>
                 Cancel
               </button>
               <button
                 type="button"
                 onClick={onConfirm}
                 className="btn-danger"
-                style={{ flex: 1, padding: "0.625rem 1rem" }}
                 disabled={isSubmitting}
               >
                 {isSubmitting ? "Deleting…" : "Delete topic"}

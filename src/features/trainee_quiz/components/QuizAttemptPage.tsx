@@ -2,6 +2,7 @@ import React, { useEffect } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useQuizAttempt } from "../hooks/useQuizAttempt";
 import { traineeSpaceUrl } from "../../trainee_study_material/utils/traineeSpaceNavigation";
+import toast from "react-hot-toast";
 import QuestionNavigator from "./QuestionNavigator";
 import QuizQuestionArea from "./QuizQuestionArea";
 import "../styles/traineeQuiz.css";
@@ -15,7 +16,13 @@ const QuizAttemptPage: React.FC = () => {
     spaceId: spaceId ?? "",
   });
 
-  const handleSaveExit = () => {
+  const handleSaveExit = async () => {
+    try {
+      await attempt.flushNavigationState();
+    } catch {
+      toast.error("Could not save your quiz position. Please try again.");
+      return;
+    }
     const nodeId = attempt.quiz?.node_id;
     if (spaceId) navigate(traineeSpaceUrl(spaceId, nodeId));
     else navigate("/trainee/spaces");
@@ -34,6 +41,15 @@ const QuizAttemptPage: React.FC = () => {
     }
   }, [attempt.quiz?.attempt_status, spaceId, attemptId, navigate]);
 
+  useEffect(() => {
+    if (!attempt.abandonedTarget || !spaceId || !attemptId) return;
+    const { nodeId, quizId } = attempt.abandonedTarget;
+    navigate(
+      `/trainee/spaces/${spaceId}/nodes/${nodeId}/quiz/${quizId}/archive-review?attempt=${attemptId}`,
+      { replace: true },
+    );
+  }, [attempt.abandonedTarget, spaceId, attemptId, navigate]);
+
   if (attempt.isLoading) {
     return (
       <div className="trainee-quiz-page trainee-quiz-page--loading">
@@ -47,7 +63,7 @@ const QuizAttemptPage: React.FC = () => {
     return (
       <div className="trainee-quiz-page trainee-quiz-page--error">
         <p>{attempt.loadError ?? "Quiz attempt not found."}</p>
-        <button type="button" className="trainee-quiz-btn trainee-quiz-btn--secondary" onClick={handleSaveExit}>
+        <button type="button" className="trainee-quiz-btn trainee-quiz-btn--secondary" onClick={() => void handleSaveExit()}>
           Back to course
         </button>
       </div>
@@ -67,7 +83,7 @@ const QuizAttemptPage: React.FC = () => {
     return (
       <div className="trainee-quiz-page trainee-quiz-page--error">
         <p>No questions available for this quiz.</p>
-        <button type="button" className="trainee-quiz-btn trainee-quiz-btn--secondary" onClick={handleSaveExit}>
+        <button type="button" className="trainee-quiz-btn trainee-quiz-btn--secondary" onClick={() => void handleSaveExit()}>
           Back to course
         </button>
       </div>
@@ -102,7 +118,7 @@ const QuizAttemptPage: React.FC = () => {
         onExpandHints={attempt.expandHints}
         onShowNextHint={attempt.showNextHint}
         onCollapseHints={attempt.collapseHints}
-        onSaveExit={handleSaveExit}
+        onSaveExit={() => void handleSaveExit()}
         onSubmitQuiz={handleSubmitQuiz}
         isSubmittingQuiz={attempt.isSubmittingQuiz}
       />

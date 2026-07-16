@@ -31,20 +31,19 @@ import QuizPage4 from "../../quiz/components/QuizPage4";
 import GenerationProgressPanel from "../../generation/components/GenerationProgressPanel";
 import { useGenerationProgress } from "../../generation/hooks/useGenerationProgress";
 import { useGenerationRunResume } from "../../generation/hooks/useGenerationRunResume";
+import type { GenerationProgressOut } from "../../generation/types/generationProgress.types";
 import type { InstructionMode } from "../../study_material/components/generate/instructionMode.types";
+import {
+  detectInstructionModeFromNode,
+  getSavedInstructionText,
+} from "../../study_material/components/generate/instructionModeUtils";
+import { FileText, Zap } from "lucide-react";
 
 // Re-export for consumers that import from here
 export type { NodeStudyStatePatch };
 
-function nonempty(s: string | null | undefined): string | null {
-  const t = s?.trim();
-  return t || null;
-}
-
 function detectMode(node: NodeTreeNode): InstructionMode {
-  if (nonempty(node.node_specific_instruction)) return "replace";
-  if (nonempty(node.node_additive_instruction)) return "extend";
-  return "inherit";
+  return detectInstructionModeFromNode(node);
 }
 
 function getDepthLabel(level: number): string {
@@ -56,6 +55,7 @@ function getDepthLabel(level: number): string {
 
 interface NodeDetailPanelProps {
   node: NodeTreeNode | null;
+  hasTopics?: boolean;
   spaceId: string;
   spaceIsPublished?: boolean;
   onRename: (nodeId: string, newTitle: string) => Promise<void>;
@@ -74,6 +74,7 @@ interface NodeDetailPanelProps {
 
 const NodeDetailPanel: React.FC<NodeDetailPanelProps> = ({
   node,
+  hasTopics = true,
   spaceId,
   spaceIsPublished,
   onRename,
@@ -124,9 +125,22 @@ const NodeDetailPanel: React.FC<NodeDetailPanelProps> = ({
   // resumes or deletes it, so an accidental re-generate can't spawn a conflicting run.
   const studyRunPaused =
     sm.generationRunPaused && sm.failedGenerationPipeline === "study_material";
+  const studyRunFailed =
+    sm.generationRunFailed && sm.failedGenerationPipeline === "study_material";
+  const handleStudyGenerationProgress = useCallback(
+    (progress: GenerationProgressOut) => {
+      if (!node || !onStudyStateChange) return;
+      onStudyStateChange(node.node_id, { generationProgress: progress });
+    },
+    [node?.node_id, onStudyStateChange],
+  );
   const studyGenerationProgress = useGenerationProgress(
     sm.generationProgressSessionId,
     showGenerationProgress,
+    sm.isGenerating || sm.isResumingFailedGeneration,
+    node?.node_id ?? null,
+    studyState?.generationProgress ?? null,
+    handleStudyGenerationProgress,
   );
   const studyRunMetaRunId =
     sm.activeGenerationRunId
@@ -145,6 +159,7 @@ const NodeDetailPanel: React.FC<NodeDetailPanelProps> = ({
     isGeneratingHints: studyState?.isGeneratingHints ?? false,
     generationProgressSessionId: studyState?.generationProgressSessionId ?? null,
     activeGenerationRunId: studyState?.activeGenerationRunId ?? null,
+    generationProgress: studyState?.generationProgress ?? null,
     generationRunFailed: studyState?.generationRunFailed ?? false,
     generationRunPaused: studyState?.generationRunPaused ?? false,
     failedGenerationPipeline: studyState?.failedGenerationPipeline ?? null,
@@ -163,8 +178,8 @@ const NodeDetailPanel: React.FC<NodeDetailPanelProps> = ({
       setIsRenaming(false);
       const detected = detectMode(node);
       setMode(detected);
-      if (detected === "replace") setModeText(node.node_specific_instruction ?? "");
-      else if (detected === "extend") setModeText(node.node_additive_instruction ?? "");
+      if (detected === "replace") setModeText(getSavedInstructionText(node, "replace"));
+      else if (detected === "extend") setModeText(getSavedInstructionText(node, "extend"));
       else setModeText("");
       setBranchDefault(node.tree_default_instruction ?? "");
     }
@@ -210,8 +225,8 @@ const NodeDetailPanel: React.FC<NodeDetailPanelProps> = ({
         <polyline points="21 15 16 10 5 21" />
       </svg>
       {sm.nodeMedia.length > 0
-        ? `Topic resources (${sm.nodeMedia.length})`
-        : "Topic resources"}
+        ? `Student resources (${sm.nodeMedia.length})`
+        : "Student resources"}
     </button>
   );
 
@@ -261,8 +276,8 @@ const NodeDetailPanel: React.FC<NodeDetailPanelProps> = ({
     if (!node) return;
     const detected = detectMode(node);
     setMode(detected);
-    if (detected === "replace") setModeText(node.node_specific_instruction ?? "");
-    else if (detected === "extend") setModeText(node.node_additive_instruction ?? "");
+    if (detected === "replace") setModeText(getSavedInstructionText(node, "replace"));
+    else if (detected === "extend") setModeText(getSavedInstructionText(node, "extend"));
     else setModeText("");
     setBranchDefault(node.tree_default_instruction ?? "");
   }, [node]);
@@ -296,17 +311,19 @@ const NodeDetailPanel: React.FC<NodeDetailPanelProps> = ({
   // ── Empty state ─────────────────────────────────────────────────────────
   if (!node) {
     return (
-      <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", height: "100%", padding: "2rem", textAlign: "center" }}>
-        <div style={{ width: "56px", height: "56px", borderRadius: "16px", background: "var(--color-bg-surface-alt)", display: "flex", alignItems: "center", justifyContent: "center", marginBottom: "1rem" }}>
-          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="var(--color-text-muted)" strokeWidth="1.5">
-            <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" />
-            <polyline points="14 2 14 8 20 8" />
-          </svg>
+      <section className="content-canvas-empty" aria-labelledby="mentor-content-canvas-title">
+        <div className="content-canvas-empty__paper-stack" aria-hidden="true">
+          <div className="content-canvas-empty__paper">
+            <FileText size={56} strokeWidth={1.2} />
+          </div>
         </div>
-        <p style={{ fontSize: "0.9375rem", fontWeight: 600, color: "var(--color-text-secondary)", margin: "0 0 0.375rem" }}>
-          Select a topic from your outline to view and edit it
+        <h2 id="mentor-content-canvas-title">Content Canvas</h2>
+        <p>
+          {hasTopics
+            ? "Select a topic from your outline to view and edit its content, materials, and learning goals."
+            : "Create your first section from the topic outline to begin shaping this learning space."}
         </p>
-      </div>
+      </section>
     );
   }
 
@@ -434,6 +451,7 @@ const NodeDetailPanel: React.FC<NodeDetailPanelProps> = ({
               onOpenMediaModal={() => sm.setShowNodeMediaModal(true)}
               isWaitingForGenerateAll={blockedByBatch}
               runPaused={studyRunPaused}
+              runFailed={studyRunFailed}
             />
           </div>
         )}
@@ -444,6 +462,7 @@ const NodeDetailPanel: React.FC<NodeDetailPanelProps> = ({
             {instructionChangeBanner}
             {showGenerationProgress ? (
               <GenerationProgressPanel
+                key={`${node.node_id}:${sm.generationProgressSessionId ?? "none"}`}
                 title={sm.processingLabel ?? "Working on study material"}
                 subtitle={`The AI is updating study content for "${node.title}". This may take a minute.`}
                 progress={studyGenerationProgress}
@@ -469,7 +488,94 @@ const NodeDetailPanel: React.FC<NodeDetailPanelProps> = ({
                   <StudentVisibilityBanner
                     visibility={sm.mentorUiState.student_visibility}
                     onShowStudentArchive={sm.expandStudentArchive}
+                    extraActions={
+                      <button
+                        type="button"
+                        className="sm-mentor-btn sm-mentor-btn--primary student-visibility-banner__action"
+                        disabled={!sm.canAccessQuiz}
+                        title={
+                          !sm.canAccessQuiz
+                            ? spaceIsPublished === false
+                              ? "Publish the space to access Quiz"
+                              : "Generate study material to enable quiz generation"
+                            : undefined
+                        }
+                        onClick={() => {
+                          if (sm.canAccessQuiz) sm.setCurrentPage(3);
+                        }}
+                      >
+                        <Zap size={14} aria-hidden />
+                        {qz.quizDraftExists ? "View Quiz Draft" : "Proceed to Quiz Generation"}
+                      </button>
+                    }
+                    actionLabel={
+                      sm.canPublishDisplayedVersion
+                        ? sm.isPublishingVersion
+                          ? "Making live…"
+                          : sm.publishButtonLabel
+                        : sm.canUnpublishDisplayedVersion
+                          ? sm.isUnpublishingVersion
+                            ? "Removing…"
+                            : sm.unpublishButtonLabel
+                          : sm.publishDisabledTooltip
+                            ? sm.publishButtonLabel
+                            : sm.unpublishDisabledTooltip
+                              ? sm.unpublishButtonLabel
+                              : undefined
+                    }
+                    actionVariant={
+                      sm.canUnpublishDisplayedVersion ||
+                      (!sm.canPublishDisplayedVersion &&
+                        !sm.publishDisabledTooltip &&
+                        Boolean(sm.unpublishDisabledTooltip))
+                        ? "danger"
+                        : "primary"
+                    }
+                    actionDisabled={
+                      sm.isPublishingVersion ||
+                      sm.isUnpublishingVersion ||
+                      (!sm.canPublishDisplayedVersion && !sm.canUnpublishDisplayedVersion)
+                    }
+                    actionTitle={
+                      sm.canUnpublishDisplayedVersion
+                        ? sm.unpublishTooltip ?? undefined
+                        : sm.publishDisabledTooltip ??
+                          sm.unpublishDisabledTooltip ??
+                          undefined
+                    }
+                    onAction={
+                      sm.canPublishDisplayedVersion
+                        ? sm.handlePublishCurrentVersion
+                        : sm.canUnpublishDisplayedVersion
+                          ? sm.handleUnpublishCurrentVersion
+                          : undefined
+                    }
                   />
+                )}
+                {isMentor &&
+                  !sm.isManualEditMode &&
+                  !sm.isHistoryHubView &&
+                  !sm.mentorUiState?.student_visibility && (
+                  <div className="student-visibility-banner student-visibility-banner__actions" style={{ justifyContent: "flex-end" }}>
+                    <button
+                      type="button"
+                      className="sm-mentor-btn sm-mentor-btn--primary student-visibility-banner__action"
+                      disabled={!sm.canAccessQuiz}
+                      title={
+                        !sm.canAccessQuiz
+                          ? spaceIsPublished === false
+                            ? "Publish the space to access Quiz"
+                            : "Generate study material to enable quiz generation"
+                          : undefined
+                      }
+                      onClick={() => {
+                        if (sm.canAccessQuiz) sm.setCurrentPage(3);
+                      }}
+                    >
+                      <Zap size={14} aria-hidden />
+                      {qz.quizDraftExists ? "View Quiz Draft" : "Proceed to Quiz Generation"}
+                    </button>
+                  </div>
                 )}
                 {isMentor && sm.isManualEditMode && sm.studyMaterialContent ? (
                   <StudyMaterialManualEditor
@@ -484,8 +590,6 @@ const NodeDetailPanel: React.FC<NodeDetailPanelProps> = ({
                   <StudyMaterialMentorWorkspace
                     node={node}
                     sm={sm}
-                    qz={qz}
-                    spaceIsPublished={spaceIsPublished}
                     onOpenFocusView={() => setShowFocusModal(true)}
                     renderGenerationSourceButton={renderGenerationSourceButton}
                     renderTopicResourcesButton={renderTopicResourcesButton}
@@ -516,6 +620,7 @@ const NodeDetailPanel: React.FC<NodeDetailPanelProps> = ({
           <QuizPage3
             nodeTitle={node.title}
             qz={qz}
+            studentVisibility={sm.mentorUiState?.student_visibility ?? null}
           />
         )}
 
@@ -524,6 +629,7 @@ const NodeDetailPanel: React.FC<NodeDetailPanelProps> = ({
           <QuizPage4
             qz={qz}
             onPageChange={sm.setCurrentPage}
+            studentVisibility={sm.mentorUiState?.student_visibility ?? null}
           />
         )}
           </>
@@ -631,6 +737,7 @@ const NodeDetailPanel: React.FC<NodeDetailPanelProps> = ({
           content={sm.studyMaterialContent}
           versionLabel={sm.displayedVersionSummary?.display_label ?? sm.activeVersion?.display_label ?? null}
           referenceMaterialId={
+            sm.displayedVersionSummary?.reference_material_id ??
             sm.activeVersion?.reference_material_id ??
             sm.referenceMaterial?.material_id ??
             null

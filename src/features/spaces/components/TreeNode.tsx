@@ -1,10 +1,23 @@
 // src/features/spaces/components/TreeNode.tsx
 /**
  * Single node row in the topic tree.
- * Handles expand/collapse, selection, hover action bar, and move-pick mode.
+ * Handles expand/collapse, selection, the accessible action menu, and move-pick mode.
  */
 
-import React, { useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
+import {
+  ChevronDown,
+  ChevronRight,
+  ChevronUp,
+  Circle,
+  Layers3,
+  MoreVertical,
+  Move,
+  Pencil,
+  Plus,
+  Trash2,
+} from "lucide-react";
 import type { NodeTreeNode } from "../types/node.types";
 import type { MoveParentSelection } from "./moveTopicUtils";
 
@@ -49,7 +62,10 @@ const TreeNode: React.FC<TreeNodeProps> = ({
   isCompact = false,
 }) => {
   const [isExpanded, setIsExpanded] = useState(true);
-  const [showActions, setShowActions] = useState(false);
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [menuPosition, setMenuPosition] = useState({ top: 0, left: 0 });
+  const menuButtonRef = useRef<HTMLButtonElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
 
   const isSelected = selectedNodeId === node.node_id;
   const hasChildren = node.children.length > 0;
@@ -61,6 +77,38 @@ const TreeNode: React.FC<TreeNodeProps> = ({
   const isMoveTargetSelected = movePickMode && moveSelectedParentId === node.node_id;
   const isMovingNode = movePickMode && movingNodeId === node.node_id;
   const canPickAsParent = movePickMode && !isMoveTargetExcluded && onPickMoveParent;
+
+  useEffect(() => {
+    if (!isMenuOpen) return;
+
+    const closeMenu = (event: MouseEvent) => {
+      const target = event.target as globalThis.Node;
+      if (!menuRef.current?.contains(target) && !menuButtonRef.current?.contains(target)) {
+        setIsMenuOpen(false);
+      }
+    };
+    const closeOnViewportChange = () => setIsMenuOpen(false);
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      setIsMenuOpen(false);
+      menuButtonRef.current?.focus();
+    };
+
+    document.addEventListener("mousedown", closeMenu);
+    document.addEventListener("keydown", closeOnEscape);
+    window.addEventListener("resize", closeOnViewportChange);
+    window.addEventListener("scroll", closeOnViewportChange, true);
+    requestAnimationFrame(() => {
+      menuRef.current?.querySelector<HTMLButtonElement>('[role="menuitem"]')?.focus();
+    });
+
+    return () => {
+      document.removeEventListener("mousedown", closeMenu);
+      document.removeEventListener("keydown", closeOnEscape);
+      window.removeEventListener("resize", closeOnViewportChange);
+      window.removeEventListener("scroll", closeOnViewportChange, true);
+    };
+  }, [isMenuOpen]);
 
   const handleRowClick = () => {
     if (canPickAsParent) {
@@ -75,156 +123,169 @@ const TreeNode: React.FC<TreeNodeProps> = ({
   const handleDeleteClick = (e: React.MouseEvent) => {
     e.stopPropagation();
     onArchive(node);
-    setShowActions(false);
+    setIsMenuOpen(false);
   };
 
-  const rowBackground = isMoveTargetSelected
-    ? "var(--color-primary-subtle)"
-    : isMovingNode
-    ? "var(--color-warning-subtle)"
-    : isSelected && !movePickMode
-    ? "var(--color-primary-subtle)"
-    : "transparent";
+  const openMenu = (event: React.MouseEvent<HTMLButtonElement>) => {
+    event.stopPropagation();
+    if (isMenuOpen) {
+      setIsMenuOpen(false);
+      return;
+    }
+    const rect = event.currentTarget.getBoundingClientRect();
+    const menuWidth = 208;
+    setMenuPosition({
+      top: Math.max(8, Math.min(rect.bottom + 6, window.innerHeight - 294)),
+      left: Math.min(Math.max(8, rect.right - menuWidth), window.innerWidth - menuWidth - 8),
+    });
+    setIsMenuOpen(true);
+  };
 
-  const rowBorder = isMoveTargetSelected
-    ? "var(--color-primary)"
-    : isMovingNode
-    ? "var(--color-warning)"
-    : isSelected && !movePickMode
-    ? "var(--color-primary)"
-    : "transparent";
+  const runMenuAction = (action: () => void) => {
+    action();
+    setIsMenuOpen(false);
+  };
+
+  const handleMenuKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
+    if (event.key !== "ArrowDown" && event.key !== "ArrowUp" && event.key !== "Home" && event.key !== "End") {
+      return;
+    }
+    event.preventDefault();
+    const items = Array.from(
+      menuRef.current?.querySelectorAll<HTMLButtonElement>('[role="menuitem"]:not(:disabled)') ?? [],
+    );
+    if (items.length === 0) return;
+    const currentIndex = items.indexOf(document.activeElement as HTMLButtonElement);
+    if (event.key === "Home") items[0].focus();
+    else if (event.key === "End") items.at(-1)?.focus();
+    else {
+      const offset = event.key === "ArrowDown" ? 1 : -1;
+      items[(currentIndex + offset + items.length) % items.length].focus();
+    }
+  };
+
+  const stateClasses = [
+    isCompact && "tree-node--compact",
+    isSelected && !movePickMode && "tree-node--selected",
+    isMoveTargetSelected && "tree-node--move-selected",
+    isMovingNode && "tree-node--moving",
+    isMoveTargetExcluded && movePickMode && "tree-node--excluded",
+    isMenuOpen && "tree-node--menu-open",
+  ].filter(Boolean).join(" ");
 
   return (
-    <div style={{ opacity: isMoveTargetExcluded && movePickMode ? 0.35 : 1 }}>
+    <div className="tree-node-branch">
       <div
-        className={`tree-node${isCompact ? " tree-node--compact" : ""}${showActions && !movePickMode ? " tree-node--actions-visible" : ""}`}
-        onMouseEnter={() => !movePickMode && setShowActions(true)}
-        onMouseLeave={() => {
-          setShowActions(false);
-        }}
-        style={{
-          cursor: canPickAsParent ? "pointer" : movePickMode && isMoveTargetExcluded ? "not-allowed" : "pointer",
-          background: rowBackground,
-          border: `1.5px solid ${rowBorder}`,
-        }}
+        className={`tree-node ${stateClasses}`}
+        style={{ cursor: canPickAsParent ? "pointer" : movePickMode && isMoveTargetExcluded ? "not-allowed" : "pointer" }}
       >
         <div className="tree-node__track">
-          <div className="tree-node__select" onClick={handleRowClick}>
+          <div
+            className="tree-node__select"
+            onClick={handleRowClick}
+            role="treeitem"
+            aria-selected={isSelected}
+            aria-disabled={isMoveTargetExcluded && movePickMode}
+            tabIndex={0}
+            onKeyDown={(event) => {
+              if (event.target !== event.currentTarget) return;
+              if (event.key === "Enter" || event.key === " ") {
+                event.preventDefault();
+                handleRowClick();
+              }
+            }}
+          >
           <button
+            type="button"
             className="tree-node__chevron"
             onClick={(e) => {
               e.stopPropagation();
               if (hasChildren) setIsExpanded((v) => !v);
             }}
-            style={{
-              cursor: hasChildren ? "pointer" : "default",
-              color: hasChildren ? "var(--color-text-secondary)" : "transparent",
-            }}
+            data-visible={hasChildren}
             aria-label={isExpanded ? "Collapse" : "Expand"}
             tabIndex={hasChildren ? 0 : -1}
           >
-            <svg
-              width="14"
-              height="14"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              style={{ transform: isExpanded ? "rotate(90deg)" : "rotate(0deg)", transition: "transform 0.15s ease" }}
-            >
-              <polyline points="9 18 15 12 9 6" />
-            </svg>
+            {isExpanded ? <ChevronDown size={15} /> : <ChevronRight size={15} />}
           </button>
 
-          <div
-            className="tree-node__icon"
-            style={{
-              background:
-                node.level === 1
-                  ? "var(--color-primary)"
-                  : node.level === 2
-                  ? "var(--color-success)"
-                  : "var(--color-bg-surface-alt)",
-              border: node.level >= 3 ? "1px solid var(--color-border)" : "none",
-            }}
-          >
-            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke={node.level >= 3 ? "var(--color-text-muted)" : "#fff"} strokeWidth="2.5">
-              {node.level === 1 ? (
-                <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" />
-              ) : (
-                <circle cx="12" cy="12" r="8" />
-              )}
-            </svg>
+          <div className={`tree-node__icon tree-node__icon--level-${Math.min(node.level, 3)}`}>
+            {node.level === 1 ? <Layers3 size={12} /> : <Circle size={10} />}
           </div>
 
           <span
             className="tree-node__title"
-            style={{
-              fontWeight: isSelected || isMoveTargetSelected ? 600 : 500,
-              color: isMoveTargetExcluded && movePickMode
-                ? "var(--color-text-muted)"
-                : isSelected || isMoveTargetSelected
-                ? "var(--color-text-primary)"
-                : "var(--color-text-secondary)",
-            }}
             title={node.title}
           >
             {node.title}
             {isMovingNode && (
-              <span style={{ marginLeft: "0.375rem", fontSize: "0.6875rem", color: "var(--color-warning)", fontWeight: 600 }}>
+              <span className="tree-node__moving-label">
                 (moving)
               </span>
             )}
           </span>
 
-          {hasChildren && !showActions && !movePickMode && (
+          {hasChildren && !isMenuOpen && !movePickMode && (
             <span className="tree-node__child-count">
               {node.children.length}
             </span>
           )}
           </div>
 
-          {isMentor && showActions && !movePickMode && (
-            <div className="tree-node__actions" onClick={(e) => e.stopPropagation()}>
-            <button className="tree-action-btn" title="Add a topic inside this one" onClick={(e) => { e.stopPropagation(); onAddChild(node); }}>
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M12 5v14M5 12h14" /></svg>
-              <span className="tree-action-btn__label">Add</span>
+          {isMentor && !movePickMode && (
+            <button
+              ref={menuButtonRef}
+              type="button"
+              className="tree-node__menu-trigger"
+              title={`Actions for ${node.title}`}
+              aria-label={`Actions for ${node.title}`}
+              aria-haspopup="menu"
+              aria-expanded={isMenuOpen}
+              onClick={openMenu}
+            >
+              <MoreVertical size={17} />
             </button>
-
-            <button className="tree-action-btn" title="Rename this topic" onClick={(e) => { e.stopPropagation(); onRename(node); }}>
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7" /><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z" /></svg>
-              <span className="tree-action-btn__label">Rename</span>
-            </button>
-
-            <button className="tree-action-btn" title="Move to another location in the tree" onClick={(e) => { e.stopPropagation(); onMove(node); }}>
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M5 9l4 4 4-4" /><path d="M19 15l-4-4-4 4" />
-              </svg>
-              <span className="tree-action-btn__label">Move</span>
-            </button>
-
-            <button className="tree-action-btn" title="Move up" disabled={!canMoveUp} onClick={(e) => { e.stopPropagation(); if (canMoveUp) onMoveUp(node); }} style={{ opacity: canMoveUp ? 1 : 0.4, cursor: canMoveUp ? "pointer" : "not-allowed" }}>
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="18 15 12 9 6 15" /></svg>
-            </button>
-
-            <button className="tree-action-btn" title="Move down" disabled={!canMoveDown} onClick={(e) => { e.stopPropagation(); if (canMoveDown) onMoveDown(node); }} style={{ opacity: canMoveDown ? 1 : 0.4, cursor: canMoveDown ? "pointer" : "not-allowed" }}>
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="6 9 12 15 18 9" /></svg>
-            </button>
-
-            <div className="tree-action-divider" />
-
-            <button className="tree-action-btn tree-action-btn--danger" title="Delete this topic" onClick={handleDeleteClick}>
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <polyline points="3 6 5 6 21 6" /><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6" /><path d="M10 11v6M14 11v6" />
-              </svg>
-            </button>
-          </div>
-        )}
+          )}
         </div>
       </div>
 
+      {isMenuOpen && createPortal(
+        <div className="learning-experience learning-portal">
+          <div
+            ref={menuRef}
+            className="tree-node-menu"
+            role="menu"
+            aria-label={`Actions for ${node.title}`}
+            style={{ top: menuPosition.top, left: menuPosition.left }}
+            onKeyDown={handleMenuKeyDown}
+          >
+            <button type="button" role="menuitem" onClick={() => runMenuAction(() => onAddChild(node))}>
+              <Plus size={16} /><span>Add subtopic</span>
+            </button>
+            <button type="button" role="menuitem" onClick={() => runMenuAction(() => onRename(node))}>
+              <Pencil size={15} /><span>Rename</span>
+            </button>
+            <button type="button" role="menuitem" onClick={() => runMenuAction(() => onMove(node))}>
+              <Move size={15} /><span>Move to…</span>
+            </button>
+            <div className="tree-node-menu__separator" role="separator" />
+            <button type="button" role="menuitem" disabled={!canMoveUp} onClick={() => runMenuAction(() => onMoveUp(node))}>
+              <ChevronUp size={16} /><span>Move up</span>
+            </button>
+            <button type="button" role="menuitem" disabled={!canMoveDown} onClick={() => runMenuAction(() => onMoveDown(node))}>
+              <ChevronDown size={16} /><span>Move down</span>
+            </button>
+            <div className="tree-node-menu__separator" role="separator" />
+            <button type="button" role="menuitem" className="tree-node-menu__danger" onClick={handleDeleteClick}>
+              <Trash2 size={15} /><span>Delete</span>
+            </button>
+          </div>
+        </div>,
+        document.body,
+      )}
+
       {hasChildren && isExpanded && (
-        <div style={{ marginLeft: "1.375rem", paddingLeft: "0.75rem", borderLeft: "1.5px solid var(--color-border)", marginTop: "1px" }}>
+        <div className="tree-node__children" role="group">
           {node.children.map((child) => (
             <TreeNode
               key={child.node_id}

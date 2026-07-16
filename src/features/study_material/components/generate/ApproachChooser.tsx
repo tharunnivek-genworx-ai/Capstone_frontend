@@ -5,6 +5,8 @@ import {
   deriveInstructionMode,
 } from "./instructionModeUtils";
 
+const INSTRUCTION_LIMIT = 1000;
+
 interface ApproachChooserProps {
   nodeTitle: string;
   mode: InstructionMode;
@@ -95,19 +97,30 @@ const ApproachChooser = forwardRef<HTMLElement, ApproachChooserProps>(
                 ? `Additional instruction for ${nodeTitle}`
                 : `Custom instruction for ${nodeTitle}`}
             </label>
-            <textarea
-              id="gsm-topic-instruction-textarea"
-              className="gsm-field"
-              rows={4}
-              value={modeText}
-              onChange={(e) => handleTextChange(e.target.value)}
-              placeholder={
-                applyDefault
-                  ? "e.g. Include one real-world coding example to illustrate the concepts."
-                  : `Describe exactly how AI should approach ${nodeTitle}…`
-              }
-            />
-            <p className="gsm-field-help">
+            <div className="gsm-field-wrap">
+              <textarea
+                id="gsm-topic-instruction-textarea"
+                className="gsm-field"
+                rows={4}
+                value={modeText}
+                maxLength={INSTRUCTION_LIMIT}
+                aria-describedby="gsm-topic-instruction-help gsm-topic-instruction-count"
+                onChange={(e) => handleTextChange(e.target.value)}
+                placeholder={
+                  applyDefault
+                    ? "e.g. Include one real-world coding example to illustrate the concepts."
+                    : `Describe exactly how AI should approach ${nodeTitle}…`
+                }
+              />
+              <span
+                id="gsm-topic-instruction-count"
+                className={`gsm-field-count${modeText.length >= INSTRUCTION_LIMIT * 0.9 ? " gsm-field-count--near" : ""}`}
+                aria-live="polite"
+              >
+                {modeText.length} / {INSTRUCTION_LIMIT}
+              </span>
+            </div>
+            <p id="gsm-topic-instruction-help" className="gsm-field-help">
               {applyDefault
                 ? `This note only applies to ${nodeTitle} — it won't change other topics.`
                 : "This replaces the default style for this topic only."}

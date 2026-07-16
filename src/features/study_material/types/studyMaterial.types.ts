@@ -1,4 +1,7 @@
-import type { GenerationPipeline } from "../../generation/types/generationProgress.types";
+import type {
+  GenerationPipeline,
+  GenerationProgressOut,
+} from "../../generation/types/generationProgress.types";
 
 export type StudyMaterialGenerationType =
   | "generate"
@@ -204,6 +207,7 @@ export interface StudyMaterialVersionOut {
   is_archived: boolean;
   archived_at: string | null;
   created_at: string;
+  lifecycle_status?: string;
   display_label: string;
   qc_failed_permanently?: boolean;
   qc_result?: QualityCheckResultOut | null;
@@ -359,6 +363,7 @@ export interface NodeStudyStatePatch {
   isAbandoningGeneration?: boolean;
   referenceMaterial?: ReferenceMaterialOut | null;
   currentQuizId?: string | null;
+  generationProgress?: GenerationProgressOut | null;
 }
 
 /** Full node-level study state — each node has its own instance */
@@ -379,4 +384,5 @@ export interface NodeStudyState {
   isAbandoningGeneration: boolean;
   referenceMaterial: ReferenceMaterialOut | null;
   currentQuizId: string | null;
+  generationProgress: GenerationProgressOut | null;
 }

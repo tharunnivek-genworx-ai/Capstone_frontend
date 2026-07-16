@@ -51,20 +51,32 @@ const GenerationProgressPanel: React.FC<GenerationProgressPanelProps> = ({
 }) => {
   const steps = progress?.steps ?? [];
   const progressStatus = progress?.status;
-  // A non-null pausedRunId is authoritative: the caller only sets it once the run
-  // row is PAUSED (resumable). Trust it even if the progress poll still reports
-  // "running" for a moment, so the paused UI appears immediately after Cancel.
-  const isUserPaused = progressStatus === "paused"
-    || Boolean(pausedRunId && onResume);
+  const hasLiveRunningProgress = progressStatus === "running";
+  // Brief handshake after Continue: spinner + "Resuming…" only — no stale checklist.
+  // Once live running progress arrives, use the same UI as a fresh generation.
+  const showResumePlaceholder = Boolean(isResuming && !hasLiveRunningProgress);
+  // While Continue is in flight, never keep the paused chrome — even if the last
+  // poll still says "paused". Outside resume, a non-null pausedRunId remains
+  // authoritative so Cancel can flip to the paused UI before the poll catches up.
+  const isUserPaused =
+    !isResuming
+    && (
+      progressStatus === "paused"
+      || Boolean(pausedRunId && onResume)
+    );
   const isFailed =
     !isUserPaused
+    && !isResuming
     && (progressStatus === "failed" || Boolean(failedRunId && onResume));
-  const isRunning = !isUserPaused && !isFailed && progressStatus !== "completed";
+  const isRunning =
+    isResuming
+    || (!isUserPaused && !isFailed && progressStatus !== "completed");
   const showResumeActions = Boolean((isUserPaused || isFailed) && (pausedRunId || failedRunId) && onResume);
   const showAbandon = Boolean(onAbandon && (isUserPaused || isFailed));
-  const showPause = Boolean(isRunning && onPause && (canPause || isPausing));
+  const showPause = Boolean(isRunning && !isResuming && onPause && (canPause || isPausing));
   const resumeDisabled =
     isResuming || isAbandoning || !resumable || (secondsUntilRetry != null && secondsUntilRetry > 0);
+  const visibleSteps = showResumePlaceholder ? [] : steps;
 
   const pausedCopy = isUserPaused
     ? formatGenerationPausedMessage(progress, pauseContext)
@@ -76,17 +88,21 @@ const GenerationProgressPanel: React.FC<GenerationProgressPanelProps> = ({
     : isFailed
       ? "Generation failed"
       : isPausing
-        ? "Cancelling…"
-        : title;
+        ? "Pausing…"
+        : showResumePlaceholder
+          ? "Resuming…"
+          : title;
   const displaySubtitle = isPausing
-    ? "Finishing the current step before pausing."
+    ? "Saving the current checkpoint before pausing."
     : isUserPaused
       ? pausedCopy?.prompt ?? "You can resume from the last saved checkpoint."
       : isFailed
         ? failureCopy?.headline ?? progress?.error ?? "Generation failed."
-        : progress
-          ? subtitle
-          : "Starting…";
+        : showResumePlaceholder
+          ? "Recovering progress from the last checkpoint."
+          : progress
+            ? subtitle
+            : "Starting…";
 
   const panelModifier = isUserPaused
     ? " generation-progress--paused"
@@ -99,6 +115,9 @@ const GenerationProgressPanel: React.FC<GenerationProgressPanelProps> = ({
       className={`generation-progress${
         compact ? " generation-progress--compact" : ""
       }${panelModifier}`}
+      role="status"
+      aria-live="polite"
+      aria-busy={isRunning}
     >
       {isRunning && (
         <span className="spinner generation-progress__spinner" aria-hidden />
@@ -128,7 +147,7 @@ const GenerationProgressPanel: React.FC<GenerationProgressPanelProps> = ({
               onClick={onPause}
               disabled={isPausing || isAbandoning}
             >
-              {isPausing ? "Cancelling…" : "Cancel"}
+              {isPausing ? "Pausing…" : "Pause generation"}
             </button>
           )}
           {showResumeActions && (
@@ -164,16 +183,16 @@ const GenerationProgressPanel: React.FC<GenerationProgressPanelProps> = ({
         </div>
       )}
 
-      {steps.length > 0 && (
+      {visibleSteps.length > 0 && (
         <ol className="generation-progress__steps" aria-label="Generation progress">
-          {steps.map((step, index) => (
+          {visibleSteps.map((step, index) => (
             <li
               key={step.id}
               className={`generation-progress__step generation-progress__step--${step.status}${
                 (isUserPaused || isFailed) && step.status === "active"
                   ? " generation-progress__step--interrupted"
                   : ""
-              }${index < steps.length - 1 ? " generation-progress__step--has-line" : ""}`}
+              }${index < visibleSteps.length - 1 ? " generation-progress__step--has-line" : ""}`}
             >
               <span className="generation-progress__dot" aria-hidden />
               <span className="generation-progress__label">{step.label}</span>

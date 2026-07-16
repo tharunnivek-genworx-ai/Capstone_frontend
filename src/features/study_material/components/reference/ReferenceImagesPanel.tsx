@@ -126,7 +126,8 @@ const ReferenceImagesPanel: React.FC<ReferenceImagesPanelProps> = ({
 
       {selectedImage &&
         createPortal(
-          <div
+          <div className="learning-experience learning-portal">
+            <div
             className="reference-image-lightbox"
             role="dialog"
             aria-modal="true"
@@ -163,6 +164,7 @@ const ReferenceImagesPanel: React.FC<ReferenceImagesPanelProps> = ({
                   alt={selectedImage.title ?? selectedImage.filename}
                 />
               </div>
+            </div>
             </div>
           </div>,
           document.body

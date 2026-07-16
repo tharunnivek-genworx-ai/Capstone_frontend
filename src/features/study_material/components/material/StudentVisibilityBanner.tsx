@@ -4,11 +4,24 @@ import type { MentorStudentVisibilityOut } from "../../types/studyMaterial.types
 interface StudentVisibilityBannerProps {
   visibility: MentorStudentVisibilityOut;
   onShowStudentArchive?: () => void;
+  actionLabel?: string;
+  actionVariant?: "primary" | "danger";
+  actionDisabled?: boolean;
+  actionTitle?: string;
+  onAction?: () => void;
+  /** Extra actions shown beside publish/unpublish (e.g. Proceed to Quiz). */
+  extraActions?: React.ReactNode;
 }
 
 const StudentVisibilityBanner: React.FC<StudentVisibilityBannerProps> = ({
   visibility,
   onShowStudentArchive,
+  actionLabel,
+  actionVariant = "primary",
+  actionDisabled = false,
+  actionTitle,
+  onAction,
+  extraActions,
 }) => {
   const hasLiveMaterial = Boolean(visibility.live_material_label);
   const hasLiveQuiz = Boolean(visibility.live_quiz_title);
@@ -34,13 +47,36 @@ const StudentVisibilityBanner: React.FC<StudentVisibilityBannerProps> = ({
       ? `${firstLabel} (+${extraCount} more)`
       : firstLabel ?? archiveSummary;
 
+  const showPrimaryAction = Boolean(actionLabel && (onAction || actionDisabled));
+  const showActions = showPrimaryAction || Boolean(extraActions);
+
   return (
     <div className="student-visibility-banner" role="status">
-      <div className="student-visibility-banner__row">
-        <span className="student-visibility-banner__label">Students see:</span>
-        <strong className="student-visibility-banner__value">
-          {liveParts.length > 0 ? liveParts.join(" · ") : "Nothing on this topic yet"}
-        </strong>
+      <div className="student-visibility-banner__main">
+        <div className="student-visibility-banner__row">
+          <span className="student-visibility-banner__label">Students see:</span>
+          <strong className="student-visibility-banner__value">
+            {liveParts.length > 0 ? liveParts.join(" · ") : "Nothing on this topic yet"}
+          </strong>
+        </div>
+        {showActions && (
+          <div className="student-visibility-banner__actions">
+            {extraActions}
+            {showPrimaryAction && (
+              <button
+                type="button"
+                className={`sm-mentor-btn sm-mentor-btn--${
+                  actionVariant === "danger" ? "outline sm-mentor-btn--danger" : "primary"
+                } student-visibility-banner__action`}
+                onClick={onAction}
+                disabled={actionDisabled}
+                title={actionTitle}
+              >
+                {actionLabel}
+              </button>
+            )}
+          </div>
+        )}
       </div>
       {hasPrevious && onShowStudentArchive && (
         <button

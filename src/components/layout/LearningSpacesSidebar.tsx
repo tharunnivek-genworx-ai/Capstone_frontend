@@ -12,15 +12,28 @@ import toast from "react-hot-toast";
 
 interface LearningSpacesSidebarProps {
   activeSpaceId?: string;
+  isCollapsed?: boolean;
+  isCompact?: boolean;
+  isDrawerOpen?: boolean;
+  onRequestClose?: () => void;
+  onCollapsedChange?: (isCollapsed: boolean) => void;
 }
 
-const LearningSpacesSidebar: React.FC<LearningSpacesSidebarProps> = ({ activeSpaceId }) => {
+const LearningSpacesSidebar: React.FC<LearningSpacesSidebarProps> = ({
+  activeSpaceId,
+  isCollapsed = false,
+  isCompact = false,
+  isDrawerOpen = false,
+  onRequestClose,
+  onCollapsedChange,
+}) => {
   const { spaceId: routeSpaceId } = useParams<{ spaceId: string }>();
   const currentSpaceId = activeSpaceId ?? routeSpaceId;
   const { logout, role } = useAuth();
   const navigate = useNavigate();
   const { spaces, isLoading, fetchSpaces } = useSpaces();
   const [loggingOut, setLoggingOut] = useState(false);
+  const isVisuallyCollapsed = isCollapsed && !isCompact;
 
   const basePath = role === "trainee" ? "/trainee/spaces" : "/mentor/spaces";
 
@@ -42,8 +55,14 @@ const LearningSpacesSidebar: React.FC<LearningSpacesSidebarProps> = ({ activeSpa
 
   return (
     <aside
+      id="learning-spaces-sidebar"
+      className={`learning-spaces-sidebar${isVisuallyCollapsed ? " learning-spaces-sidebar--collapsed" : ""}${
+        isCompact ? " learning-spaces-sidebar--compact" : ""
+      }${isDrawerOpen ? " learning-spaces-sidebar--drawer-open" : ""}`}
+      aria-label="Learning spaces navigation"
+      role={isCompact && isDrawerOpen ? "dialog" : undefined}
+      aria-modal={isCompact && isDrawerOpen ? "true" : undefined}
       style={{
-        width: "240px",
         minHeight: "100vh",
         background: "var(--color-bg-surface)",
         boxShadow: "var(--shadow-subtle)",
@@ -56,23 +75,46 @@ const LearningSpacesSidebar: React.FC<LearningSpacesSidebarProps> = ({ activeSpa
         zIndex: 20,
       }}
     >
-      <div style={{ padding: "1.5rem 1.25rem", borderBottom: "1px solid var(--color-border)" }}>
+      <div className="learning-spaces-sidebar__brand">
         <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
           <div style={{ width: "36px", height: "36px", borderRadius: "10px", background: "var(--color-primary)", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "var(--shadow-subtle)" }}>
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
               <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
             </svg>
           </div>
-          <div>
+          <div className="learning-spaces-sidebar__label">
             <p style={{ margin: 0, fontWeight: 800, fontSize: "0.9375rem", color: "var(--color-text-primary)", lineHeight: 1.2 }}>StudyGuru</p>
             <p style={{ margin: 0, fontSize: "0.75rem", fontWeight: 600, color: "var(--color-text-secondary)" }}>
               {role === "mentor" ? "Instructor" : role === "trainee" ? "Learner" : "Admin"}
             </p>
           </div>
         </div>
+        <button
+          type="button"
+          className="learning-spaces-sidebar__collapse"
+          onClick={() => onCollapsedChange?.(!isCollapsed)}
+          aria-label={isCollapsed ? "Expand learning spaces sidebar" : "Collapse learning spaces sidebar"}
+          aria-expanded={!isCollapsed}
+          title={isCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+        >
+          <i
+            className={isCollapsed ? "ti ti-layout-sidebar-left-expand" : "ti ti-layout-sidebar-left-collapse"}
+            aria-hidden="true"
+          />
+        </button>
+        {isCompact && (
+          <button
+            type="button"
+            className="learning-spaces-sidebar__drawer-close"
+            onClick={onRequestClose}
+            aria-label="Close learning spaces navigation"
+          >
+            <i className="ti ti-x" aria-hidden="true" />
+          </button>
+        )}
       </div>
 
-      <div style={{ padding: "1rem 0.75rem 0.5rem" }}>
+      <div className="learning-spaces-sidebar__section-heading">
         <p style={{ margin: "0 0 0.625rem", padding: "0 0.125rem", fontSize: "0.6875rem", fontWeight: 600, color: "var(--color-text-muted)", textTransform: "uppercase", letterSpacing: "0.05em" }}>
           My learning spaces
         </p>
@@ -95,7 +137,14 @@ const LearningSpacesSidebar: React.FC<LearningSpacesSidebarProps> = ({ activeSpa
             <button
               key={space.space_id}
               type="button"
-              onClick={() => navigate(`${basePath}/${space.space_id}`)}
+              onClick={() => {
+                navigate(`${basePath}/${space.space_id}`);
+                onRequestClose?.();
+              }}
+              aria-current={isActive ? "page" : undefined}
+              aria-label={isVisuallyCollapsed ? space.space_name : undefined}
+              title={isVisuallyCollapsed ? space.space_name : undefined}
+              className="learning-spaces-sidebar__space"
               style={{
                 display: "flex",
                 alignItems: "center",
@@ -133,6 +182,7 @@ const LearningSpacesSidebar: React.FC<LearningSpacesSidebarProps> = ({ activeSpa
                 </svg>
               </div>
               <span
+                className="learning-spaces-sidebar__label"
                 style={{
                   flex: 1,
                   fontSize: "0.8125rem",
@@ -142,11 +192,11 @@ const LearningSpacesSidebar: React.FC<LearningSpacesSidebarProps> = ({ activeSpa
                   textOverflow: "ellipsis",
                   whiteSpace: "nowrap",
                 }}
-                title={space.space_name}
+                title={!isVisuallyCollapsed ? space.space_name : undefined}
               >
                 {space.space_name}
               </span>
-              {space.is_published && (
+              {space.is_published && !isVisuallyCollapsed && (
                 <span style={{ width: "6px", height: "6px", borderRadius: "50%", background: "var(--color-success)", flexShrink: 0 }} title="Published" />
               )}
             </button>
@@ -158,11 +208,16 @@ const LearningSpacesSidebar: React.FC<LearningSpacesSidebarProps> = ({ activeSpa
         <div style={{ padding: "0.5rem 0.75rem", borderTop: "1px solid var(--color-border)" }}>
           <button
             type="button"
-            onClick={() => navigate("/mentor/spaces")}
+            onClick={() => {
+              navigate("/mentor/spaces");
+              onRequestClose?.();
+            }}
             className="btn-secondary"
-            style={{ width: "100%", padding: "0.5rem", fontSize: "0.8125rem" }}
+            aria-label={isVisuallyCollapsed ? "All learning spaces" : undefined}
+            title={isVisuallyCollapsed ? "All learning spaces" : undefined}
+            style={{ width: "100%", padding: "0.5rem", fontSize: "0.8125rem", minHeight: "36px" }}
           >
-            All learning spaces
+            {isVisuallyCollapsed ? <i className="ti ti-apps" aria-hidden="true" /> : "All learning spaces"}
           </button>
         </div>
       )}
@@ -172,6 +227,8 @@ const LearningSpacesSidebar: React.FC<LearningSpacesSidebarProps> = ({ activeSpa
           id="sidebar-logout"
           onClick={handleLogout}
           disabled={loggingOut}
+          aria-label={isVisuallyCollapsed ? (loggingOut ? "Signing out" : "Sign out") : undefined}
+          title={isVisuallyCollapsed ? (loggingOut ? "Signing out" : "Sign out") : undefined}
           style={{
             width: "100%",
             display: "flex",
@@ -196,7 +253,9 @@ const LearningSpacesSidebar: React.FC<LearningSpacesSidebarProps> = ({ activeSpa
               <path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4" /><polyline points="16 17 21 12 16 7" /><line x1="21" y1="12" x2="9" y2="12" />
             </svg>
           )}
-          {loggingOut ? "Signing out…" : "Sign out"}
+          <span className="learning-spaces-sidebar__label">
+            {loggingOut ? "Signing out…" : "Sign out"}
+          </span>
         </button>
       </div>
     </aside>

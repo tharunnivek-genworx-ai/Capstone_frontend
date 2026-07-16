@@ -63,14 +63,14 @@ const SpaceDetailPage: React.FC = () => {
   const [editName, setEditName] = useState("");
   const [editDesc, setEditDesc] = useState("");
   const [isSavingEdit, setIsSavingEdit] = useState(false);
-  const [copied, setCopied] = useState(false);
   const [showManageTrainees, setShowManageTrainees] = useState(false);
   const [unpublishPreview, setUnpublishPreview] = useState<SpaceUnpublishPreviewOut | null>(null);
   const [isLoadingUnpublishPreview, setIsLoadingUnpublishPreview] = useState(false);
   const [republishChecklist, setRepublishChecklist] = useState<RepublishChecklistNode[] | null>(null);
   const [nodeContentRefreshTokens, setNodeContentRefreshTokens] = useState<Record<string, number>>({});
   const [isMoveMode, setIsMoveMode] = useState(false);
-  const [treePanelWidth, setTreePanelWidth] = useState(340);
+  const [treePanelWidth, setTreePanelWidth] = useState(280);
+  const [isTopicPanelVisible, setIsTopicPanelVisible] = useState(true);
   const [nodeStudyStates, setNodeStudyStates] = useState<Map<string, NodeStudyState>>(new Map());
   const [showSpaceProgress, setShowSpaceProgress] = useState(false);
   const [cameFromSpaceProgress, setCameFromSpaceProgress] = useState(false);
@@ -84,12 +84,14 @@ const SpaceDetailPage: React.FC = () => {
   const [activeBatchId, setActiveBatchId] = useState<string | null>(null);
   const [showBatchProgressPanel, setShowBatchProgressPanel] = useState(false);
   const completedBatchStepIdsRef = useRef<Set<string>>(new Set());
+  const settledBatchStepIdsRef = useRef<Set<string>>(new Set());
   const batchAutoOpenedMaterialNodeIdsRef = useRef<Set<string>>(new Set());
   const {
     batchDetail,
     steps: batchSteps,
     currentRunningStep,
     isPolling: isBatchPolling,
+    error: batchPollingError,
     cancel: cancelBatchJob,
   } = useBatchJobPoll(activeBatchId, spaceId ?? null);
 
@@ -163,6 +165,7 @@ const SpaceDetailPage: React.FC = () => {
           isAbandoningGeneration: false,
           referenceMaterial: null,
           currentQuizId: null,
+          generationProgress: null,
         };
         const next = new Map(prev);
         next.set(nodeId, { ...existing, ...patch });
@@ -243,13 +246,14 @@ const SpaceDetailPage: React.FC = () => {
     setEditName("");
     setEditDesc("");
     setIsSavingEdit(false);
-    setCopied(false);
     setShowManageTrainees(false);
     setUnpublishPreview(null);
     setIsLoadingUnpublishPreview(false);
     setRepublishChecklist(null);
     setNodeContentRefreshTokens({});
     setIsMoveMode(false);
+    setTreePanelWidth(280);
+    setIsTopicPanelVisible(true);
     setNodeStudyStates(new Map());
     setShowSpaceProgress(false);
     setCameFromSpaceProgress(false);
@@ -263,6 +267,7 @@ const SpaceDetailPage: React.FC = () => {
     setActiveBatchId(null);
     setShowBatchProgressPanel(false);
     completedBatchStepIdsRef.current = new Set();
+    settledBatchStepIdsRef.current = new Set();
     batchAutoOpenedMaterialNodeIdsRef.current = new Set();
 
     const load = async () => {
@@ -368,16 +373,15 @@ const SpaceDetailPage: React.FC = () => {
     document.body.style.userSelect = "none";
   };
 
-  const handleCopyInvite = async () => {
-    if (!space?.invite_code) return;
-    try {
-      await navigator.clipboard.writeText(space.invite_code);
-      setCopied(true);
-      toast.success("Invite code copied!");
-      setTimeout(() => setCopied(false), 2500);
-    } catch {
-      toast.error("Could not copy — please copy manually.");
-    }
+  const handleTreeResizeKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
+    e.preventDefault();
+    const availableWidth = bodyRef.current?.getBoundingClientRect().width;
+    const maxWidth = availableWidth
+      ? Math.min(380, Math.max(260, availableWidth - 560))
+      : 380;
+    const delta = e.key === "ArrowLeft" ? -20 : 20;
+    setTreePanelWidth((width) => Math.min(maxWidth, Math.max(260, width + delta)));
   };
 
   const loadRepublishChecklist = async (id: string) => {
@@ -471,6 +475,25 @@ const SpaceDetailPage: React.FC = () => {
       setSelectedNode(node);
       setCameFromSpaceProgress(false);
       if (node) setShowSpaceProgress(false);
+      if (isMentor && node && batchStepStatusByNodeId[node.node_id] === "completed") {
+        updateNodeStudyState(node.node_id, {
+          currentPage: 2,
+          isGenerating: false,
+          hasTriggeredGeneration: true,
+        });
+        void studyMaterialService.getActiveVersion(node.node_id).then((version) => {
+          if (!version) return;
+          updateNodeStudyState(node.node_id, {
+            currentPage: 2,
+            isGenerating: false,
+            hasTriggeredGeneration: true,
+            studyMaterialContent: version.content,
+            activeVersion: version,
+          });
+        }).catch(() => {
+          // The Material page will use its normal loading/recovery path.
+        });
+      }
       if (!isMentor && spaceId) {
         if (node) {
           setSearchParams({ node: node.node_id }, { replace: true });
@@ -479,7 +502,13 @@ const SpaceDetailPage: React.FC = () => {
         }
       }
     },
-    [isMentor, spaceId, setSearchParams],
+    [
+      isMentor,
+      spaceId,
+      setSearchParams,
+      batchStepStatusByNodeId,
+      updateNodeStudyState,
+    ],
   );
 
   const handleNavigateToNode = useCallback(
@@ -510,6 +539,7 @@ const SpaceDetailPage: React.FC = () => {
 
       if (step.status === "completed" && !completedBatchStepIdsRef.current.has(step.step_id)) {
         completedBatchStepIdsRef.current.add(step.step_id);
+        settledBatchStepIdsRef.current.add(step.step_id);
         setNodeContentRefreshTokens((prev) => ({
           ...prev,
           [step.node_id]: (prev[step.node_id] ?? 0) + 1,
@@ -544,20 +574,39 @@ const SpaceDetailPage: React.FC = () => {
 
         toast.success(`Draft ready: ${step.node_title}`);
       }
+
+      if (
+        (step.status === "failed" || step.status === "skipped") &&
+        !settledBatchStepIdsRef.current.has(step.step_id)
+      ) {
+        settledBatchStepIdsRef.current.add(step.step_id);
+        const hasResumableRun =
+          step.status === "failed" &&
+          Boolean(step.generation_run_id) &&
+          step.run_status !== "abandoned";
+        const terminalPatch: Partial<NodeStudyState> = {
+          isGenerating: false,
+          generationProgressSessionId: hasResumableRun ? step.generation_run_id : null,
+          activeGenerationRunId: hasResumableRun ? step.generation_run_id : null,
+          generationRunFailed: hasResumableRun,
+          generationRunPaused: false,
+          failedGenerationPipeline: hasResumableRun ? "study_material" : null,
+          isPausingGeneration: false,
+          isAbandoningGeneration: false,
+        };
+        if (hasResumableRun) {
+          terminalPatch.hasTriggeredGeneration = true;
+          if (selectedNode?.node_id === step.node_id) terminalPatch.currentPage = 2;
+        }
+        updateNodeStudyState(step.node_id, terminalPatch);
+        if (step.status === "failed") {
+          toast.error(
+            `${step.node_title}: ${step.error_message ?? "Generation failed. Open the topic to continue or delete the run."}`,
+          );
+        }
+      }
     }
   }, [batchDetail, roots, selectedNode?.node_id, updateNodeStudyState]);
-
-  // Hide progress panel shortly after the batch finishes.
-  useEffect(() => {
-    if (!batchDetail) return;
-    const { status } = batchDetail.batch;
-    if (status !== "completed" && status !== "failed" && status !== "cancelled") return;
-
-    const timer = window.setTimeout(() => {
-      setShowBatchProgressPanel(false);
-    }, 3000);
-    return () => window.clearTimeout(timer);
-  }, [batchDetail?.batch.status, batchDetail?.batch.batch_id]);
 
   const handleNavigateFromSpaceProgress = useCallback(
     (nodeId: string) => {
@@ -624,6 +673,13 @@ const SpaceDetailPage: React.FC = () => {
 
   const startGenerateAllFromWizard = useCallback(async (policy: ExistingMaterialPolicy) => {
     if (!spaceId || selectedBatchNodeIds.length === 0) return;
+    const eligibleNodeIds = batchPreview
+      ? batchPreview.items.filter((item) => item.can_generate).map((item) => item.node_id)
+      : selectedBatchNodeIds;
+    if (eligibleNodeIds.length === 0) {
+      toast.error("None of the selected topics can be queued for generation.");
+      return;
+    }
 
     setIsSubmittingBatchFlow(true);
     closeBatchWizard();
@@ -631,12 +687,13 @@ const SpaceDetailPage: React.FC = () => {
     try {
       const created = await studyMaterialBatchService.createBatch(spaceId, {
         root_node_ids: [],
-        node_ids: selectedBatchNodeIds,
+        node_ids: eligibleNodeIds,
         policy,
       });
       setActiveBatchId(created.batch_id);
       setShowBatchProgressPanel(true);
       completedBatchStepIdsRef.current = new Set();
+      settledBatchStepIdsRef.current = new Set();
       batchAutoOpenedMaterialNodeIdsRef.current = new Set();
       toast.success(
         "Generate-all started. Progress continues in the background — you can close this tab.",
@@ -647,7 +704,7 @@ const SpaceDetailPage: React.FC = () => {
     } finally {
       setIsSubmittingBatchFlow(false);
     }
-  }, [spaceId, selectedBatchNodeIds, closeBatchWizard]);
+  }, [spaceId, selectedBatchNodeIds, batchPreview, closeBatchWizard]);
 
   const handleContinueRootPicker = useCallback(async (nodeIds: string[]) => {
     if (!spaceId || nodeIds.length === 0) return;
@@ -726,6 +783,21 @@ const SpaceDetailPage: React.FC = () => {
         background: "var(--color-bg-page)",
       }}
     >
+      <button
+        type="button"
+        className="space-topic-panel-toggle"
+        onClick={() => setIsTopicPanelVisible((visible) => !visible)}
+        aria-controls="space-topic-panel"
+        aria-expanded={isTopicPanelVisible}
+        aria-label={isTopicPanelVisible ? "Hide topic outline" : "Show topic outline"}
+        title={isTopicPanelVisible ? "Hide topic outline" : "Show topic outline"}
+      >
+        <i
+          className={isTopicPanelVisible ? "ti ti-layout-sidebar-left-collapse" : "ti ti-list-tree"}
+          aria-hidden="true"
+        />
+      </button>
+
       {/* ── Top header ── */}
       <header
         style={{
@@ -933,23 +1005,6 @@ const SpaceDetailPage: React.FC = () => {
 
           {isMentor && (
             <button
-              type="button"
-              className="btn-primary"
-              style={{ padding: "0.375rem 0.875rem", fontSize: "0.8125rem" }}
-              disabled={isSubmittingBatchFlow || roots.length === 0}
-              title={
-                roots.length === 0
-                  ? "Create at least one section first"
-                  : "Generate materials across selected sections"
-              }
-              onClick={() => setShowRootPickerModal(true)}
-            >
-              Generate all study materials
-            </button>
-          )}
-
-          {isMentor && (
-            <button
               onClick={() => void handlePublishClick()}
               className={space.is_published ? "btn-danger" : "btn-primary"}
               style={{ padding: "0.375rem 0.875rem", fontSize: "0.8125rem" }}
@@ -970,51 +1025,6 @@ const SpaceDetailPage: React.FC = () => {
                 "Publish Space"
               )}
             </button>
-          )}
-
-          {/* Invite code */}
-          {isMentor && space.invite_code && (
-            <div
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: "0.5rem",
-                padding: "0.25rem 0.75rem 0.25rem 0.875rem",
-                background: "var(--color-surface)",
-                border: "1px solid var(--color-border)",
-                borderRadius: "var(--radius-md)",
-                cursor: "pointer",
-              }}
-              onClick={handleCopyInvite}
-              title="Click to copy invite code"
-            >
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--color-text-muted)" strokeWidth="2">
-                <path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6" />
-                <polyline points="15 3 21 3 21 9" />
-                <line x1="10" y1="14" x2="21" y2="3" />
-              </svg>
-              <code
-                style={{
-                  fontSize: "0.8125rem",
-                  fontWeight: 700,
-                  letterSpacing: "0.08em",
-                  color: "var(--color-primary)",
-                  fontFamily: "monospace",
-                }}
-              >
-                {space.invite_code}
-              </code>
-              {copied ? (
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--color-success)" strokeWidth="2.5">
-                  <polyline points="20 6 9 17 4 12" />
-                </svg>
-              ) : (
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--color-text-muted)" strokeWidth="2">
-                  <rect x="9" y="9" width="13" height="13" rx="2" />
-                  <path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1" />
-                </svg>
-              )}
-            </div>
           )}
 
           {/* Share invite code button */}
@@ -1063,9 +1073,13 @@ const SpaceDetailPage: React.FC = () => {
       >
         {/* Left: Topic tree panel */}
         <aside
+          id="space-topic-panel"
+          className={`space-topic-panel${isTopicPanelVisible ? "" : " space-topic-panel--hidden"}`}
+          aria-label="Topic outline"
+          aria-hidden={!isTopicPanelVisible}
           style={{
-            width: `${treePanelWidth}px`,
-            minWidth: "260px",
+            width: isTopicPanelVisible ? `${treePanelWidth}px` : 0,
+            minWidth: isTopicPanelVisible ? "260px" : 0,
             background: "var(--color-bg-surface)",
             display: "flex",
             flexDirection: "column",
@@ -1107,6 +1121,9 @@ const SpaceDetailPage: React.FC = () => {
               isMentor={isMentor}
               onMoveModeChange={setIsMoveMode}
               isCompact={treePanelWidth < 300}
+              onGenerateAll={() => setShowRootPickerModal(true)}
+              isGenerateAllDisabled={isSubmittingBatchFlow || roots.length === 0}
+              isGenerateAllSubmitting={isSubmittingBatchFlow}
             />
           ) : (
             <TraineeTopicTree
@@ -1122,8 +1139,14 @@ const SpaceDetailPage: React.FC = () => {
           role="separator"
           aria-orientation="vertical"
           aria-label="Resize topic outline panel"
+          aria-valuemin={260}
+          aria-valuemax={380}
+          aria-valuenow={treePanelWidth}
+          aria-hidden={!isTopicPanelVisible}
+          tabIndex={isTopicPanelVisible ? 0 : -1}
           onMouseDown={startTreeResize}
-          className="panel-resize-handle"
+          onKeyDown={handleTreeResizeKeyDown}
+          className={`panel-resize-handle${isTopicPanelVisible ? "" : " panel-resize-handle--hidden"}`}
           title="Drag to resize"
         />
 
@@ -1153,6 +1176,7 @@ const SpaceDetailPage: React.FC = () => {
               ) : (
                 <NodeDetailPanel
                   node={selectedNode}
+                  hasTopics={roots.length > 0}
                   spaceId={spaceId ?? ""}
                   spaceIsPublished={space.is_published}
                   onRename={handleNodeRename}
@@ -1167,6 +1191,7 @@ const SpaceDetailPage: React.FC = () => {
             ) : (
               <NodeDetailPanel
                 node={selectedNode}
+                hasTopics={roots.length > 0}
                 spaceId={spaceId ?? ""}
                 spaceIsPublished={space.is_published}
                 onRename={handleNodeRename}
@@ -1206,6 +1231,7 @@ const SpaceDetailPage: React.FC = () => {
                 ) : (
                   <TraineeNodeDetailPanel
                     node={selectedNode}
+                    hasTopics={roots.length > 0}
                     spaceId={spaceId ?? ""}
                     onNavigateToNode={handleNavigateToNode}
                   />
@@ -1213,6 +1239,7 @@ const SpaceDetailPage: React.FC = () => {
               ) : (
                 <TraineeNodeDetailPanel
                   node={selectedNode}
+                  hasTopics={roots.length > 0}
                   spaceId={spaceId ?? ""}
                   onNavigateToNode={handleNavigateToNode}
                 />
@@ -1273,6 +1300,7 @@ const SpaceDetailPage: React.FC = () => {
         <GenerateAllPolicyModal
           defaultPolicy={existingPolicy}
           isSubmitting={isSubmittingBatchFlow}
+          blockedItems={batchPreview?.items.filter((item) => !item.can_generate) ?? []}
           onClose={closeBatchWizard}
           onBack={() => {
             setShowPolicyModal(false);
@@ -1314,7 +1342,9 @@ const SpaceDetailPage: React.FC = () => {
           batchDetail={batchDetail}
           currentRunningStep={currentRunningStep}
           isPolling={isBatchPolling}
+          error={batchPollingError}
           onCancel={cancelBatchJob}
+          onClose={() => setShowBatchProgressPanel(false)}
         />
       )}
     </div>

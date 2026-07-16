@@ -9,16 +9,26 @@ import HintDeleteDraftModal from "./HintDeleteDraftModal";
 import QuizPublishConfirmModal from "./QuizPublishConfirmModal";
 import QuizUnpublishConfirmModal from "./QuizUnpublishConfirmModal";
 import HintGenerationDiagnosticsPanel from "./HintGenerationDiagnosticsPanel";
+import QuizMentorVisibilityBanner from "./QuizMentorVisibilityBanner";
+import HintReviewToolbar from "./HintReviewToolbar";
 import GenerationProgressPanel from "../../generation/components/GenerationProgressPanel";
 import { useGenerationProgress } from "../../generation/hooks/useGenerationProgress";
 import { useGenerationRunResume } from "../../generation/hooks/useGenerationRunResume";
+import type { MentorStudentVisibilityOut } from "../../study_material/types/studyMaterial.types";
+import "../../study_material/styles/studyMaterialMentor.css";
+import "../styles/mentorQuiz.css";
 
 interface QuizPage4Props {
   qz: UseQuizReturn;
   onPageChange: (page: TopicContentPage) => void;
+  studentVisibility?: MentorStudentVisibilityOut | null;
 }
 
-const QuizPage4: React.FC<QuizPage4Props> = ({ qz, onPageChange }) => {
+const QuizPage4: React.FC<QuizPage4Props> = ({
+  qz,
+  onPageChange,
+  studentVisibility = null,
+}) => {
   const [hintRegenerateTarget, setHintRegenerateTarget] = useState<{
     questionId: string;
     questionIndex: number;
@@ -33,6 +43,9 @@ const QuizPage4: React.FC<QuizPage4Props> = ({ qz, onPageChange }) => {
   const hintGenerationProgress = useGenerationProgress(
     qz.generationProgressSessionId,
     showHintGenerationUi,
+    qz.isGeneratingHints || qz.isResumingFailedGeneration,
+    qz.activeGenerationRunId ?? qz.generationProgressSessionId,
+    qz.generationProgress,
   );
   const hintRunResume = useGenerationRunResume(
     qz.failedGenerationPipeline === "hint"
@@ -90,7 +103,9 @@ const QuizPage4: React.FC<QuizPage4Props> = ({ qz, onPageChange }) => {
   const hintsComplete = quiz.hints_status === "complete";
   const hintsNone = quiz.hints_status === "none";
   const hintsPartial = quiz.hints_status === "partial";
-  const hintsLocked = qz.hintsLocked;
+  const questionsWithCompleteHints = activeQuestions.filter(
+    (question) => question.hint_1 && question.hint_2 && question.hint_3,
+  ).length;
   const hintGeneration = quiz.qc_result?.hintGeneration;
   const questionsById = new Map(
     activeQuestions.map((question, index) => [
@@ -101,173 +116,111 @@ const QuizPage4: React.FC<QuizPage4Props> = ({ qz, onPageChange }) => {
 
   const handleScrollToQuestion = (questionId: string) => {
     onPageChange(3);
-    setTimeout(() => {
+    const revealQuestion = (attempt = 0) => {
       const el = document.getElementById(`quiz-question-${questionId}`);
       if (el) {
-        el.scrollIntoView({ behavior: "smooth", block: "center" });
-        el.style.outline = "2px solid var(--color-primary)";
-        setTimeout(() => { el.style.outline = ""; }, 2000);
+        const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+        el.scrollIntoView({ behavior: reducedMotion ? "auto" : "smooth", block: "center" });
+        el.style.outline = "2px solid var(--as-primary, var(--color-primary))";
+        el.style.outlineOffset = "3px";
+        setTimeout(() => {
+          el.style.outline = "";
+          el.style.outlineOffset = "";
+        }, 2000);
+        return;
       }
-    }, 150);
+      if (attempt < 20) {
+        setTimeout(() => revealQuestion(attempt + 1), 100);
+      }
+    };
+    requestAnimationFrame(() => revealQuestion());
   };
 
+  const hintsStatusLabel = hintsComplete ? "Complete" : hintsPartial ? "Partial" : "None";
+  const publishReady = quiz.is_published || qz.canPublishQuiz;
+
   return (
-    <div style={{ flex: 1, borderTop: "1px solid var(--color-border)", paddingTop: "1.25rem", display: "flex", flexDirection: "column", minHeight: 0 }}>
-      {/* Top toolbar */}
-      <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", marginBottom: "1rem", flexWrap: "wrap", flexShrink: 0 }}>
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: "0.625rem", flexWrap: "wrap" }}>
-            <span style={{ fontSize: "0.875rem", fontWeight: 700, color: "var(--color-text-primary)" }}>
-              {quiz.title} — Hints
-            </span>
-            <span style={{
-              fontSize: "0.6875rem", fontWeight: 700, padding: "0.2rem 0.5rem", borderRadius: "var(--radius-sm)", textTransform: "uppercase",
-              background: hintsComplete ? "rgba(22,163,74,0.1)" : hintsPartial ? "rgba(245,158,11,0.1)" : "var(--color-bg-surface-alt)",
-              color: hintsComplete ? "#16a34a" : hintsPartial ? "#b45309" : "var(--color-text-muted)",
-              border: `1px solid ${hintsComplete ? "#16a34a" : hintsPartial ? "#f59e0b" : "var(--color-border)"}`,
-            }}>
-              Hints: {hintsComplete ? "Complete" : hintsPartial ? "Partial" : "None"}
-            </span>
-            {quiz.is_published && (
-              <span style={{ fontSize: "0.6875rem", fontWeight: 700, padding: "0.2rem 0.5rem", borderRadius: "var(--radius-sm)", background: "rgba(22,163,74,0.1)", color: "#16a34a", border: "1px solid #16a34a" }}>
-                Live for students
-              </span>
-            )}
-          </div>
-        </div>
-
-        <div style={{ display: "flex", gap: "0.5rem", flexShrink: 0, alignItems: "center" }}>
-          <button
-            type="button"
-            onClick={() => qz.setShowDeleteHintsModal(true)}
-            disabled={quiz.is_published || hintsNone || qz.isDeletingHintsDraft}
-            title={
-              quiz.is_published
-                ? "Remove the quiz from students before deleting hints"
-                : hintsNone
-                  ? "No hints have been generated yet"
-                  : undefined
-            }
-            style={{
-              padding: "0.4rem 0.875rem", borderRadius: "var(--radius-md)",
-              border: "1px solid var(--color-border)", background: "none",
-              color: "var(--color-danger, #dc2626)",
-              cursor: quiz.is_published || hintsNone ? "not-allowed" : "pointer",
-              fontSize: "0.8125rem", fontWeight: 600,
-              display: "flex", alignItems: "center", gap: "0.375rem",
-              opacity: quiz.is_published || hintsNone ? 0.45 : 1,
-            }}
-          >
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <polyline points="3 6 5 6 21 6" />
-              <path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6" />
-            </svg>
-            Delete Draft
-          </button>
-
-          {/* Generate / Regenerate all hints */}
-          {hintsNone ? (
-            <button
-              type="button"
-              className="btn-primary"
-              onClick={qz.handleGenerateHints}
-              disabled={qz.isGeneratingHints || !qz.canGenerateHints}
-              title={!qz.canGenerateHints ? (qz.hintsLockedTooltip ?? undefined) : undefined}
-              style={{
-                padding: "0.4rem 0.875rem",
-                fontSize: "0.8125rem",
-                display: "flex",
-                alignItems: "center",
-                gap: "0.375rem",
-                opacity: hintsLocked ? 0.45 : 1,
-                cursor: hintsLocked ? "not-allowed" : "pointer",
-              }}
-            >
-              {qz.isGeneratingHints ? (
-                <><span className="spinner" style={{ width: "0.875rem", height: "0.875rem" }} />Generating hints…</>
-              ) : (
-                <><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" /></svg>Generate All Hints</>
-              )}
-            </button>
-          ) : (
-            <button
-              type="button"
-              className="btn-secondary"
-              onClick={() => setShowRegenerateAllHintsModal(true)}
-              disabled={qz.isGeneratingHints || !qz.canRegenerateHints}
-              title={!qz.canRegenerateHints ? (qz.hintsLockedTooltip ?? undefined) : undefined}
-              style={{
-                padding: "0.4rem 0.875rem",
-                fontSize: "0.8125rem",
-                display: "flex",
-                alignItems: "center",
-                gap: "0.375rem",
-                opacity: hintsLocked ? 0.45 : 1,
-                cursor: hintsLocked ? "not-allowed" : "pointer",
-              }}
-            >
-              {qz.isGeneratingHints ? (
-                <><span className="spinner" style={{ width: "0.875rem", height: "0.875rem" }} />Generating…</>
-              ) : (
-                <><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="23 4 23 10 17 10" /><path d="M20.49 15a9 9 0 11-2.12-9.36L23 10" /></svg>Regenerate All Hints</>
-              )}
-            </button>
-          )}
-
-          {!quiz.is_published && (
-            <button
-              type="button"
-              className="btn-primary"
-              onClick={qz.handlePublishQuiz}
-              disabled={!qz.canPublishQuiz || qz.isPublishing}
-              style={{
-                padding: "0.4rem 0.875rem",
-                fontSize: "0.8125rem",
-                opacity: !qz.canPublishQuiz ? 0.5 : 1,
-                cursor: !qz.canPublishQuiz ? "not-allowed" : "pointer",
-              }}
-            >
-              {qz.isPublishing ? "Making live…" : qz.publishQuizButtonLabel}
-            </button>
-          )}
-
-          {quiz.is_published && (
-            <button
-              type="button"
-              className="btn-secondary"
-              onClick={() => void qz.handleUnpublishQuiz()}
-              disabled={qz.isUnpublishing}
-              style={{ padding: "0.4rem 0.875rem", fontSize: "0.8125rem" }}
-            >
-              {qz.isUnpublishing ? "Removing…" : qz.unpublishQuizButtonLabel}
-            </button>
-          )}
-        </div>
-      </div>
-
-      {/* Hints loading indicator */}
-      {qz.isGeneratingHints && (
-        <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", padding: "0.75rem 1rem", background: "var(--color-primary-subtle)", borderRadius: "var(--radius-md)", marginBottom: "1rem", fontSize: "0.875rem", color: "var(--color-primary)", flexShrink: 0 }}>
-          <span className="spinner" style={{ width: "1rem", height: "1rem", borderTopColor: "var(--color-primary)" }} />
-          Generating hints for all questions…
-        </div>
-      )}
-
-      {hintGeneration && (
-        <HintGenerationDiagnosticsPanel
-          hintGeneration={hintGeneration}
-          entityNextLlmRetryAt={quiz.next_llm_retry_at}
-          questionsById={questionsById}
+    <div className="quiz-hints-page">
+      <div className="quiz-page__mentor-layout">
+        <QuizMentorVisibilityBanner
+          visibility={studentVisibility}
+          statusTag={{
+            label: hintsComplete ? "Complete" : hintsPartial ? "Partial" : "None",
+            modifier: hintsComplete ? "live" : hintsPartial ? "draft" : "muted",
+          }}
+          metaText={`${questionsWithCompleteHints} of ${activeQuestions.length} hint sets · ${activeQuestions.length} questions`}
+          secondaryInfoLabel="Hint workspace"
+          secondaryInfoValue="Review progressive hints and publishing status here"
+          actionLabel={
+            quiz.is_published
+              ? undefined
+              : qz.isPublishing
+                ? "Making live…"
+                : qz.publishQuizButtonLabel
+          }
+          actionDisabled={!quiz.is_published && (!qz.canPublishQuiz || qz.isPublishing)}
+          actionTitle={!qz.canPublishQuiz ? qz.publishDisabledTooltip ?? undefined : undefined}
+          onAction={quiz.is_published ? undefined : qz.handlePublishQuiz}
+          extraActions={
+            quiz.is_published ? (
+              <button
+                type="button"
+                className="sm-mentor-btn sm-mentor-btn--outline sm-mentor-btn--danger student-visibility-banner__action"
+                onClick={() => void qz.handleUnpublishQuiz()}
+                disabled={qz.isUnpublishing}
+              >
+                {qz.isUnpublishing ? "Removing…" : qz.unpublishQuizButtonLabel}
+              </button>
+            ) : undefined
+          }
         />
-      )}
 
-      {/* Hint cards — infinitely scrollable */}
-      <div style={{ flex: 1, overflowY: "auto", minHeight: 0 }}>
+        <HintReviewToolbar
+          qz={qz}
+          onPageChange={onPageChange}
+          hintsNone={hintsNone}
+          onGenerateAllHints={qz.handleGenerateHints}
+          onRegenerateAllHints={() => setShowRegenerateAllHintsModal(true)}
+        />
+
+        <div className="sm-version-bar">
+          <span className="sm-version-pill">
+            Hints
+            <span className={`sm-version-tag sm-version-tag--${quiz.is_published ? "live" : "draft"}`}>
+              {quiz.is_published ? "Live for students" : "Working draft"}
+            </span>
+          </span>
+          <span
+            className={`quiz-status-chip ${
+              hintsComplete
+                ? "quiz-status-chip--complete"
+                : hintsPartial
+                  ? "quiz-status-chip--partial"
+                  : "quiz-status-chip--empty"
+            }`}
+          >
+            Hints: {hintsStatusLabel}
+          </span>
+          <span className="quiz-hints-version-bar__publish">
+            Publishing: {quiz.is_published ? "Live" : publishReady ? "Ready" : "Waiting for complete hints"}
+          </span>
+        </div>
+
+        {hintGeneration && (
+          <HintGenerationDiagnosticsPanel
+            hintGeneration={hintGeneration}
+            entityNextLlmRetryAt={quiz.next_llm_retry_at}
+            questionsById={questionsById}
+            onNavigateQuestion={handleScrollToQuestion}
+          />
+        )}
+
+        <div className="quiz-hints-scroll">
         {activeQuestions.length === 0 ? (
-          <div style={{ textAlign: "center", padding: "2rem", color: "var(--color-text-muted)" }}>
-            <p style={{ fontSize: "0.9375rem", fontWeight: 600, margin: "0 0 0.375rem" }}>No questions yet</p>
-            <p style={{ fontSize: "0.8125rem", margin: 0 }}>
-              Go back to <button type="button" style={{ background: "none", border: "none", color: "var(--color-primary)", cursor: "pointer", fontWeight: 600 }} onClick={() => onPageChange(3)}>page 3</button> to add questions first.
+          <div className="quiz-empty-state">
+            <strong>No questions yet</strong>
+            <p>
+              Return to <button type="button" className="quiz-hint-card__question-link" onClick={() => onPageChange(3)}>question review</button> to add questions first.
             </p>
           </div>
         ) : (
@@ -279,6 +232,7 @@ const QuizPage4: React.FC<QuizPage4Props> = ({ qz, onPageChange }) => {
               isPublished={quiz.is_published}
               canEdit={qz.canEditQuestions}
               isRegeneratingHints={qz.isGeneratingHints}
+              hintsStale={qz.hintsStaleQuestionIds.includes(q.question_id)}
               onRequestRegenerateHints={(questionId) => {
                 setHintRegenerateTarget({
                   questionId,
@@ -290,6 +244,7 @@ const QuizPage4: React.FC<QuizPage4Props> = ({ qz, onPageChange }) => {
             />
           ))
         )}
+        </div>
       </div>
 
       {showRegenerateAllHintsModal && (
@@ -298,8 +253,8 @@ const QuizPage4: React.FC<QuizPage4Props> = ({ qz, onPageChange }) => {
           isSubmitting={qz.isGeneratingHints}
           onClose={() => !qz.isGeneratingHints && setShowRegenerateAllHintsModal(false)}
           onConfirm={async (feedback) => {
-            await qz.handleRegenerateAllHints(feedback);
-            setShowRegenerateAllHintsModal(false);
+            const succeeded = await qz.handleRegenerateAllHints(feedback);
+            if (succeeded) setShowRegenerateAllHintsModal(false);
           }}
         />
       )}
@@ -311,8 +266,8 @@ const QuizPage4: React.FC<QuizPage4Props> = ({ qz, onPageChange }) => {
           isSubmitting={qz.isGeneratingHints}
           onClose={() => !qz.isGeneratingHints && setHintRegenerateTarget(null)}
           onConfirm={async (feedback) => {
-            await qz.handleRegenerateHints(hintRegenerateTarget.questionId, feedback);
-            setHintRegenerateTarget(null);
+            const succeeded = await qz.handleRegenerateHints(hintRegenerateTarget.questionId, feedback);
+            if (succeeded) setHintRegenerateTarget(null);
           }}
         />
       )}

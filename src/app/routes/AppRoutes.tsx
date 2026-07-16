@@ -28,7 +28,7 @@ const AdminLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => (
 
 /** Layout wrapper for mentor pages */
 const MentorLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => (
-  <div style={{ display: "flex", minHeight: "100vh" }}>
+  <div className="learning-experience" style={{ display: "flex", minHeight: "100vh" }}>
     <Sidebar />
     <main style={{ flex: 1, marginLeft: "240px", minHeight: "100vh", background: "var(--color-bg-page)", overflowY: "auto" }}>
       {children}
@@ -38,13 +38,129 @@ const MentorLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => 
 
 /** Layout wrapper for trainee pages */
 const TraineeLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => (
-  <div style={{ display: "flex", minHeight: "100vh" }}>
+  <div className="learning-experience" style={{ display: "flex", minHeight: "100vh" }}>
     <Sidebar />
     <main style={{ flex: 1, marginLeft: "240px", minHeight: "100vh", background: "var(--color-bg-page)", overflowY: "auto" }}>
       {children}
     </main>
   </div>
 );
+
+const LEARNING_SIDEBAR_STORAGE_KEY = "studyguru.learning-sidebar-collapsed";
+const COMPACT_LEARNING_SHELL_QUERY = "(max-width: 768px)";
+
+interface LearningSpaceRouteLayoutProps {
+  children: React.ReactNode;
+  background?: string;
+  overflow?: React.CSSProperties["overflow"];
+}
+
+/** Persistent learning navigation used by space detail and trainee quiz routes. */
+const LearningSpaceRouteLayout: React.FC<LearningSpaceRouteLayoutProps> = ({
+  children,
+  background = "var(--color-bg-page)",
+  overflow = "hidden",
+}) => {
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = React.useState(() => {
+    try {
+      return window.localStorage.getItem(LEARNING_SIDEBAR_STORAGE_KEY) === "true";
+    } catch {
+      return false;
+    }
+  });
+  const [isCompactViewport, setIsCompactViewport] = React.useState(
+    () => window.matchMedia(COMPACT_LEARNING_SHELL_QUERY).matches,
+  );
+  const [isCompactDrawerOpen, setIsCompactDrawerOpen] = React.useState(false);
+  const drawerToggleRef = React.useRef<HTMLButtonElement>(null);
+
+  React.useEffect(() => {
+    const mediaQuery = window.matchMedia(COMPACT_LEARNING_SHELL_QUERY);
+    const handleChange = (event: MediaQueryListEvent) => {
+      setIsCompactViewport(event.matches);
+      setIsCompactDrawerOpen(false);
+    };
+    mediaQuery.addEventListener("change", handleChange);
+    return () => mediaQuery.removeEventListener("change", handleChange);
+  }, []);
+
+  React.useEffect(() => {
+    if (!isCompactViewport || !isCompactDrawerOpen) return;
+    const previousOverflow = document.body.style.overflow;
+    const drawerToggle = drawerToggleRef.current;
+    document.body.style.overflow = "hidden";
+    document
+      .querySelector<HTMLElement>("#learning-spaces-sidebar .learning-spaces-sidebar__drawer-close")
+      ?.focus();
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      event.preventDefault();
+      setIsCompactDrawerOpen(false);
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener("keydown", handleKeyDown);
+      drawerToggle?.focus();
+    };
+  }, [isCompactDrawerOpen, isCompactViewport]);
+
+  const handleSidebarCollapsedChange = (isCollapsed: boolean) => {
+    setIsSidebarCollapsed(isCollapsed);
+    try {
+      window.localStorage.setItem(LEARNING_SIDEBAR_STORAGE_KEY, String(isCollapsed));
+    } catch {
+      // The shell still works when storage is unavailable.
+    }
+  };
+
+  return (
+    <div
+      className={`learning-experience learning-space-route-layout${
+        isSidebarCollapsed ? " learning-space-route-layout--sidebar-collapsed" : ""
+      }${isCompactViewport ? " learning-space-route-layout--compact" : ""}${
+        isCompactDrawerOpen ? " learning-space-route-layout--drawer-open" : ""
+      }`}
+    >
+      {isCompactViewport && (
+        <>
+          <button
+            ref={drawerToggleRef}
+            type="button"
+            className="learning-space-route-layout__drawer-toggle"
+            onClick={() => setIsCompactDrawerOpen(true)}
+            aria-label="Open learning spaces navigation"
+            aria-expanded={isCompactDrawerOpen}
+            aria-controls="learning-spaces-sidebar"
+          >
+            <i className="ti ti-menu-2" aria-hidden="true" />
+          </button>
+          {isCompactDrawerOpen && (
+            <button
+              type="button"
+              className="learning-space-route-layout__drawer-backdrop"
+              onClick={() => setIsCompactDrawerOpen(false)}
+              aria-label="Close learning spaces navigation"
+            />
+          )}
+        </>
+      )}
+      <LearningSpacesSidebar
+        isCollapsed={isSidebarCollapsed}
+        isCompact={isCompactViewport}
+        isDrawerOpen={isCompactDrawerOpen}
+        onRequestClose={() => setIsCompactDrawerOpen(false)}
+        onCollapsedChange={handleSidebarCollapsedChange}
+      />
+      <div
+        className="learning-space-route-layout__content"
+        style={{ background, overflow }}
+      >
+        {children}
+      </div>
+    </div>
+  );
+};
 
 const AppRoutes: React.FC = () => {
   const { isLoggedIn, role } = useAuth();
@@ -108,13 +224,9 @@ const AppRoutes: React.FC = () => {
         path="/mentor/spaces/:spaceId"
         element={
           <ProtectedRoute requiredRole="mentor">
-            {/* SpaceDetailPage manages its own full layout (no sidebar margin) */}
-            <div style={{ display: "flex", minHeight: "100vh" }}>
-              <LearningSpacesSidebar />
-              <div style={{ flex: 1, marginLeft: "240px", minHeight: "100vh", background: "var(--color-bg-page)", overflow: "hidden", display: "flex", flexDirection: "column" }}>
-                <SpaceDetailPage />
-              </div>
-            </div>
+            <LearningSpaceRouteLayout>
+              <SpaceDetailPage />
+            </LearningSpaceRouteLayout>
           </ProtectedRoute>
         }
       />
@@ -134,12 +246,9 @@ const AppRoutes: React.FC = () => {
         path="/trainee/spaces/:spaceId"
         element={
           <ProtectedRoute requiredRole="trainee">
-            <div style={{ display: "flex", minHeight: "100vh" }}>
-              <LearningSpacesSidebar />
-              <div style={{ flex: 1, marginLeft: "240px", minHeight: "100vh", background: "var(--color-bg-page)", overflow: "hidden", display: "flex", flexDirection: "column" }}>
-                <SpaceDetailPage />
-              </div>
-            </div>
+            <LearningSpaceRouteLayout>
+              <SpaceDetailPage />
+            </LearningSpaceRouteLayout>
           </ProtectedRoute>
         }
       />
@@ -147,12 +256,9 @@ const AppRoutes: React.FC = () => {
         path="/trainee/spaces/:spaceId/quiz/attempt/:attemptId"
         element={
           <ProtectedRoute requiredRole="trainee">
-            <div style={{ display: "flex", minHeight: "100vh" }}>
-              <LearningSpacesSidebar />
-              <div style={{ flex: 1, marginLeft: "240px", minHeight: "100vh", background: "#f5f5f7", overflow: "hidden" }}>
-                <QuizAttemptPage />
-              </div>
-            </div>
+            <LearningSpaceRouteLayout background="#f5f5f7">
+              <QuizAttemptPage />
+            </LearningSpaceRouteLayout>
           </ProtectedRoute>
         }
       />
@@ -160,12 +266,9 @@ const AppRoutes: React.FC = () => {
         path="/trainee/spaces/:spaceId/nodes/:nodeId/quiz/:quizId/attempts"
         element={
           <ProtectedRoute requiredRole="trainee">
-            <div style={{ display: "flex", minHeight: "100vh" }}>
-              <LearningSpacesSidebar />
-              <div style={{ flex: 1, marginLeft: "240px", minHeight: "100vh", background: "#f5f5f7", overflow: "auto" }}>
-                <QuizAttemptHistoryPage />
-              </div>
-            </div>
+            <LearningSpaceRouteLayout background="#f5f5f7" overflow="auto">
+              <QuizAttemptHistoryPage />
+            </LearningSpaceRouteLayout>
           </ProtectedRoute>
         }
       />
@@ -173,12 +276,9 @@ const AppRoutes: React.FC = () => {
         path="/trainee/spaces/:spaceId/nodes/:nodeId/quiz/:quizId/archive-review"
         element={
           <ProtectedRoute requiredRole="trainee">
-            <div style={{ display: "flex", minHeight: "100vh" }}>
-              <LearningSpacesSidebar />
-              <div style={{ flex: 1, marginLeft: "240px", minHeight: "100vh", background: "#f5f5f7", overflow: "auto" }}>
-                <ArchivedQuizReviewPage />
-              </div>
-            </div>
+            <LearningSpaceRouteLayout background="#f5f5f7" overflow="auto">
+              <ArchivedQuizReviewPage />
+            </LearningSpaceRouteLayout>
           </ProtectedRoute>
         }
       />
@@ -186,12 +286,9 @@ const AppRoutes: React.FC = () => {
         path="/trainee/spaces/:spaceId/quiz/attempt/:attemptId/results"
         element={
           <ProtectedRoute requiredRole="trainee">
-            <div style={{ display: "flex", minHeight: "100vh" }}>
-              <LearningSpacesSidebar />
-              <div style={{ flex: 1, marginLeft: "240px", minHeight: "100vh", background: "#f5f5f7", overflow: "auto" }}>
-                <QuizAttemptResultsPage />
-              </div>
-            </div>
+            <LearningSpaceRouteLayout background="#f5f5f7" overflow="auto">
+              <QuizAttemptResultsPage />
+            </LearningSpaceRouteLayout>
           </ProtectedRoute>
         }
       />

@@ -5,6 +5,7 @@
 import { describe, expect, it } from "vitest";
 
 import type { GenerationProgressOut } from "./types/generationProgress.types";
+import { resolveGenerationProgress } from "./hooks/useGenerationProgress";
 import { extractResumeErrorDetail } from "./utils/generationJobErrors";
 import {
   patchForGenerationJobAbandoned,
@@ -25,6 +26,7 @@ function panelButtonVisibility(input: {
   onAbandon?: boolean;
   canPause?: boolean;
   isPausing?: boolean;
+  isResuming?: boolean;
 }) {
   const {
     progressStatus,
@@ -35,18 +37,24 @@ function panelButtonVisibility(input: {
     onAbandon = false,
     canPause = false,
     isPausing = false,
+    isResuming = false,
   } = input;
 
   const isUserPaused =
-    progressStatus === "paused"
-    || Boolean(pausedRunId && onResume && progressStatus !== "running");
+    !isResuming
+    && (
+      progressStatus === "paused"
+      || Boolean(pausedRunId && onResume)
+    );
   const isFailed =
     !isUserPaused
+    && !isResuming
     && (progressStatus === "failed" || Boolean(failedRunId && onResume));
   const isRunning =
-    !isUserPaused && !isFailed && progressStatus !== "completed";
+    isResuming
+    || (!isUserPaused && !isFailed && progressStatus !== "completed");
   const showAbandon = Boolean(onAbandon && (isUserPaused || isFailed));
-  const showPause = Boolean(isRunning && onPause && (canPause || isPausing));
+  const showPause = Boolean(isRunning && !isResuming && onPause && (canPause || isPausing));
 
   return { showPause, showAbandon, isUserPaused, isRunning };
 }
@@ -90,8 +98,23 @@ describe("Manual test gate — scenario 1: Cancel on step 2 → pause modal, sta
       onAbandon: true,
       canPause: true,
     });
-    expect(stalePausedFlag.isUserPaused).toBe(false);
-    expect(stalePausedFlag.showPause).toBe(true);
+    // After Cancel, pausedRunId wins over a briefly stale "running" poll.
+    expect(stalePausedFlag.isUserPaused).toBe(true);
+    expect(stalePausedFlag.showPause).toBe(false);
+    expect(stalePausedFlag.showAbandon).toBe(true);
+
+    const continuing = panelButtonVisibility({
+      progressStatus: "paused",
+      pausedRunId: RUN_ID,
+      onPause: true,
+      onResume: true,
+      onAbandon: true,
+      isResuming: true,
+    });
+    // While Continue is in flight, show live progress chrome immediately.
+    expect(continuing.isUserPaused).toBe(false);
+    expect(continuing.isRunning).toBe(true);
+    expect(continuing.showAbandon).toBe(false);
   });
 });
 
@@ -171,5 +194,133 @@ describe("Manual test gate — scenario 6: regenerate after cancel does not stic
     expect(view.isRunning).toBe(true);
     expect(view.showPause).toBe(true);
     expect(view.showAbandon).toBe(false);
+  });
+});
+
+describe("Generation progress — per-node checklist isolation", () => {
+  const nodeAProgress: GenerationProgressOut = {
+    session_id: "run-a",
+    pipeline: "study_material",
+    status: "running",
+    current_step_index: 1,
+    steps: [
+      { id: "outline", label: "Outlining", status: "completed" },
+      { id: "generate", label: "Generating", status: "active" },
+      { id: "assess", label: "Assessing", status: "pending" },
+    ],
+  };
+  const nodeBProgress: GenerationProgressOut = {
+    session_id: "run-b",
+    pipeline: "study_material",
+    status: "running",
+    current_step_index: 0,
+    steps: [
+      { id: "outline", label: "Outlining", status: "active" },
+      { id: "generate", label: "Generating", status: "pending" },
+      { id: "assess", label: "Assessing", status: "pending" },
+    ],
+  };
+  const pausedSeed: GenerationProgressOut = {
+    session_id: "run-a",
+    pipeline: "study_material",
+    status: "paused",
+    current_step_index: 0,
+    steps: [
+      { id: "outline", label: "Outlining", status: "active" },
+      { id: "generate", label: "Generating", status: "pending" },
+      { id: "assess", label: "Assessing", status: "pending" },
+    ],
+  };
+
+  it("uses seeded progress for the active session when poll cache is empty", () => {
+    const resolved = resolveGenerationProgress(true, "run-a", null, nodeAProgress);
+    expect(resolved?.steps[1]?.status).toBe("active");
+  });
+
+  it("does not show another node's seeded progress after switching topics", () => {
+    const resolved = resolveGenerationProgress(true, "run-b", null, nodeAProgress);
+    expect(resolved).toBeNull();
+    const resolvedB = resolveGenerationProgress(true, "run-b", null, nodeBProgress);
+    expect(resolvedB?.steps[0]?.status).toBe("active");
+  });
+
+  it("prefers live poll data over stale seed for the same session", () => {
+    const polled: GenerationProgressOut = {
+      ...nodeAProgress,
+      current_step_index: 2,
+      steps: [
+        { id: "outline", label: "Outlining", status: "completed" },
+        { id: "generate", label: "Generating", status: "completed" },
+        { id: "assess", label: "Assessing", status: "active" },
+      ],
+    };
+    const resolved = resolveGenerationProgress(
+      true,
+      "run-a",
+      { sessionId: "run-a", progress: polled },
+      nodeAProgress,
+    );
+    expect(resolved?.steps[2]?.status).toBe("active");
+  });
+
+  it("ignores paused/failed seed while a run is active (resume handshake)", () => {
+    expect(resolveGenerationProgress(true, "run-a", null, pausedSeed, true)).toBeNull();
+    const failedSeed: GenerationProgressOut = { ...pausedSeed, status: "failed" };
+    expect(resolveGenerationProgress(true, "run-a", null, failedSeed, true)).toBeNull();
+  });
+
+  it("still shows paused seed on the paused screen when not suppressing", () => {
+    expect(resolveGenerationProgress(true, "run-a", null, pausedSeed, false)?.status).toBe(
+      "paused",
+    );
+  });
+
+  it("ignores a stale paused poll cache while suppressing during resume", () => {
+    expect(
+      resolveGenerationProgress(
+        true,
+        "run-a",
+        { sessionId: "run-a", progress: pausedSeed },
+        null,
+        true,
+      ),
+    ).toBeNull();
+  });
+});
+
+describe("Generation progress — resume placeholder vs live checklist", () => {
+  function resumePanelChrome(input: {
+    isResuming?: boolean;
+    progressStatus?: GenerationProgressOut["status"];
+    stepCount?: number;
+  }) {
+    const { isResuming = false, progressStatus, stepCount = 3 } = input;
+    const hasLiveRunningProgress = progressStatus === "running";
+    const showResumePlaceholder = Boolean(isResuming && !hasLiveRunningProgress);
+    const visibleStepCount = showResumePlaceholder ? 0 : stepCount;
+    const displayTitle = showResumePlaceholder ? "Resuming…" : "Generating study material";
+    return { showResumePlaceholder, visibleStepCount, displayTitle };
+  }
+
+  it("hides the checklist while Continue is recovering the run", () => {
+    const view = resumePanelChrome({
+      isResuming: true,
+      progressStatus: "paused",
+      stepCount: 3,
+    });
+    expect(view.showResumePlaceholder).toBe(true);
+    expect(view.visibleStepCount).toBe(0);
+    expect(view.displayTitle).toBe("Resuming…");
+  });
+
+  it("shows the normal checklist once live running progress arrives", () => {
+    const view = resumePanelChrome({
+      isResuming: false,
+      progressStatus: "running",
+      stepCount: 3,
+    });
+    expect(view.showResumePlaceholder).toBe(false);
+    expect(view.visibleStepCount).toBe(3);
+    expect(view.displayTitle).toBe("Generating study material");
   });
 });

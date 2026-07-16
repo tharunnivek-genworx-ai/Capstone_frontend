@@ -8,6 +8,8 @@ import type {
   TraineeQuizOut,
   TraineeArchivedQuizListOut,
   ArchivedQuizReviewOut,
+  QuizAttemptStateOut,
+  QuizAttemptStatePatch,
 } from "../types/traineeQuiz.types";
 
 export const traineeQuizService = {
@@ -50,15 +52,31 @@ export const traineeQuizService = {
       .then((r) => r.data);
   },
 
+  patchAttemptState(
+    attemptId: string,
+    payload: QuizAttemptStatePatch,
+  ): Promise<QuizAttemptStateOut> {
+    return studyAgentClient
+      .patch<QuizAttemptStateOut>(`/trainee/attempts/${attemptId}/state`, payload)
+      .then((r) => r.data);
+  },
+
   listArchivedQuizzes(nodeId: string): Promise<TraineeArchivedQuizListOut> {
     return studyAgentClient
       .get<TraineeArchivedQuizListOut>(`/trainee/nodes/${nodeId}/quizzes/archive`)
       .then((r) => r.data);
   },
 
-  reviewArchivedQuiz(nodeId: string, quizId: string): Promise<ArchivedQuizReviewOut> {
+  reviewArchivedQuiz(
+    nodeId: string,
+    quizId: string,
+    attemptId?: string | null,
+  ): Promise<ArchivedQuizReviewOut> {
     return studyAgentClient
-      .get<ArchivedQuizReviewOut>(`/trainee/nodes/${nodeId}/quizzes/${quizId}/review`)
+      .get<ArchivedQuizReviewOut>(
+        `/trainee/nodes/${nodeId}/quizzes/${quizId}/review`,
+        { params: attemptId ? { attempt_id: attemptId } : undefined },
+      )
       .then((r) => r.data);
   },
 };

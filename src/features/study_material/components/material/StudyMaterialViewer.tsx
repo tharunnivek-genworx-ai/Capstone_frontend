@@ -40,7 +40,7 @@ interface StudyMaterialViewerProps {
   isDownloadingPdf?: boolean;
   onDownloadPdf?: () => void;
   hideReferenceImages?: boolean;
-  scrollContainerRef?: React.RefObject<HTMLDivElement | null>;
+  scrollContainerRef?: React.Ref<HTMLDivElement>;
   /** Hide title/actions row — used inside focus modal where chrome lives outside */
   compactHeader?: boolean;
   /** Hide the full header — mentor workspace renders chrome externally */

@@ -14,6 +14,7 @@ import NodeDeleteConfirmModal from "./NodeDeleteConfirmModal";
 import { getExcludedMoveTargetIds, findParentId, type MoveParentSelection } from "./moveTopicUtils";
 import { mentorProgressService } from "../../mentor_progress_view";
 import type { NodeDeletePreviewOut } from "../../mentor_progress_view/types/mentorProgress.types";
+import { Layers3, Plus, Sparkles, X } from "lucide-react";
 
 function collectSubtreeNodeIds(node: NodeTreeNode): string[] {
   return [node.node_id, ...node.children.flatMap(collectSubtreeNodeIds)];
@@ -37,6 +38,9 @@ interface TopicTreeProps {
   isMentor?: boolean;
   onMoveModeChange?: (active: boolean) => void;
   isCompact?: boolean;
+  onGenerateAll?: () => void;
+  isGenerateAllDisabled?: boolean;
+  isGenerateAllSubmitting?: boolean;
 }
 
 const TopicTree: React.FC<TopicTreeProps> = ({
@@ -52,6 +56,9 @@ const TopicTree: React.FC<TopicTreeProps> = ({
   isMentor = true,
   onMoveModeChange,
   isCompact = false,
+  onGenerateAll,
+  isGenerateAllDisabled = false,
+  isGenerateAllSubmitting = false,
 }) => {
   // ── Create node state ────────────────────────────────────────────────────
   const [createState, setCreateState] = useState<CreateNodeState | null>(null);
@@ -201,77 +208,10 @@ const TopicTree: React.FC<TopicTreeProps> = ({
     }
   };
 
-  // ── Empty state ───────────────────────────────────────────────────────────
-
-  if (roots.length === 0 && createState === null) {
-    return (
-      <div
-        style={{
-          display: "flex",
-          flexDirection: "column",
-          alignItems: "center",
-          justifyContent: "center",
-          height: "100%",
-          padding: "3rem 2rem",
-          textAlign: "center",
-        }}
-      >
-        <div
-          style={{
-            width: "72px",
-            height: "72px",
-            borderRadius: "20px",
-            background: "linear-gradient(135deg, rgba(37,99,235,0.15), rgba(37,99,235,0.05))",
-            border: "1px solid rgba(37,99,235,0.2)",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            marginBottom: "1.5rem",
-          }}
-        >
-          <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="var(--color-primary)" strokeWidth="1.5">
-            <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" />
-          </svg>
-        </div>
-        <h3
-          style={{
-            fontSize: "1.0625rem",
-            fontWeight: 700,
-            color: "var(--color-text-primary)",
-            margin: "0 0 0.5rem",
-          }}
-        >
-          No topics yet
-        </h3>
-        <p
-          style={{
-            fontSize: "0.875rem",
-            color: "var(--color-text-muted)",
-            margin: "0 0 1.75rem",
-            lineHeight: 1.6,
-            maxWidth: "280px",
-          }}
-        >
-          Start building your outline by adding the first section for this learning space.
-        </p>
-        <button
-          onClick={() => openCreatePanel(null)}
-          className="btn-primary"
-          style={{ padding: "0.75rem 1.5rem" }}
-        >
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-            <path d="M12 5v14M5 12h14" />
-          </svg>
-          Create New Section
-        </button>
-      </div>
-    );
-  }
-
   const excludedMoveIds = moveTarget ? getExcludedMoveTargetIds(moveTarget) : undefined;
 
   return (
-    <div style={{ height: "100%", display: "flex", flexDirection: "column", position: "relative" }}>
+    <div className="topic-tree">
       {moveTarget && (
         <MoveTopicOverlay
           movingNode={moveTarget}
@@ -284,69 +224,57 @@ const TopicTree: React.FC<TopicTreeProps> = ({
       )}
       {/* ── Tree header ── */}
       {!moveTarget && (
-        <div
-          style={{
-            padding: "0.875rem 1rem 0.625rem",
-            borderBottom: "1px solid var(--color-border)",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-            flexShrink: 0,
-          }}
-        >
-          <span
-            style={{
-              fontSize: "0.8125rem",
-              fontWeight: 600,
-              color: "var(--color-text-secondary)",
-            }}
-          >
-            Topic Outline
-          </span>
+        <>
+          <div className="topic-tree__header">
+            <div>
+              <span className="topic-tree__eyebrow">Learning structure</span>
+              <h2 className="topic-tree__heading">Topic Outline</h2>
+            </div>
+          </div>
           {isMentor && (
-            <button
-              onClick={() => openCreatePanel(null)}
-              className="btn-primary"
-              style={{
-                padding: "0.375rem 0.75rem",
-                fontSize: "0.8125rem",
-                gap: "0.375rem",
-              }}
-              title="Create a new top-level section"
-            >
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                <path d="M12 5v14M5 12h14" />
-              </svg>
-              Create New Section
-            </button>
+            <div className="topic-tree__primary-actions">
+              <button
+                type="button"
+                className="topic-tree__generate-all-button"
+                onClick={onGenerateAll}
+                disabled={isGenerateAllDisabled || !onGenerateAll}
+                title={
+                  roots.length === 0
+                    ? "Create at least one section first"
+                    : "Generate materials across selected sections"
+                }
+              >
+                <Sparkles size={18} aria-hidden="true" />
+                <span>
+                  <strong>
+                    {isGenerateAllSubmitting ? "Starting generation…" : "Generate all study materials"}
+                  </strong>
+                  <small>Generate for all topics in this space</small>
+                </span>
+              </button>
+              <button
+                type="button"
+                onClick={() => openCreatePanel(null)}
+                className="topic-tree__create-section-button"
+                title="Create a new top-level section"
+              >
+                <Plus size={17} aria-hidden="true" />
+                <span>Create New Section</span>
+              </button>
+            </div>
           )}
-        </div>
+        </>
       )}
 
       {/* ── Inline create input (shows when createState is set) ── */}
       {createState !== null && (
-        <div
-          className="animate-fade-in"
-          style={{
-            padding: "0.75rem 1rem",
-            borderBottom: "1px solid var(--color-border)",
-            background: "var(--color-primary-subtle)",
-            flexShrink: 0,
-          }}
-        >
-          <p
-            style={{
-              fontSize: "0.75rem",
-              fontWeight: 600,
-              color: "var(--color-primary)",
-              margin: "0 0 0.5rem",
-            }}
-          >
+        <div className="topic-tree__create-panel animate-fade-in">
+          <p className="topic-tree__form-label">
             {createState.parentId
               ? `Adding subtopic under "${createState.parentTitle ?? "selected topic"}"`
               : "Adding new section"}
           </p>
-          <form onSubmit={handleCreateSubmit} style={{ display: "flex", gap: "0.5rem" }}>
+          <form onSubmit={handleCreateSubmit} className="topic-tree__inline-form">
             <input
               autoFocus
               className="input-field"
@@ -354,7 +282,6 @@ const TopicTree: React.FC<TopicTreeProps> = ({
               value={createTitle}
               onChange={(e) => setCreateTitle(e.target.value)}
               maxLength={300}
-              style={{ flex: 1, fontSize: "0.875rem" }}
               onKeyDown={(e) => {
                 if (e.key === "Escape") setCreateState(null);
               }}
@@ -362,20 +289,17 @@ const TopicTree: React.FC<TopicTreeProps> = ({
             <button
               type="submit"
               className="btn-primary"
-              style={{ padding: "0.5rem 0.875rem", flexShrink: 0 }}
               disabled={isCreating || !createTitle.trim()}
             >
-              {isCreating ? <span className="spinner" style={{ width: "1rem", height: "1rem" }} /> : "Add"}
+              {isCreating ? <span className="spinner topic-tree__small-spinner" /> : "Add"}
             </button>
             <button
               type="button"
               onClick={() => setCreateState(null)}
-              className="btn-secondary"
-              style={{ padding: "0.5rem", flexShrink: 0 }}
+              className="btn-secondary topic-tree__icon-button"
+              aria-label="Cancel creating topic"
             >
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
-              </svg>
+              <X size={16} />
             </button>
           </form>
         </div>
@@ -384,37 +308,19 @@ const TopicTree: React.FC<TopicTreeProps> = ({
       {/* ── Inline rename (modal-like, shown when renamingNode is set) ── */}
       {renamingNode && (
         <>
-          <div
-            onClick={() => setRenamingNode(null)}
-            style={{ position: "fixed", inset: 0, zIndex: 40, background: "rgba(0,0,0,0.5)", backdropFilter: "blur(2px)" }}
-          />
-          <div
-            style={{
-              position: "fixed",
-              inset: 0,
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              zIndex: 50,
-              pointerEvents: "none",
-            }}
-          >
+          <div onClick={() => setRenamingNode(null)} className="topic-tree-modal__backdrop" />
+          <div className="topic-tree-modal__layer">
             <div
-              className="animate-fade-in"
-              style={{
-                pointerEvents: "auto",
-                width: "min(420px, 95vw)",
-                background: "var(--color-surface-2)",
-                border: "1px solid var(--color-border)",
-                borderRadius: "var(--radius-xl)",
-                padding: "1.5rem",
-                boxShadow: "0 24px 80px rgba(0,0,0,0.6)",
-              }}
+              className="topic-tree-modal animate-fade-in"
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="rename-topic-title"
             >
-              <h3 style={{ margin: "0 0 1rem", fontSize: "1rem", fontWeight: 700, color: "var(--color-text-primary)" }}>
+              <span className="topic-tree-modal__eyebrow">Edit outline</span>
+              <h3 id="rename-topic-title" className="topic-tree-modal__title">
                 Rename Topic
               </h3>
-              <form onSubmit={handleRenameSubmit} style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
+              <form onSubmit={handleRenameSubmit} className="topic-tree-modal__form">
                 <input
                   autoFocus
                   className="input-field"
@@ -423,19 +329,17 @@ const TopicTree: React.FC<TopicTreeProps> = ({
                   maxLength={300}
                   onKeyDown={(e) => { if (e.key === "Escape") setRenamingNode(null); }}
                 />
-                <div style={{ display: "flex", gap: "0.625rem" }}>
+                <div className="topic-tree-modal__actions">
                   <button
                     type="button"
                     onClick={() => setRenamingNode(null)}
                     className="btn-secondary"
-                    style={{ flex: 1 }}
                   >
                     Cancel
                   </button>
                   <button
                     type="submit"
                     className="btn-primary"
-                    style={{ flex: 2 }}
                     disabled={isRenaming || !renameTitle.trim()}
                   >
                     {isRenaming ? <><span className="spinner" />Saving…</> : "Save"}
@@ -448,38 +352,41 @@ const TopicTree: React.FC<TopicTreeProps> = ({
       )}
 
       {/* ── Tree scroll area ── */}
-      <div
-        style={{
-          flex: 1,
-          overflowY: "auto",
-          overflowX: "auto",
-          padding: "0.625rem 0.5rem 1rem",
-        }}
-      >
-        {roots.map((root) => (
-          <TreeNode
-            key={root.node_id}
-            node={root}
-            spaceId={spaceId}
-            selectedNodeId={selectedNodeId}
-            onSelect={onSelectNode}
-            onAddChild={(n) => openCreatePanel(n.node_id, n.title)}
-            onRename={(n) => { setRenamingNode(n); setRenameTitle(n.title); }}
-            onMove={startMove}
-            onMoveUp={(n) => handleMoveSibling(n, "up")}
-            onMoveDown={(n) => handleMoveSibling(n, "down")}
-            onArchive={handleRequestDelete}
-            siblings={roots}
-            isMentor={isMentor}
-            movePickMode={!!moveTarget}
-            movingNodeId={moveTarget?.node_id}
-            excludedMoveTargetIds={excludedMoveIds}
-            moveSelectedParentId={moveParentId}
-            onPickMoveParent={(parentId) => setMoveParentId(parentId)}
-            isCompact={isCompact}
-          />
-        ))}
-      </div>
+      {roots.length === 0 && createState === null ? (
+        <div className="topic-tree-empty">
+          <span className="topic-tree-empty__icon" aria-hidden="true"><Layers3 size={31} /></span>
+          <h2>No topics yet</h2>
+          <p>
+            Start building your outline by adding the first section for this learning space.
+          </p>
+        </div>
+      ) : (
+        <div className="topic-tree__scroll" role="tree" aria-label="Topic outline">
+          {roots.map((root) => (
+            <TreeNode
+              key={root.node_id}
+              node={root}
+              spaceId={spaceId}
+              selectedNodeId={selectedNodeId}
+              onSelect={onSelectNode}
+              onAddChild={(n) => openCreatePanel(n.node_id, n.title)}
+              onRename={(n) => { setRenamingNode(n); setRenameTitle(n.title); }}
+              onMove={startMove}
+              onMoveUp={(n) => handleMoveSibling(n, "up")}
+              onMoveDown={(n) => handleMoveSibling(n, "down")}
+              onArchive={handleRequestDelete}
+              siblings={roots}
+              isMentor={isMentor}
+              movePickMode={!!moveTarget}
+              movingNodeId={moveTarget?.node_id}
+              excludedMoveTargetIds={excludedMoveIds}
+              moveSelectedParentId={moveParentId}
+              onPickMoveParent={(parentId) => setMoveParentId(parentId)}
+              isCompact={isCompact}
+            />
+          ))}
+        </div>
+      )}
 
       {deleteTarget && deletePreview && (
         <NodeDeleteConfirmModal
@@ -493,38 +400,11 @@ const TopicTree: React.FC<TopicTreeProps> = ({
 
       {deleteTarget && isLoadingDeletePreview && (
         <>
-          <div
-            style={{
-              position: "fixed",
-              inset: 0,
-              background: "rgba(0,0,0,0.65)",
-              zIndex: 50,
-              backdropFilter: "blur(4px)",
-            }}
-          />
-          <div
-            style={{
-              position: "fixed",
-              inset: 0,
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              zIndex: 60,
-              pointerEvents: "none",
-            }}
-          >
-            <div
-              style={{
-                pointerEvents: "auto",
-                padding: "1.5rem 2rem",
-                background: "var(--color-surface-2)",
-                border: "1px solid var(--color-border)",
-                borderRadius: "var(--radius-xl)",
-                fontSize: "0.875rem",
-                color: "var(--color-text-secondary)",
-              }}
-            >
-              Loading delete preview…
+          <div className="topic-tree-modal__backdrop topic-tree-modal__backdrop--strong" />
+          <div className="topic-tree-modal__layer topic-tree-modal__layer--front">
+            <div className="topic-tree-modal__loading" role="status">
+              <span className="spinner" />
+              <span>Reviewing affected content…</span>
             </div>
           </div>
         </>

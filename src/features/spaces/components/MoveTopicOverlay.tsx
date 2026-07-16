@@ -1,6 +1,7 @@
 // src/features/spaces/components/MoveTopicOverlay.tsx
 
 import React from "react";
+import { Check, CornerDownRight, Layers3, X } from "lucide-react";
 import type { NodeTreeNode } from "../types/node.types";
 import type { MoveParentSelection } from "./moveTopicUtils";
 
@@ -26,83 +27,55 @@ const MoveTopicOverlay: React.FC<MoveTopicOverlayProps> = ({
   const isTopicDestination = hasDestination && selectedParentId !== "__ROOT__";
 
   return (
-    <div
-      style={{
-        background: "var(--color-bg-surface)",
-        borderBottom: "1px solid var(--color-border)",
-        padding: "0.875rem 1rem",
-        display: "flex",
-        flexDirection: "column",
-        gap: "0.75rem",
-        flexShrink: 0,
-      }}
-    >
+    <div className="topic-move">
       <div>
-        <p style={{ margin: 0, fontSize: "0.8125rem", fontWeight: 600, color: "var(--color-text-primary)" }}>
-          Move topic
-        </p>
-        <p style={{ margin: "0.25rem 0 0", fontSize: "0.75rem", color: "var(--color-text-muted)", lineHeight: 1.45 }}>
-          Click a topic in the outline below to place{" "}
-          <strong style={{ color: "var(--color-text-secondary)" }}>"{movingNode.title}"</strong>{" "}
-          under it.
+        <span className="topic-move__eyebrow">Choose destination</span>
+        <h2 className="topic-move__title">Move topic</h2>
+        <p className="topic-move__description">
+          Select a topic below to place <strong>&ldquo;{movingNode.title}&rdquo;</strong> inside it.
         </p>
       </div>
 
       <button
         type="button"
-        onClick={onCancel}
-        className="btn-secondary"
-        style={{ width: "100%", padding: "0.75rem 1rem", fontSize: "0.875rem", fontWeight: 600 }}
-        disabled={isSubmitting}
-      >
-        Cancel
-      </button>
-
-      <button
-        type="button"
         onClick={onSelectIndividualSpace}
-        style={{
-          width: "100%",
-          display: "flex",
-          alignItems: "center",
-          gap: "0.625rem",
-          padding: "0.75rem 1rem",
-          borderRadius: "var(--radius-lg)",
-          border: `1.5px solid ${isIndividualSpace ? "var(--color-primary)" : "var(--color-border)"}`,
-          background: isIndividualSpace ? "var(--color-primary-subtle)" : "var(--color-bg-surface)",
-          cursor: "pointer",
-          textAlign: "left",
-        }}
+        className={`topic-move__root-option${isIndividualSpace ? " topic-move__root-option--selected" : ""}`}
         disabled={isSubmitting}
       >
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={isIndividualSpace ? "var(--color-primary)" : "var(--color-text-muted)"} strokeWidth="2">
-          <path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z" />
-        </svg>
-        <span style={{ fontSize: "0.8125rem", fontWeight: 600, color: "var(--color-text-primary)" }}>
-          Make this topic a separate section
-        </span>
+        <Layers3 size={17} />
+        <span>Make this a separate section</span>
+        {isIndividualSpace && <Check size={16} className="topic-move__check" />}
       </button>
 
-      {hasDestination && (
+      <div className="topic-move__actions">
+        <button
+          type="button"
+          onClick={onCancel}
+          className="btn-secondary"
+          disabled={isSubmitting}
+        >
+          <X size={15} />
+          Cancel
+        </button>
         <button
           type="button"
           onClick={onConfirm}
           className="btn-primary"
-          style={{ width: "100%", padding: "0.75rem 1rem", fontSize: "0.875rem", fontWeight: 600 }}
-          disabled={isSubmitting}
+          disabled={isSubmitting || !hasDestination}
         >
           {isSubmitting ? (
             <>
-              <span className="spinner" style={{ width: "0.875rem", height: "0.875rem" }} />
+              <span className="spinner topic-tree__small-spinner" />
               Moving…
             </>
-          ) : isTopicDestination ? (
-            "OK — move here"
           ) : (
-            "OK — make separate section"
+            <>
+              <CornerDownRight size={15} />
+              {isTopicDestination ? "Move here" : "Make separate"}
+            </>
           )}
         </button>
-      )}
+      </div>
     </div>
   );
 };

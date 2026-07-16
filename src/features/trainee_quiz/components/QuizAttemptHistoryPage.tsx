@@ -3,6 +3,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import { traineeQuizService } from "../services/traineeQuizService";
 import type { TraineeQuizAttemptListOut } from "../types/traineeQuiz.types";
 import { traineeSpaceUrl } from "../../trainee_study_material/utils/traineeSpaceNavigation";
+import { parseAttemptError } from "../utils/attemptErrors";
 import "../styles/traineeQuiz.css";
 
 const QuizAttemptHistoryPage: React.FC = () => {
@@ -24,8 +25,7 @@ const QuizAttemptHistoryPage: React.FC = () => {
         const result = await traineeQuizService.listAttempts(nodeId, quizId);
         setData(result);
       } catch (err) {
-        const e = err as { response?: { data?: { detail?: string } }; message?: string };
-        setError(e?.response?.data?.detail ?? e?.message ?? "Failed to load attempts.");
+        setError(parseAttemptError(err, "Failed to load attempts.").message);
       } finally {
         setIsLoading(false);
       }
@@ -41,6 +41,12 @@ const QuizAttemptHistoryPage: React.FC = () => {
   const handleOpenAttempt = (attemptId: string, status: string) => {
     if (status === "submitted") {
       navigate(`/trainee/spaces/${spaceId}/quiz/attempt/${attemptId}/results`);
+      return;
+    }
+    if (status === "abandoned") {
+      navigate(
+        `/trainee/spaces/${spaceId}/nodes/${nodeId}/quiz/${quizId}/archive-review?attempt=${attemptId}`,
+      );
       return;
     }
     navigate(`/trainee/spaces/${spaceId}/quiz/attempt/${attemptId}`);
@@ -89,7 +95,11 @@ const QuizAttemptHistoryPage: React.FC = () => {
             >
               <div className="trainee-quiz-history__card-top">
                 <span className={`trainee-quiz-history__status trainee-quiz-history__status--${attempt.status}`}>
-                  {attempt.status === "in_progress" ? "In progress" : "Submitted"}
+                  {attempt.status === "in_progress"
+                    ? "In progress"
+                    : attempt.status === "abandoned"
+                      ? "Archived"
+                      : "Submitted"}
                 </span>
                 {attempt.score_percent != null && (
                   <span className="trainee-quiz-history__score">{attempt.score_percent}%</span>

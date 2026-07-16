@@ -8,6 +8,7 @@ import type {
   QuizMentorUiStateOut,
   QuizOut,
   QuizQuestionCreateRequest,
+  QuizQuestionDeletedOut,
   QuizQuestionOut,
   QuizQuestionRegenerateRequest,
   QuizQuestionReorderRequest,
@@ -52,12 +53,6 @@ export const quizService = {
         `/nodes/${nodeId}/quizzes/${quizId}/hints/regenerate`,
         payload,
       )
-      .then((r) => r.data);
-  },
-
-  generate(nodeId: string, payload: QuizGenerateRequest): Promise<QuizOut> {
-    return studyAgentClient
-      .post<QuizOut>(`/nodes/${nodeId}/quizzes/generate`, payload)
       .then((r) => r.data);
   },
 
@@ -139,9 +134,9 @@ export const quizService = {
       .then((r) => r.data);
   },
 
-  deleteQuestion(nodeId: string, quizId: string, questionId: string): Promise<{ question_id: string; is_active: boolean }> {
+  deleteQuestion(nodeId: string, quizId: string, questionId: string): Promise<QuizQuestionDeletedOut> {
     return studyAgentClient
-      .delete<{ question_id: string; is_active: boolean }>(`/nodes/${nodeId}/quizzes/${quizId}/questions/${questionId}`)
+      .delete<QuizQuestionDeletedOut>(`/nodes/${nodeId}/quizzes/${quizId}/questions/${questionId}`)
       .then((r) => r.data);
   },
 
@@ -151,25 +146,4 @@ export const quizService = {
       .then((r) => r.data);
   },
 
-  regenerateQuestions(
-    nodeId: string,
-    quizId: string,
-    payload: QuizQuestionRegenerateRequest,
-  ): Promise<QuizOut> {
-    return studyAgentClient
-      .post<QuizOut>(`/nodes/${nodeId}/quizzes/${quizId}/questions/regenerate`, payload)
-      .then((r) => r.data);
-  },
-
-  generateHints(nodeId: string, quizId: string): Promise<QuizOut> {
-    return studyAgentClient
-      .post<QuizOut>(`/nodes/${nodeId}/quizzes/${quizId}/hints/generate`, {})
-      .then((r) => r.data);
-  },
-
-  regenerateHints(nodeId: string, quizId: string, payload: HintRegenerateRequest): Promise<QuizOut> {
-    return studyAgentClient
-      .post<QuizOut>(`/nodes/${nodeId}/quizzes/${quizId}/hints/regenerate`, payload)
-      .then((r) => r.data);
-  },
 };

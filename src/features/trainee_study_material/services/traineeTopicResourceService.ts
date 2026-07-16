@@ -20,10 +20,18 @@ export async function downloadTraineeFile(
 /** Open a trainee file endpoint inline in a new tab (auth via axios blob). */
 export async function openTraineeFileInNewTab(
   urlPath: string,
-  mimeType: string
+  mimeType: string,
+  targetWindow: Window
 ): Promise<void> {
   const response = await studyAgentClient.get<Blob>(urlPath, { responseType: "blob" });
   const blobUrl = window.URL.createObjectURL(new Blob([response.data], { type: mimeType }));
-  window.open(blobUrl, "_blank", "noopener,noreferrer");
-  window.setTimeout(() => window.URL.revokeObjectURL(blobUrl), 60_000);
+  let revoked = false;
+  const revoke = () => {
+    if (revoked) return;
+    revoked = true;
+    window.URL.revokeObjectURL(blobUrl);
+  };
+  targetWindow.addEventListener("pagehide", revoke, { once: true });
+  targetWindow.location.replace(blobUrl);
+  window.setTimeout(revoke, 60_000);
 }

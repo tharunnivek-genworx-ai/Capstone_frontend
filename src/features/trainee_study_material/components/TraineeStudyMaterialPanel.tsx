@@ -187,7 +187,8 @@ const TraineeStudyMaterialPanel: React.FC<TraineeStudyMaterialPanelProps> = ({
 
   const fullscreenOverlay = isFullscreen
     ? createPortal(
-        <div
+        <div className="learning-experience learning-portal">
+          <div
           className="trainee-study-material-fullscreen"
           role="dialog"
           aria-modal="true"
@@ -196,6 +197,7 @@ const TraineeStudyMaterialPanel: React.FC<TraineeStudyMaterialPanelProps> = ({
           <div className="trainee-study-material-fullscreen__inner">
             {toolbar}
             <div className="trainee-study-material-fullscreen__content">{studySurface}</div>
+          </div>
           </div>
         </div>,
         document.body

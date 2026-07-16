@@ -1,12 +1,15 @@
 import { useRef, useState } from "react";
 import { Pencil } from "lucide-react";
 
+const INSTRUCTION_LIMIT = 1000;
+
 interface SectionDefaultStyleCardProps {
   sectionName: string;
   hasChildren: boolean;
   value: string;
   onChange: (val: string) => void;
   onSave: () => void;
+  onDiscard: () => void;
   isSaving: boolean;
   isDirty: boolean;
   embedded?: boolean;
@@ -18,6 +21,7 @@ export default function SectionDefaultStyleCard({
   value,
   onChange,
   onSave,
+  onDiscard,
   isSaving,
   isDirty,
   embedded = false,
@@ -41,6 +45,7 @@ export default function SectionDefaultStyleCard({
   };
 
   const handleCancel = () => {
+    onDiscard();
     setIsEditorOpen(false);
   };
 
@@ -80,16 +85,27 @@ export default function SectionDefaultStyleCard({
         <label className="gsm-field-label" htmlFor="gsm-standard-editor-field">
           Default style — {sectionName} section
         </label>
-        <textarea
-          ref={textareaRef}
-          id="gsm-standard-editor-field"
-          className="gsm-field"
-          rows={4}
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
-          placeholder="e.g. Keep all subtopics practical — every concept should have a code snippet."
-          tabIndex={isEditorOpen ? 0 : -1}
-        />
+        <div className="gsm-field-wrap">
+          <textarea
+            ref={textareaRef}
+            id="gsm-standard-editor-field"
+            className="gsm-field"
+            rows={4}
+            value={value}
+            maxLength={INSTRUCTION_LIMIT}
+            aria-describedby="gsm-standard-editor-count"
+            onChange={(e) => onChange(e.target.value)}
+            placeholder="e.g. Keep all subtopics practical — every concept should have a code snippet."
+            tabIndex={isEditorOpen ? 0 : -1}
+          />
+          <span
+            id="gsm-standard-editor-count"
+            className={`gsm-field-count${value.length >= INSTRUCTION_LIMIT * 0.9 ? " gsm-field-count--near" : ""}`}
+            aria-live="polite"
+          >
+            {value.length} / {INSTRUCTION_LIMIT}
+          </span>
+        </div>
         <div className="gsm-standard-editor-actions">
           <button
             type="button"

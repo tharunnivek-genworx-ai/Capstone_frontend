@@ -772,3 +772,239 @@
   font-size: 0.75rem !important;
   min-width: 5.5rem;
 }
+
+/* Academic Studio theme for trainee overview, archive, and resource states. */
+.learning-experience .topic-detail-panel {
+  font-family: var(--as-font-sans);
+  color: var(--as-on-surface);
+  background: var(--as-surface-lowest);
+}
+
+.learning-experience .topic-detail-panel__scroll {
+  padding: var(--as-space-6) var(--as-page-gutter);
+  background-color: var(--as-surface);
+  background-image:
+    linear-gradient(rgb(225 227 228 / 24%) 1px, transparent 1px),
+    linear-gradient(90deg, rgb(225 227 228 / 24%) 1px, transparent 1px);
+  background-size: 20px 20px;
+}
+
+.learning-experience .topic-detail-panel__scroll > * {
+  max-width: var(--as-content-width);
+  margin-right: auto;
+  margin-left: auto;
+}
+
+.learning-experience .topic-detail-panel__header,
+.learning-experience .topic-detail-panel__material-preview,
+.learning-experience .topic-detail-panel__coming-soon,
+.learning-experience .topic-detail-panel__overall,
+.learning-experience .topic-detail-panel__whats-next {
+  border: var(--as-border);
+  border-radius: var(--as-radius-lg);
+  background: var(--as-paper);
+}
+
+.learning-experience .topic-detail-panel__header {
+  padding: var(--as-space-5);
+  box-shadow: var(--as-shadow-overlay);
+}
+
+.learning-experience .topic-detail-panel__icon {
+  border: 1px solid var(--as-outline-variant);
+  border-radius: var(--as-radius-md);
+  background: var(--as-primary-soft);
+  color: var(--as-primary);
+}
+
+.learning-experience .topic-detail-panel__title,
+.learning-experience .topic-detail-panel__heading {
+  font-family: var(--as-font-serif);
+  font-weight: 600;
+  color: var(--as-on-surface);
+}
+
+.learning-experience .topic-detail-panel__title {
+  font-size: 1.5rem;
+}
+
+.learning-experience :is(
+  .topic-detail-panel__meta,
+  .topic-detail-panel__summary,
+  .topic-detail-panel__material-preview-body,
+  .topic-detail-panel__subtopic-meta,
+  .topic-detail-panel__overall-meta,
+  .topic-detail-panel__archive-hint,
+  .topic-detail-panel__archive-meta,
+  .topic-detail-panel__archive-footnote,
+  .trainee-topic-resources__meta,
+  .trainee-topic-resources__subtitle
+) {
+  color: var(--as-outline);
+}
+
+.learning-experience :is(
+  .topic-detail-panel__panel-back,
+  .topic-detail-panel__reading-back,
+  .topic-detail-panel__breadcrumb-link,
+  .topic-detail-panel__whats-next-link
+) {
+  color: var(--as-primary);
+}
+
+.learning-experience :is(
+  .topic-detail-panel__panel-back,
+  .topic-detail-panel__reading-back,
+  .topic-detail-panel__breadcrumb-link,
+  .topic-detail-panel__whats-next-link
+):hover {
+  color: var(--as-primary-hover);
+}
+
+.learning-experience .topic-detail-panel__badge,
+.learning-experience .topic-detail-panel__chip,
+.learning-experience .topic-detail-panel__complete-badge,
+.learning-experience .topic-detail-panel__archive-read-badge,
+.learning-experience .topic-detail-panel__archive-reference-badge {
+  border-radius: var(--as-radius-full);
+}
+
+.learning-experience :is(
+  .topic-detail-panel__badge--available,
+  .topic-detail-panel__badge--done,
+  .topic-detail-panel__badge--quiz-done,
+  .topic-detail-panel__complete-badge,
+  .topic-detail-panel__archive-read-badge
+) {
+  background: var(--as-success-soft);
+  color: var(--as-success);
+}
+
+.learning-experience :is(
+  .topic-detail-panel__badge--progress,
+  .topic-detail-panel__badge--quiz-progress,
+  .topic-detail-panel__callout,
+  .topic-detail-panel__upgrade-banner
+) {
+  border-color: var(--as-outline-variant);
+  background: var(--as-primary-soft);
+  color: var(--as-primary);
+}
+
+.learning-experience .topic-detail-panel__seg-control {
+  border: 1px solid var(--as-outline-variant);
+  border-radius: var(--as-radius-md);
+  background: var(--as-surface-low);
+}
+
+.learning-experience .topic-detail-panel__seg-btn {
+  border-radius: var(--as-radius);
+  color: var(--as-on-surface-variant);
+}
+
+.learning-experience .topic-detail-panel__seg-btn--active {
+  border-color: var(--as-outline-variant);
+  background: var(--as-surface-lowest);
+  color: var(--as-primary);
+}
+
+.learning-experience .topic-detail-panel__progress-track {
+  border-radius: var(--as-radius-full);
+  background: var(--as-surface-container);
+}
+
+.learning-experience .topic-detail-panel__progress-fill {
+  border-radius: var(--as-radius-full);
+  background: var(--as-primary);
+}
+
+.learning-experience .topic-detail-panel__material-preview-hdr {
+  border-color: var(--as-outline-variant);
+  background: var(--as-surface-low);
+}
+
+.learning-experience .topic-detail-panel__subtopic-row {
+  border: var(--as-border);
+  border-radius: var(--as-radius-lg);
+  background: var(--as-paper);
+}
+
+.learning-experience .topic-detail-panel__subtopic-row--clickable:hover {
+  border-color: var(--as-primary);
+  background: var(--as-primary-soft);
+}
+
+.learning-experience .topic-detail-panel__chip {
+  border-color: var(--as-outline-variant);
+  background: var(--as-surface-low);
+  color: var(--as-on-surface);
+}
+
+.learning-experience .topic-detail-panel__chip:hover {
+  border-color: var(--as-primary);
+  color: var(--as-primary);
+}
+
+.learning-experience .topic-detail-panel__reading-header {
+  padding: var(--as-space-4) var(--as-page-gutter) var(--as-space-2);
+  background: var(--as-surface);
+}
+
+.learning-experience .topic-detail-panel__archive-list {
+  gap: var(--as-space-3);
+}
+
+.learning-experience .topic-detail-panel__archive-card {
+  border: var(--as-border);
+  border-radius: var(--as-radius-lg);
+  background: var(--as-paper);
+  box-shadow: var(--as-shadow-overlay);
+}
+
+.learning-experience .topic-detail-panel__archive-version-label {
+  font-family: var(--as-font-serif);
+  color: var(--as-on-surface);
+}
+
+.learning-experience .topic-detail-panel__archive-reference-badge {
+  background: var(--as-surface-container);
+  color: var(--as-on-surface-variant);
+}
+
+.learning-experience .trainee-topic-resources {
+  border-color: var(--as-outline-variant);
+}
+
+.learning-experience .trainee-topic-resources__toggle,
+.learning-experience .trainee-topic-resources__item {
+  border: var(--as-border);
+  border-radius: var(--as-radius-lg);
+  background: var(--as-paper);
+  color: var(--as-on-surface);
+}
+
+.learning-experience .trainee-topic-resources__toggle:hover {
+  border-color: var(--as-primary);
+  background: var(--as-primary-soft);
+}
+
+.learning-experience .trainee-topic-resources__badge {
+  border-radius: var(--as-radius-full);
+  background: var(--as-success-soft);
+  color: var(--as-success);
+}
+
+.learning-experience .trainee-topic-resources__title {
+  color: var(--as-on-surface);
+}
+
+@media (max-width: 640px) {
+  .learning-experience .topic-detail-panel__scroll {
+    padding: var(--as-space-4);
+  }
+
+  .learning-experience .topic-detail-panel__reading-header {
+    padding-right: var(--as-space-4);
+    padding-left: var(--as-space-4);
+  }
+}

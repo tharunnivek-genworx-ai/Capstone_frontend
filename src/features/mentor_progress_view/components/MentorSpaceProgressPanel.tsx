@@ -3,6 +3,7 @@ import type {
   MentorSpaceProgressOut,
   TraineeSpaceSummaryOut,
 } from "../types/mentorProgress.types";
+import "../../trainee_space_progress/styles/learningProgress.css";
 
 interface MentorSpaceProgressPanelProps {
   progress: MentorSpaceProgressOut;
@@ -40,7 +41,7 @@ const MentorSpaceProgressPanel: React.FC<MentorSpaceProgressPanelProps> = ({
   };
 
   return (
-    <div style={{ padding: "1.5rem", overflowY: "auto", height: "100%", background: "#f8fafc" }}>
+    <div className="learning-progress mentor-learning-progress" style={{ padding: "1.5rem", overflowY: "auto", height: "100%", background: "#f8fafc" }}>
       {/* ── Section A: Space-Level Metrics (At-a-Glance) ── */}
       <div
         style={{
@@ -52,6 +53,7 @@ const MentorSpaceProgressPanel: React.FC<MentorSpaceProgressPanelProps> = ({
       >
         {/* Metric Card 1: Space Name & Total Nodes */}
         <div
+          className="learning-progress__card"
           style={{
             background: "#fff",
             border: "1px solid var(--color-border)",
@@ -314,7 +316,10 @@ const MentorSpaceProgressPanel: React.FC<MentorSpaceProgressPanelProps> = ({
                             width: "48px",
                             height: "48px",
                             borderRadius: "999px",
-                            background: `conic-gradient(#16a34a ${Math.round((trainee.overall_score_avg ?? 0) * 100)}%, #e5e7eb ${Math.round((trainee.overall_score_avg ?? 0) * 100)}% 100%)`,
+                            background:
+                              trainee.overall_score_avg == null
+                                ? "#e5e7eb"
+                                : `conic-gradient(#16a34a ${Math.round(trainee.overall_score_avg * 100)}%, #e5e7eb ${Math.round(trainee.overall_score_avg * 100)}% 100%)`,
                             display: "grid",
                             placeItems: "center",
                           }}
@@ -439,6 +444,7 @@ const MentorSpaceProgressPanel: React.FC<MentorSpaceProgressPanelProps> = ({
       {/* ── Detail Modal for Node-Level breakdown ── */}
       {detailModalTrainee && (
         <div
+          className="learning-progress-modal"
           style={{
             position: "fixed",
             inset: 0,
@@ -452,6 +458,7 @@ const MentorSpaceProgressPanel: React.FC<MentorSpaceProgressPanelProps> = ({
           onClick={() => setDetailModalTrainee(null)}
         >
           <div
+            className="learning-progress-modal__dialog"
             style={{
               background: "#fff",
               borderRadius: "20px",

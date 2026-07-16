@@ -1,7 +1,8 @@
 // src/features/quiz/components/QuizQuestionModal.tsx
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import { createPortal } from "react-dom";
 import type { CorrectOption, QuizQuestionCreateRequest, QuizQuestionOut, QuizQuestionUpdateRequest } from "../types/quiz.types";
+import { isCompleteFourOptionQuestion } from "../utils/quizQuestionContract";
 
 interface QuizQuestionModalProps {
   mode: "create" | "edit";
@@ -28,23 +29,13 @@ const QuizQuestionModal: React.FC<QuizQuestionModalProps> = ({
   const [correctOption, setCorrectOption] = useState<CorrectOption>(question?.correct_option ?? "A");
   const [explanation, setExplanation] = useState(question?.explanation ?? "");
 
-  useEffect(() => {
-    if (question) {
-      setQuestionText(question.question_text);
-      setOptionA(question.option_a);
-      setOptionB(question.option_b);
-      setOptionC(question.option_c ?? "");
-      setOptionD(question.option_d ?? "");
-      setCorrectOption(question.correct_option);
-      setExplanation(question.explanation ?? "");
-    }
-  }, [question?.question_id]);
-
-  const canSave =
-    questionText.trim().length >= 5 &&
-    optionA.trim().length > 0 &&
-    optionB.trim().length > 0 &&
-    !isSaving;
+  const canSave = isCompleteFourOptionQuestion({
+    questionText,
+    optionA,
+    optionB,
+    optionC,
+    optionD,
+  }) && !isSaving;
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -53,8 +44,8 @@ const QuizQuestionModal: React.FC<QuizQuestionModalProps> = ({
       question_text: questionText.trim(),
       option_a: optionA.trim(),
       option_b: optionB.trim(),
-      option_c: optionC.trim() || null,
-      option_d: optionD.trim() || null,
+      option_c: optionC.trim(),
+      option_d: optionD.trim(),
       correct_option: correctOption,
       explanation: explanation.trim() || null,
     };
@@ -65,7 +56,8 @@ const QuizQuestionModal: React.FC<QuizQuestionModalProps> = ({
   const labelStyle: React.CSSProperties = { display: "block", fontSize: "0.8125rem", fontWeight: 600, color: "var(--color-text-secondary)", marginBottom: "0.375rem" };
 
   return createPortal(
-    <div
+    <div className="learning-experience learning-portal">
+      <div
       className="study-material-modal-overlay"
       onClick={(e) => e.target === e.currentTarget && !isSaving && onClose()}
     >
@@ -115,7 +107,6 @@ const QuizQuestionModal: React.FC<QuizQuestionModalProps> = ({
           {OPTION_LETTERS.map((letter) => {
             const val = letter === "A" ? optionA : letter === "B" ? optionB : letter === "C" ? optionC : optionD;
             const setter = letter === "A" ? setOptionA : letter === "B" ? setOptionB : letter === "C" ? setOptionC : setOptionD;
-            const required = letter === "A" || letter === "B";
             const isCorrect = correctOption === letter;
 
             return (
@@ -140,16 +131,17 @@ const QuizQuestionModal: React.FC<QuizQuestionModalProps> = ({
                   className="input-field"
                   value={val}
                   onChange={(e) => setter(e.target.value)}
-                  placeholder={`Option ${letter}${required ? " (required)" : " (optional)"}`}
+                  placeholder={`Option ${letter} (required)`}
                   style={{ flex: 1, fontSize: "0.875rem" }}
                   disabled={isSaving}
+                  required
                 />
               </div>
             );
           })}
 
           <div style={{ margin: "0.5rem 0 0.75rem", padding: "0.5rem 0.875rem", background: "var(--color-bg-surface-alt)", borderRadius: "var(--radius-md)", fontSize: "0.75rem", color: "var(--color-text-muted)" }}>
-            Click a letter button to mark it as the correct answer. Options A and B are required.
+            Click a letter button to mark it as the correct answer. All four options are required.
           </div>
 
           <div style={fieldStyle}>
@@ -180,6 +172,7 @@ const QuizQuestionModal: React.FC<QuizQuestionModalProps> = ({
           </div>
           </div>
         </form>
+      </div>
       </div>
     </div>,
     document.body,

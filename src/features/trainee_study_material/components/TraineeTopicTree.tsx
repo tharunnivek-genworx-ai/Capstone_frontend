@@ -1,5 +1,5 @@
 import React from "react";
-import { Lock } from "lucide-react";
+import { Layers3, Lock } from "lucide-react";
 import type { NodeTreeNode } from "../../spaces/types/node.types";
 import TraineeTreeNode from "./TraineeTreeNode";
 
@@ -25,52 +25,30 @@ const TraineeTopicTree: React.FC<TraineeTopicTreeProps> = ({
   const showLegend = hasUnpublishedNodes(roots);
 
   return (
-    <div style={{ height: "100%", display: "flex", flexDirection: "column" }}>
-      <div
-        style={{
-          padding: "0.875rem 1rem 0.625rem",
-          borderBottom: "1px solid var(--color-border)",
-          flexShrink: 0,
-        }}
-      >
-        <span
-          style={{
-            fontSize: "0.8125rem",
-            fontWeight: 600,
-            color: "var(--color-text-secondary)",
-          }}
-        >
-          Topic Outline
-        </span>
+    <div className="topic-tree topic-tree--trainee">
+      <div className="topic-tree__header">
+        <div>
+          <span className="topic-tree__eyebrow">Learning structure</span>
+          <h2 className="topic-tree__heading">Topic Outline</h2>
+        </div>
       </div>
 
+      {roots.length === 0 && (
+        <div className="topic-tree-empty topic-tree-empty--trainee">
+          <span className="topic-tree-empty__icon" aria-hidden="true"><Layers3 size={31} /></span>
+          <h2>No topics available yet</h2>
+          <p>Your mentor is still preparing this learning space. Published topics will appear here.</p>
+        </div>
+      )}
+
       {showLegend && (
-        <div
-          style={{
-            margin: "0.5rem 0.75rem 0",
-            padding: "0.45rem 0.6rem",
-            borderRadius: "var(--radius-md)",
-            border: "0.5px solid #e4e7ec",
-            background: "#f7f8fa",
-            color: "#6b7280",
-            fontSize: "0.75rem",
-            display: "flex",
-            alignItems: "center",
-            gap: "0.4rem",
-          }}
-        >
-          <Lock size={12} color="#9ca3af" />
+        <div className="topic-tree__lock-legend">
+          <Lock size={13} />
           <span>Some topics are not yet available</span>
         </div>
       )}
 
-      <div
-        style={{
-          flex: 1,
-          overflowY: "auto",
-          padding: "0.625rem 0.5rem 1rem",
-        }}
-      >
+      {roots.length > 0 && <div className="topic-tree__scroll" role="tree" aria-label="Topic outline">
         {roots.map((root) => (
           <TraineeTreeNode
             key={root.node_id}
@@ -79,7 +57,7 @@ const TraineeTopicTree: React.FC<TraineeTopicTreeProps> = ({
             onSelect={onSelectNode}
           />
         ))}
-      </div>
+      </div>}
     </div>
   );
 };

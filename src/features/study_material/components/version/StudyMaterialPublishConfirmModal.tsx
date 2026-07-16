@@ -3,6 +3,7 @@ import type {
   RetentionMode,
   StudyMaterialPublishPreviewOut,
 } from "../../types/studyMaterial.types";
+import StudyMaterialLifecycleModal from "./StudyMaterialLifecycleModal";
 
 type PublishModalMode = "first_publish" | "replace_live" | "restore_older";
 
@@ -67,40 +68,6 @@ const confirmLabelByMode: Record<PublishModalMode, string> = {
   restore_older: "Restore as live",
 };
 
-function ModalHeader({
-  title,
-  onClose,
-  isSubmitting,
-}: {
-  title: string;
-  onClose: () => void;
-  isSubmitting: boolean;
-}) {
-  return (
-    <div
-      style={{
-        padding: "1.25rem 1.5rem",
-        borderBottom: "1px solid var(--color-border)",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "space-between",
-        gap: "1rem",
-      }}
-    >
-      <h2 style={{ margin: 0, fontSize: "1rem", fontWeight: 700 }}>{title}</h2>
-      <button
-        type="button"
-        onClick={onClose}
-        className="btn-secondary"
-        style={{ padding: "0.375rem 0.75rem", fontSize: "0.8125rem", flexShrink: 0 }}
-        disabled={isSubmitting}
-      >
-        Cancel
-      </button>
-    </div>
-  );
-}
-
 const StudyMaterialPublishConfirmModal: React.FC<StudyMaterialPublishConfirmModalProps> = ({
   preview,
   onClose,
@@ -120,117 +87,68 @@ const StudyMaterialPublishConfirmModal: React.FC<StudyMaterialPublishConfirmModa
       : preview.previous_version_label;
 
   return (
-    <>
-      <div
-        onClick={isSubmitting ? undefined : onClose}
-        style={{
-          position: "fixed",
-          inset: 0,
-          background: "rgba(0,0,0,0.65)",
-          zIndex: 50,
-          backdropFilter: "blur(4px)",
-        }}
-      />
-      <div
-        style={{
-          position: "fixed",
-          inset: 0,
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          zIndex: 60,
-          pointerEvents: "none",
-        }}
-      >
-        <div
-          className="animate-fade-in"
-          style={{
-            pointerEvents: "auto",
-            width: "min(480px, 95vw)",
-            background: "var(--color-surface-2)",
-            border: "1px solid var(--color-border)",
-            borderRadius: "var(--radius-xl)",
-            boxShadow: "0 24px 80px rgba(0,0,0,0.6)",
-            overflow: "hidden",
-          }}
-        >
-          <ModalHeader title={title} onClose={onClose} isSubmitting={isSubmitting} />
-          <div style={{ padding: "1.5rem" }}>
-            {transactionError ? (
-              <p style={{ fontSize: "0.875rem", color: "var(--color-text-secondary)", margin: "0 0 1rem", lineHeight: 1.6 }}>
-                {transactionError}
-              </p>
-            ) : (
-              <>
-                <p style={{ fontSize: "0.875rem", color: "var(--color-text-secondary)", margin: "0 0 0.75rem", lineHeight: 1.6 }}>
-                  {intro}
-                </p>
-                {impactBullets.length > 0 && (
-                  <ul style={{ margin: "0 0 1rem", paddingLeft: "1.25rem", fontSize: "0.8125rem", color: "var(--color-text-secondary)", lineHeight: 1.6 }}>
-                    {impactBullets.map((bullet) => (
-                      <li key={bullet}>{bullet}</li>
-                    ))}
-                  </ul>
-                )}
-              </>
-            )}
+    <StudyMaterialLifecycleModal
+      title={title}
+      onClose={onClose}
+      isSubmitting={isSubmitting}
+    >
+      {transactionError ? (
+        <p className="sm-lifecycle-modal__error" role="alert">
+          {transactionError}
+        </p>
+      ) : (
+        <>
+          <p className="sm-lifecycle-modal__intro">{intro}</p>
+          {impactBullets.length > 0 && (
+            <ul className="sm-lifecycle-modal__impact-list">
+              {impactBullets.map((bullet) => (
+                <li key={bullet}>{bullet}</li>
+              ))}
+            </ul>
+          )}
+        </>
+      )}
 
-            {showSupersededChoices ? (
-              <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
-                <button
-                  type="button"
-                  onClick={() => onConfirm("keep_for_review")}
-                  className="btn-primary"
-                  style={{ width: "100%", padding: "0.625rem 1rem", textAlign: "left" }}
-                  disabled={isSubmitting}
-                >
-                  <span style={{ display: "block", fontWeight: 600 }}>
-                    {isSubmitting ? "Making live…" : transactionError ? "Try again" : "Move to previous version"}
-                  </span>
-                  {!isSubmitting && !transactionError && supersededLabel && (
-                    <span style={{ display: "block", marginTop: "0.2rem", fontSize: "0.8125rem", fontWeight: 400, opacity: 0.9 }}>
-                      {supersededLabel} stays in Previous versions for students.
-                    </span>
-                  )}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => onConfirm("remove_completely")}
-                  className="btn-secondary"
-                  style={{
-                    width: "100%",
-                    padding: "0.625rem 1rem",
-                    textAlign: "left",
-                    borderColor: "var(--color-danger, #e53e3e)",
-                    color: "var(--color-danger, #e53e3e)",
-                  }}
-                  disabled={isSubmitting}
-                >
-                  <span style={{ display: "block", fontWeight: 600 }}>
-                    {isSubmitting ? "Making live…" : transactionError ? "Try again" : "Remove this from students"}
-                  </span>
-                  {!isSubmitting && !transactionError && supersededLabel && (
-                    <span style={{ display: "block", marginTop: "0.2rem", fontSize: "0.8125rem", fontWeight: 400, opacity: 0.85 }}>
-                      {supersededLabel} will not appear in Previous versions.
-                    </span>
-                  )}
-                </button>
-              </div>
-            ) : (
-              <button
-                type="button"
-                onClick={() => onConfirm()}
-                className="btn-primary"
-                style={{ width: "100%", padding: "0.625rem 1rem" }}
-                disabled={isSubmitting}
-              >
-                {isSubmitting ? "Making live…" : transactionError ? "Try again" : confirmLabel}
-              </button>
+      {showSupersededChoices ? (
+        <div className="sm-lifecycle-modal__choices">
+          <button
+            type="button"
+            onClick={() => onConfirm("keep_for_review")}
+            className="sm-lifecycle-choice sm-lifecycle-choice--primary"
+            disabled={isSubmitting}
+          >
+            <strong>
+              {isSubmitting ? "Making live…" : transactionError ? "Try again" : "Keep for student review"}
+            </strong>
+            {!isSubmitting && !transactionError && supersededLabel && (
+              <span>{supersededLabel} stays available in Previous versions.</span>
             )}
-          </div>
+          </button>
+          <button
+            type="button"
+            onClick={() => onConfirm("remove_completely")}
+            className="sm-lifecycle-choice sm-lifecycle-choice--danger"
+            disabled={isSubmitting}
+          >
+            <strong>
+              {isSubmitting ? "Making live…" : transactionError ? "Try again" : "Remove from students"}
+            </strong>
+            {!isSubmitting && !transactionError && supersededLabel && (
+              <span>{supersededLabel} will not appear in Previous versions.</span>
+            )}
+          </button>
         </div>
-      </div>
-    </>
+      ) : (
+        <button
+          type="button"
+          onClick={() => onConfirm()}
+          className="sm-mentor-btn sm-mentor-btn--primary sm-lifecycle-modal__confirm"
+          disabled={isSubmitting}
+        >
+          {isSubmitting ? "Making live…" : transactionError ? "Try again" : confirmLabel}
+        </button>
+      )}
+    </StudyMaterialLifecycleModal>
   );
 };
 

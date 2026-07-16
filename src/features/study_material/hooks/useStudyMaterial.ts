@@ -28,6 +28,7 @@ import {
   patchForGenerationJobPaused,
   patchForGenerationJobStart,
   patchForGenerationJobSuccess,
+  patchGenerationProgressUpdate,
 } from "../../generation/utils/generationRunState";
 import {
   extractResumeErrorDetail,
@@ -262,6 +263,7 @@ export function useStudyMaterial({
     useState<StudyMaterialClearDraftsEligibilityOut | null>(null);
   const [mentorUiState, setMentorUiState] =
     useState<StudyMaterialMentorUiStateOut | null>(null);
+  const [isLoadingMentorUiState, setIsLoadingMentorUiState] = useState(false);
   const [publishPreview, setPublishPreview] =
     useState<StudyMaterialPublishPreviewOut | null>(null);
   const [unpublishPreview, setUnpublishPreview] =
@@ -400,6 +402,7 @@ export function useStudyMaterial({
 
   const refreshMentorUiState = useCallback(
     async (nodeId: string, viewingId?: string | null) => {
+      setIsLoadingMentorUiState(true);
       try {
         const state = await studyMaterialService.getMentorUiState(
           nodeId,
@@ -417,6 +420,8 @@ export function useStudyMaterial({
         }
       } catch {
         setMentorUiState(null);
+      } finally {
+        setIsLoadingMentorUiState(false);
       }
     },
     [viewingVersionId, patchNodeStudyState]
@@ -549,8 +554,10 @@ export function useStudyMaterial({
     // Clear stale mentor UI state so the old node's instruction-change banner
     // never bleeds into the newly selected node before the fresh fetch arrives.
     setMentorUiState(null);
+    setIsLoadingMentorUiState(false);
     setNodeMedia([]);
     setProcessingLabel(null);
+    setIsResumingFailedGeneration(false);
   }, [node?.node_id]);
 
   // Load generation source and topic resources when switching nodes
@@ -1155,12 +1162,12 @@ export function useStudyMaterial({
 
   // ── Handlers ──────────────────────────────────────────────────────────────
 
-  // Backend-truth guard: a paused run holds this topic's generation slot and must be
-  // resumed or deleted explicitly — never silently superseded by a fresh generate.
-  // Returns true (and routes the mentor to the paused run's Continue / Delete UI) when
-  // a paused run exists, so callers abort. Closes the race where a mentor clicks
+  // Backend-truth guard: an unresolved paused or failed run must be resumed or
+  // deleted explicitly — never silently superseded by a fresh generate.
+  // Returns true (and routes the mentor to Continue / Delete UI) when such a run
+  // exists, so callers abort. Closes the race where a mentor clicks
   // Generate on page 1 right after a reload, before recovery rehydrates paused state.
-  const routeToPausedRunIfAny = async (nodeId: string): Promise<boolean> => {
+  const routeToUnresolvedRunIfAny = async (nodeId: string): Promise<boolean> => {
     try {
       const active = await generationJobService.getActiveRun(nodeId, "study_material");
       if (active?.run_id && active.status === "paused") {
@@ -1169,6 +1176,22 @@ export function useStudyMaterial({
           currentPage: 2,
           hasTriggeredGeneration: true,
           ...patchForGenerationJobPaused(active.run_id, "study_material"),
+        });
+        if (isViewingNode(nodeId)) {
+          setProcessingLabel(null);
+        }
+        return true;
+      }
+      if (active?.run_id && active.status === "failed") {
+        generatingNodeIds.delete(nodeId);
+        patchNodeStudyState(nodeId, {
+          currentPage: 2,
+          hasTriggeredGeneration: true,
+          ...patchForGenerationJobFailure(
+            new GenerationJobFailedError("Generation failed.", active.run_id),
+            active.run_id,
+            "study_material",
+          ),
         });
         if (isViewingNode(nodeId)) {
           setProcessingLabel(null);
@@ -1194,21 +1217,18 @@ export function useStudyMaterial({
     });
     setProcessingLabel("Generating study material");
     try {
-      if (await routeToPausedRunIfAny(nodeId)) return;
+      if (await routeToUnresolvedRunIfAny(nodeId)) return;
       await generationJobService.waitForResourceIdle(nodeId);
       // Re-check: a run that was still winding down (RUNNING) may have settled to
       // PAUSED while we waited. Never supersede it — route the mentor to resume/delete.
-      if (await routeToPausedRunIfAny(nodeId)) return;
+      if (await routeToUnresolvedRunIfAny(nodeId)) return;
       const { result, progress } = await generationJobService.runJob(
         () => studyMaterialService.startGenerate(nodeId, {
           reference_material_id: referenceMaterial?.material_id ?? null,
         }),
         (progressUpdate) => {
           latestRunId = progressUpdate.session_id;
-          patchNodeStudyState(nodeId, {
-            generationProgressSessionId: progressUpdate.session_id,
-            activeGenerationRunId: progressUpdate.session_id,
-          });
+          patchNodeStudyState(nodeId, patchGenerationProgressUpdate(progressUpdate));
         },
       );
       if (progress.status === "paused") {
@@ -1283,10 +1303,10 @@ export function useStudyMaterial({
     setProcessingLabel("Generating study material");
     try {
       // The finally below resets isDeletingDrafts; just abort if a paused run exists.
-      if (await routeToPausedRunIfAny(nodeId)) return;
+      if (await routeToUnresolvedRunIfAny(nodeId)) return;
       await generationJobService.waitForResourceIdle(nodeId);
       // Re-check after the wait: a winding-down run may have just settled to PAUSED.
-      if (await routeToPausedRunIfAny(nodeId)) return;
+      if (await routeToUnresolvedRunIfAny(nodeId)) return;
       await studyMaterialService.clearAllDrafts(nodeId);
       const { result, progress } = await generationJobService.runJob(
         () => studyMaterialService.startGenerate(nodeId, {
@@ -1294,10 +1314,7 @@ export function useStudyMaterial({
         }),
         (progressUpdate) => {
           latestRunId = progressUpdate.session_id;
-          patchNodeStudyState(nodeId, {
-            generationProgressSessionId: progressUpdate.session_id,
-            activeGenerationRunId: progressUpdate.session_id,
-          });
+          patchNodeStudyState(nodeId, patchGenerationProgressUpdate(progressUpdate));
         },
       );
       if (progress.status === "paused") {
@@ -1383,10 +1400,7 @@ export function useStudyMaterial({
           })),
         (progressUpdate) => {
           latestRunId = progressUpdate.session_id;
-          patchNodeStudyState(nodeId, {
-            generationProgressSessionId: progressUpdate.session_id,
-            activeGenerationRunId: progressUpdate.session_id,
-          });
+          patchNodeStudyState(nodeId, patchGenerationProgressUpdate(progressUpdate));
         },
       );
       if (progress.status === "paused") {
@@ -1471,21 +1485,31 @@ export function useStudyMaterial({
     const nodeId = node.node_id;
     generatingNodeIds.add(nodeId);
     setIsResumingFailedGeneration(true);
+    // Drop the paused checklist seed so Continue cannot paint a stale step list.
+    // Panel shows "Resuming…" until onResumeLive flips to the normal progress UI.
     patchNodeStudyState(nodeId, {
       generationRunFailed: false,
       generationRunPaused: false,
       isGenerating: true,
       generationProgressSessionId: runId,
       activeGenerationRunId: runId,
+      generationProgress: null,
     });
-    setProcessingLabel("Resuming study material generation");
     try {
-      const { result, progress } = await generationJobService.resumeJob(runId, (update) => {
-        patchNodeStudyState(nodeId, {
-          generationProgressSessionId: update.session_id,
-          activeGenerationRunId: update.session_id,
-        });
-      });
+      const { result, progress } = await generationJobService.resumeJob(
+        runId,
+        (update) => {
+          patchNodeStudyState(nodeId, patchGenerationProgressUpdate(update));
+        },
+        {
+          onResumeLive: () => {
+            setIsResumingFailedGeneration(false);
+            if (isViewingNode(nodeId)) {
+              setProcessingLabel("Generating study material");
+            }
+          },
+        },
+      );
       if (progress.status === "paused") {
         patchPausedGenerationState(nodeId, runId);
         return;
@@ -1617,6 +1641,7 @@ export function useStudyMaterial({
     try {
       const version = await studyMaterialService.getVersion(nodeId, versionId);
       patchNodeStudyState(nodeId, { studyMaterialContent: version.content });
+      await refreshMentorUiStateRef.current(nodeId, versionId);
     } catch (err) {
       toast.error(extractErrorDetail(err));
     }
@@ -1918,17 +1943,35 @@ export function useStudyMaterial({
 
   // ── Computed values ───────────────────────────────────────────────────────
 
-  const versionActions = mentorUiState?.displayed_version_actions;
-
   const canAccessStudyMaterial = mentorUiState?.can_access_study_material ?? false;
   const hasWorkspaceStudyMaterial = Boolean(mentorUiState?.has_workspace_versions);
   const canAccessQuiz = mentorUiState?.can_access_quiz ?? false;
   const displayedVersionId = viewingVersionId ?? activeVersion?.version_id ?? null;
   const displayedVersionSummary = findVersionSummary(displayedVersionId);
+  const candidateVersionActions = mentorUiState?.displayed_version_actions;
+  const versionActions =
+    candidateVersionActions?.version_id === displayedVersionId
+      ? candidateVersionActions
+      : null;
   const isViewingArchivedVersion = versionActions?.is_viewing_archived ?? false;
   const isViewingNonActiveVersion = versionActions?.is_viewing_non_active ?? false;
-  const canEditActiveDraft = versionActions?.can_edit_active_draft ?? false;
-  const canArchiveDisplayedVersion = versionActions?.can_archive ?? false;
+  // Optimistic fallback: while mentorUiState is loading (null), unblock the
+  // edit/improve/regenerate buttons if we already know the active version is
+  // an unpublished draft and the user is not viewing a historical version.
+  // This eliminates the brief "greyed-out" flash after Generate All navigates
+  // to a material page before the async UI-state refresh completes.
+  const canEditActiveDraftOptimistic =
+    isLoadingMentorUiState &&
+    mentorUiState === null &&
+    viewingVersionId === null &&
+    activeVersion !== null &&
+    activeVersion.lifecycle_status === "draft";
+  const canEditActiveDraft =
+    versionActions?.can_edit_active_draft ?? canEditActiveDraftOptimistic;
+  const canArchiveDisplayedVersion = Boolean(
+    versionActions?.can_archive &&
+    displayedVersionSummary?.lifecycle_status === "draft"
+  );
   const canPublishDisplayedVersion = versionActions?.can_publish ?? false;
   const canUnpublishDisplayedVersion = versionActions?.can_unpublish ?? false;
   const publishButtonLabel = versionActions?.publish_button_label ?? "Make live for students";

@@ -21,6 +21,7 @@ export function partitionHistoryVersions(
   for (const version of versionHistory) {
     switch (version.mentor_display_badge) {
       case "Previous for students":
+      case "In student archive":
         studentArchive.push(version);
         break;
       case "Removed from students":

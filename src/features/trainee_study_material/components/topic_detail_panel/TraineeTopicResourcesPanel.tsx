@@ -38,14 +38,22 @@ const TraineeTopicResourcesPanel: React.FC<TraineeTopicResourcesPanelProps> = ({
 
   const handleView = async (item: TraineeTopicResource) => {
     if (item.media_type === "video_url" || item.media_type === "article_link") {
-      window.open(item.view_url, "_blank", "noopener,noreferrer");
+      const opened = window.open(item.view_url, "_blank", "noopener,noreferrer");
+      if (!opened) toast.error("Your browser blocked the new tab. Allow popups to view this resource.");
       return;
     }
     if (!item.mime_type) return;
+    const opened = window.open("", "_blank");
+    if (!opened) {
+      toast.error("Your browser blocked the new tab. Allow popups to view this resource.");
+      return;
+    }
+    opened.opener = null;
     setBusyId(item.media_id);
     try {
-      await openTraineeFileInNewTab(resourcePath(item.view_url), item.mime_type);
+      await openTraineeFileInNewTab(resourcePath(item.view_url), item.mime_type, opened);
     } catch {
+      opened.close();
       toast.error("Could not open this file.");
     } finally {
       setBusyId(null);

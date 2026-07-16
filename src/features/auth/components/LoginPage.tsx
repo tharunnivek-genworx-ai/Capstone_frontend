@@ -7,6 +7,7 @@
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
+import "./loginPage.css";
 
 const LoginPage: React.FC = () => {
   const { login, isLoading, error, clearError } = useAuth();
@@ -35,33 +36,10 @@ const LoginPage: React.FC = () => {
   };
 
   return (
-    <div
-      style={{
-        minHeight: "100vh",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        background:
-          "radial-gradient(ellipse at 60% 20%, rgba(37,99,235,0.18) 0%, transparent 60%), var(--color-surface)",
-        padding: "1.5rem",
-      }}
-    >
-      <div className="animate-fade-in" style={{ width: "100%", maxWidth: "420px" }}>
-        {/* Logo / Brand */}
-        <div style={{ textAlign: "center", marginBottom: "2.5rem" }}>
-          <div
-            style={{
-              display: "inline-flex",
-              alignItems: "center",
-              justifyContent: "center",
-              width: "56px",
-              height: "56px",
-              borderRadius: "16px",
-              background: "linear-gradient(135deg, #2563eb, #1d4ed8)",
-              marginBottom: "1rem",
-              boxShadow: "var(--shadow-glow)",
-            }}
-          >
+    <div className="learning-experience sg-login">
+      <div className="sg-login__shell animate-fade-in">
+        <div className="sg-login__brand">
+          <div className="sg-login__logo" aria-hidden="true">
             <svg width="28" height="28" viewBox="0 0 24 24" fill="none">
               <path
                 d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"
@@ -72,39 +50,13 @@ const LoginPage: React.FC = () => {
               />
             </svg>
           </div>
-          <h1
-            style={{
-              fontSize: "1.75rem",
-              fontWeight: 800,
-              color: "var(--color-text-primary)",
-              margin: 0,
-              letterSpacing: "-0.02em",
-            }}
-          >
-            StudyGuru
-          </h1>
-          <p
-            style={{
-              color: "var(--color-text-secondary)",
-              fontSize: "0.875rem",
-              marginTop: "0.375rem",
-            }}
-          >
-            Sign in to your account
-          </p>
+          <h1 className="sg-login__title">StudyGuru</h1>
+          <p className="sg-login__subtitle">Sign in to your account</p>
         </div>
 
-        {/* Card */}
-        <div
-          className="card"
-          style={{
-            border: "1px solid rgba(37,99,235,0.25)",
-            boxShadow: "0 4px 40px rgba(0,0,0,0.4), var(--shadow-glow)",
-          }}
-        >
+        <div className="sg-login__card">
           <form onSubmit={handleSubmit} noValidate>
-            {/* Email */}
-            <div style={{ marginBottom: "1.25rem" }}>
+            <div className="sg-login__field">
               <label htmlFor="login-email" className="label">
                 Email address
               </label>
@@ -121,12 +73,11 @@ const LoginPage: React.FC = () => {
               />
             </div>
 
-            {/* Password */}
-            <div style={{ marginBottom: "1.5rem" }}>
+            <div className="sg-login__field sg-login__field--password">
               <label htmlFor="login-password" className="label">
                 Password
               </label>
-              <div style={{ position: "relative" }}>
+              <div className="sg-login__password-wrap">
                 <input
                   id="login-password"
                   type={showPassword ? "text" : "password"}
@@ -136,24 +87,11 @@ const LoginPage: React.FC = () => {
                   onChange={(e) => setPassword(e.target.value)}
                   required
                   autoComplete="current-password"
-                  style={{ paddingRight: "2.75rem" }}
                 />
                 <button
                   type="button"
+                  className="sg-login__password-toggle"
                   onClick={() => setShowPassword((v) => !v)}
-                  style={{
-                    position: "absolute",
-                    right: "0.75rem",
-                    top: "50%",
-                    transform: "translateY(-50%)",
-                    background: "none",
-                    border: "none",
-                    cursor: "pointer",
-                    color: "var(--color-text-muted)",
-                    padding: 0,
-                    display: "flex",
-                    alignItems: "center",
-                  }}
                   aria-label={showPassword ? "Hide password" : "Show password"}
                 >
                   {showPassword ? (
@@ -171,22 +109,8 @@ const LoginPage: React.FC = () => {
               </div>
             </div>
 
-            {/* Error */}
             {error && (
-              <div
-                style={{
-                  background: "rgba(239,68,68,0.1)",
-                  border: "1px solid rgba(239,68,68,0.3)",
-                  borderRadius: "var(--radius-md)",
-                  padding: "0.75rem 1rem",
-                  marginBottom: "1.25rem",
-                  fontSize: "0.8125rem",
-                  color: "var(--color-danger)",
-                  display: "flex",
-                  alignItems: "center",
-                  gap: "0.5rem",
-                }}
-              >
+              <div className="sg-login__error" role="alert">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                   <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
                 </svg>
@@ -194,12 +118,10 @@ const LoginPage: React.FC = () => {
               </div>
             )}
 
-            {/* Submit */}
             <button
               id="login-submit"
               type="submit"
-              className="btn-primary"
-              style={{ width: "100%", padding: "0.75rem" }}
+              className="btn-primary sg-login__submit"
               disabled={isLoading || !email || !password}
             >
               {isLoading ? (
@@ -214,14 +136,7 @@ const LoginPage: React.FC = () => {
           </form>
         </div>
 
-        <p
-          style={{
-            textAlign: "center",
-            marginTop: "1.5rem",
-            fontSize: "0.8125rem",
-            color: "var(--color-text-muted)",
-          }}
-        >
+        <p className="sg-login__footnote">
           Credentials are managed by your IT Administrator.
         </p>
       </div>

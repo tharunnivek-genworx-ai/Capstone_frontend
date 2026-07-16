@@ -1,4 +1,4 @@
-import type { GenerationPipeline } from "../../generation/types/generationProgress.types";
+import type { GenerationPipeline, GenerationProgressOut } from "../../generation/types/generationProgress.types";
 import type { NodeStudyStatePatch } from "../../study_material/types/studyMaterial.types";
 import { getGenerationJobFailedRunId } from "./generationJobErrors";
 
@@ -9,6 +9,7 @@ export function patchForGenerationJobStart(): NodeStudyStatePatch {
     failedGenerationPipeline: null,
     generationProgressSessionId: null,
     activeGenerationRunId: null,
+    generationProgress: null,
     isPausingGeneration: false,
     isAbandoningGeneration: false,
   };
@@ -24,6 +25,7 @@ export function patchForGenerationJobSuccess(): NodeStudyStatePatch {
     failedGenerationPipeline: null,
     generationProgressSessionId: null,
     activeGenerationRunId: null,
+    generationProgress: null,
     isPausingGeneration: false,
     isAbandoningGeneration: false,
   };
@@ -79,6 +81,7 @@ export function patchForGenerationJobAbandoned(): NodeStudyStatePatch {
     failedGenerationPipeline: null,
     generationProgressSessionId: null,
     activeGenerationRunId: null,
+    generationProgress: null,
     isPausingGeneration: false,
     isAbandoningGeneration: false,
   };
@@ -91,5 +94,16 @@ export function patchClearFailedGenerationRun(): NodeStudyStatePatch {
     failedGenerationPipeline: null,
     generationProgressSessionId: null,
     activeGenerationRunId: null,
+    generationProgress: null,
+  };
+}
+
+export function patchGenerationProgressUpdate(
+  progress: GenerationProgressOut,
+): NodeStudyStatePatch {
+  return {
+    generationProgressSessionId: progress.session_id,
+    activeGenerationRunId: progress.session_id,
+    generationProgress: progress,
   };
 }

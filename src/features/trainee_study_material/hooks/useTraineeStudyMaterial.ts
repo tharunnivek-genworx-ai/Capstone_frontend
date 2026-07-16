@@ -2,6 +2,10 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import toast from "react-hot-toast";
 import type { TraineeStudyMaterialOut } from "../types/traineeStudyMaterial.types";
 import { traineeStudyMaterialService } from "../services/traineeStudyMaterialService";
+import {
+  measureScrollDepth,
+  resolveScrollContainer,
+} from "../utils/scrollDepth";
 
 interface UseTraineeStudyMaterialParams {
   nodeId: string | null;
@@ -15,20 +19,13 @@ export interface UseTraineeStudyMaterialReturn {
   isDownloadingPdf: boolean;
   readPercent: number;
   handleDownloadPdf: () => Promise<void>;
-  scrollContainerRef: React.RefObject<HTMLDivElement | null>;
+  scrollContainerRef: React.RefCallback<HTMLDivElement>;
 }
 
 function extractErrorDetail(err: unknown): string {
   const e = err as { response?: { data?: string | { detail?: string } }; message?: string };
   if (typeof e?.response?.data === "string") return e.response.data;
   return e?.response?.data?.detail ?? e?.message ?? "Request failed.";
-}
-
-/** Collect scroll depth from the DOM to send as raw input to the backend. */
-function measureScrollDepth(container: HTMLElement): number {
-  const maxScroll = container.scrollHeight - container.clientHeight;
-  if (maxScroll <= 0) return 100;
-  return Math.min(100, Math.round((container.scrollTop / maxScroll) * 100));
 }
 
 export function useTraineeStudyMaterial({
@@ -40,18 +37,21 @@ export function useTraineeStudyMaterial({
   const [loadError, setLoadError] = useState<string | null>(null);
   const [isDownloadingPdf, setIsDownloadingPdf] = useState(false);
   const [readPercent, setReadPercent] = useState(0);
-  const scrollContainerRef = useRef<HTMLDivElement | null>(null);
   const lastReportedPercent = useRef(0);
   const latestMeasuredDepth = useRef(0);
   const progressTimer = useRef<number | null>(null);
+  const scrollCleanupRef = useRef<(() => void) | null>(null);
+  const nodeGenerationRef = useRef(0);
 
   const reportProgress = useCallback(
     async (measuredDepth: number) => {
       if (!nodeId || measuredDepth <= lastReportedPercent.current) return;
+      const requestGeneration = nodeGenerationRef.current;
       try {
         const updated = await traineeStudyMaterialService.updateProgress(nodeId, {
           read_percent: measuredDepth,
         });
+        if (nodeGenerationRef.current !== requestGeneration) return;
         lastReportedPercent.current = updated.study_material_read_percent;
         setReadPercent(updated.study_material_read_percent);
       } catch {
@@ -62,6 +62,7 @@ export function useTraineeStudyMaterial({
   );
 
   useEffect(() => {
+    nodeGenerationRef.current += 1;
     if (!nodeId) {
       setMaterial(null);
       setLoadError(null);
@@ -100,12 +101,14 @@ export function useTraineeStudyMaterial({
     };
   }, [nodeId]);
 
-  useEffect(() => {
-    const container = scrollContainerRef.current;
-    if (!container || !nodeId || !material) return;
+  const scrollContainerRef = useCallback<React.RefCallback<HTMLDivElement>>((anchor) => {
+    scrollCleanupRef.current?.();
+    scrollCleanupRef.current = null;
+    if (!anchor || !nodeId || !material || material.node_id !== nodeId) return;
 
+    const container = resolveScrollContainer(anchor);
     const handleScroll = () => {
-      const measuredDepth = measureScrollDepth(container);
+      const measuredDepth = measureScrollDepth(anchor);
       latestMeasuredDepth.current = measuredDepth;
       if (progressTimer.current !== null) {
         window.clearTimeout(progressTimer.current);
@@ -115,18 +118,30 @@ export function useTraineeStudyMaterial({
       }, 400);
     };
 
-    const initialMeasureFrame = window.requestAnimationFrame(handleScroll);
-
     container.addEventListener("scroll", handleScroll, { passive: true });
-    return () => {
-      window.cancelAnimationFrame(initialMeasureFrame);
+    const initialMeasurementFrame = window.requestAnimationFrame(handleScroll);
+    const resizeObserver =
+      typeof ResizeObserver === "undefined"
+        ? null
+        : new ResizeObserver(() => handleScroll());
+    resizeObserver?.observe(anchor);
+    if (container !== anchor) resizeObserver?.observe(container);
+    scrollCleanupRef.current = () => {
+      window.cancelAnimationFrame(initialMeasurementFrame);
+      resizeObserver?.disconnect();
       container.removeEventListener("scroll", handleScroll);
       if (progressTimer.current !== null) {
         window.clearTimeout(progressTimer.current);
+        progressTimer.current = null;
       }
       void reportProgress(latestMeasuredDepth.current);
     };
   }, [nodeId, material, reportProgress]);
+
+  useEffect(() => () => {
+    scrollCleanupRef.current?.();
+    scrollCleanupRef.current = null;
+  }, []);
 
   const handleDownloadPdf = async () => {
     if (!nodeId || isDownloadingPdf) return;
