@@ -26,15 +26,21 @@ import QuizUnpublishConfirmModal from "./QuizUnpublishConfirmModal";
 import QuizQuestionModal from "./QuizQuestionModal";
 import QuizHistoryPanel from "./QuizHistoryPanel";
 import QuizQcWarningPanel from "./QuizQcWarningPanel";
+import QuizMentorVisibilityBanner from "./QuizMentorVisibilityBanner";
+import QuizReviewToolbar from "./QuizReviewToolbar";
 import { isLlmRateLimited } from "../../study_material/utils/llmDiagnostics";
 import { shouldShowQcWarning } from "../../study_material/utils/qcDisplayUtils";
+import type { MentorStudentVisibilityOut } from "../../study_material/types/studyMaterial.types";
 import GenerationProgressPanel from "../../generation/components/GenerationProgressPanel";
 import { useGenerationProgress } from "../../generation/hooks/useGenerationProgress";
 import { useGenerationRunResume } from "../../generation/hooks/useGenerationRunResume";
+import "../../study_material/styles/studyMaterialMentor.css";
+import "../styles/mentorQuiz.css";
 
 interface QuizPage3Props {
   nodeTitle: string;
   qz: UseQuizReturn;
+  studentVisibility?: MentorStudentVisibilityOut | null;
 }
 
 const DIFFICULTY_OPTIONS: { value: QuizDifficulty; label: string }[] = [
@@ -44,11 +50,18 @@ const DIFFICULTY_OPTIONS: { value: QuizDifficulty; label: string }[] = [
   { value: "hard", label: "Hard" },
 ];
 
-const QuizPage3: React.FC<QuizPage3Props> = ({ nodeTitle, qz }) => {
+const QuizPage3: React.FC<QuizPage3Props> = ({
+  nodeTitle,
+  qz,
+  studentVisibility = null,
+}) => {
   const [showAddModal, setShowAddModal] = useState(false);
   const [isSavingQuestion, setIsSavingQuestion] = useState(false);
   const [localQuestionIds, setLocalQuestionIds] = useState<string[] | null>(null);
   const [questionCountInput, setQuestionCountInput] = useState(String(qz.questionCount));
+  useEffect(() => {
+    setQuestionCountInput(String(qz.questionCount));
+  }, [qz.questionCount]);
   const showQuizGenerationUi =
     qz.isGenerating ||
     qz.isPausingGeneration ||
@@ -58,6 +71,9 @@ const QuizPage3: React.FC<QuizPage3Props> = ({ nodeTitle, qz }) => {
   const generationProgress = useGenerationProgress(
     qz.generationProgressSessionId,
     showQuizGenerationUi,
+    qz.isGenerating || qz.isResumingFailedGeneration || Boolean(qz.isRegeneratingQuestion),
+    qz.activeGenerationRunId ?? qz.generationProgressSessionId,
+    qz.generationProgress,
   );
   const quizRunResume = useGenerationRunResume(
     qz.failedGenerationPipeline === "quiz"
@@ -105,22 +121,19 @@ const QuizPage3: React.FC<QuizPage3Props> = ({ nodeTitle, qz }) => {
   const handleCreateQuestion = async (data: QuizQuestionCreateRequest | QuizQuestionUpdateRequest) => {
     setIsSavingQuestion(true);
     try {
-      await qz.handleCreateQuestion(data as QuizQuestionCreateRequest);
-      setShowAddModal(false);
+      const succeeded = await qz.handleCreateQuestion(data as QuizQuestionCreateRequest);
+      if (succeeded) setShowAddModal(false);
     } finally {
       setIsSavingQuestion(false);
     }
   };
-
-  useEffect(() => {
-    setQuestionCountInput(String(qz.questionCount));
-  }, [qz.questionCount]);
 
   const commitQuestionCountInput = () => {
     const parsed = Number.parseInt(questionCountInput, 10);
     const clamped = Number.isFinite(parsed) ? Math.max(5, Math.min(20, parsed)) : qz.questionCount;
     qz.setQuestionCount(clamped);
     setQuestionCountInput(String(clamped));
+    return clamped;
   };
 
   // ── Loading state (workspace quiz or history fetch) ─────────────────────
@@ -172,6 +185,7 @@ const QuizPage3: React.FC<QuizPage3Props> = ({ nodeTitle, qz }) => {
 
     return (
       <div className="quiz-page quiz-page--history">
+        <div className="quiz-page__mentor-layout">
         <div className="quiz-page__banner">
           <div>
             <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", flexWrap: "wrap" }}>
@@ -189,29 +203,30 @@ const QuizPage3: React.FC<QuizPage3Props> = ({ nodeTitle, qz }) => {
             {historyItem?.can_delete && (
               <button
                 type="button"
-                className="quiz-page__btn quiz-page__btn--danger"
+                className="quiz-danger-action"
                 onClick={() => void qz.handleDeleteHistoryQuiz(historyQuiz.quiz_id)}
                 disabled={qz.isDeletingDraft}
               >
                 Delete
               </button>
             )}
-            <button type="button" className="btn-secondary quiz-page__btn" onClick={qz.handleCloseHistoryView}>
+            <button type="button" className="quiz-secondary-action" onClick={qz.handleCloseHistoryView}>
               Close
             </button>
           </div>
         </div>
 
-        <div className="quiz-page__header">
-          <div className="quiz-page__title-block">
-            <span className="quiz-page__title">{historyQuiz.title}</span>
-            <div className="quiz-page__meta">
-              <span className="quiz-page__meta-text">
-                {historyQuiz.total_questions} questions · {historyDifficulty}
-                {historyItem?.version_label ? ` · ${historyItem.version_label}` : ""}
-              </span>
-            </div>
-          </div>
+        <div className="sm-version-bar">
+          <span className="sm-version-pill">
+            Quiz history
+            {historyItem?.status_badge && (
+              <span className="sm-version-tag sm-version-tag--muted">{historyItem.status_badge}</span>
+            )}
+          </span>
+          <span className="quiz-mentor-visibility-banner__meta-text">
+            {historyQuiz.total_questions} questions · {historyDifficulty}
+            {historyItem?.version_label ? ` · ${historyItem.version_label}` : ""}
+          </span>
         </div>
 
         <div className="quiz-page__scroll">
@@ -226,9 +241,9 @@ const QuizPage3: React.FC<QuizPage3Props> = ({ nodeTitle, qz }) => {
               isSaving={false}
               isDeleting={false}
               isRegenerating={false}
-              onUpdate={async () => {}}
-              onDelete={async () => {}}
-              onRegenerate={async () => {}}
+              onUpdate={async () => false}
+              onDelete={async () => false}
+              onRegenerate={async () => false}
             />
           ))}
         </div>
@@ -240,6 +255,7 @@ const QuizPage3: React.FC<QuizPage3Props> = ({ nodeTitle, qz }) => {
           isDeleting={qz.isDeletingDraft}
           viewingQuizId={qz.viewingHistoryItem?.quiz_id ?? null}
         />
+        </div>
       </div>
     );
   }
@@ -247,89 +263,108 @@ const QuizPage3: React.FC<QuizPage3Props> = ({ nodeTitle, qz }) => {
   // ── Generation form (no workspace quiz yet) ─────────────────────────────
   if (!qz.quiz) {
     return (
-      <div style={{ flex: 1, borderTop: "1px solid var(--color-border)", paddingTop: "1.25rem", overflowY: "auto" }}>
-        <div style={{ maxWidth: "520px", margin: "0 auto", padding: "1rem" }}>
-          <h3 style={{ margin: "0 0 0.375rem", fontSize: "1.0625rem", fontWeight: 700, color: "var(--color-text-primary)" }}>
-            Generate Quiz
-          </h3>
-          <p style={{ margin: "0 0 1.5rem", fontSize: "0.875rem", color: "var(--color-text-muted)" }}>
-            Configure and generate MCQ quiz questions from your study material.
-          </p>
-
-          {!qz.canGenerateQuiz && qz.generateDisabledTooltip && (
-            <p style={{ margin: "0 0 1rem", fontSize: "0.8125rem", color: "var(--color-text-muted)" }}>
-              {qz.generateDisabledTooltip}
+      <div className="quiz-page quiz-page--setup">
+        <div className="quiz-page__mentor-layout">
+        <div className="quiz-setup">
+          <header className="quiz-page-heading">
+            <span className="quiz-page-heading__eyebrow">Quiz studio</span>
+            <h2>Create a knowledge check</h2>
+            <p>
+              Build multiple-choice questions from the current published study material for
+              <strong> {nodeTitle}</strong>.
             </p>
-          )}
+          </header>
 
-          <div style={{ marginBottom: "1.25rem" }}>
-            <label style={{ display: "block", fontSize: "0.8125rem", fontWeight: 600, color: "var(--color-text-secondary)", marginBottom: "0.5rem" }}>
-              Number of questions
-            </label>
-            <input
-              type="number"
-              className="input-field"
-              value={questionCountInput}
-              min={5}
-              max={20}
-              onChange={(e) => setQuestionCountInput(e.target.value)}
-              onBlur={commitQuestionCountInput}
-              style={{ width: "140px", fontSize: "0.9375rem" }}
-            />
-            <span style={{ marginLeft: "0.625rem", fontSize: "0.8125rem", color: "var(--color-text-muted)" }}>
-              (5 – 20)
-            </span>
-          </div>
-
-          <div style={{ marginBottom: "1.75rem" }}>
-            <label style={{ display: "block", fontSize: "0.8125rem", fontWeight: 600, color: "var(--color-text-secondary)", marginBottom: "0.5rem" }}>
-              Difficulty
-            </label>
-            <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
-              {DIFFICULTY_OPTIONS.map(({ value, label }) => (
-                <button
-                  key={value}
-                  type="button"
-                  onClick={() => qz.setDifficulty(value)}
-                  style={{
-                    padding: "0.4rem 1rem", borderRadius: "var(--radius-md)",
-                    border: `1px solid ${qz.difficulty === value ? "var(--color-primary)" : "var(--color-border)"}`,
-                    background: qz.difficulty === value ? "var(--color-primary-subtle)" : "var(--color-bg-surface)",
-                    color: qz.difficulty === value ? "var(--color-primary)" : "var(--color-text-secondary)",
-                    cursor: "pointer", fontWeight: 600, fontSize: "0.8125rem",
-                  }}
-                >
-                  {label}
-                </button>
-              ))}
+          <section className="quiz-setup-card" aria-labelledby="quiz-setup-title">
+            <div className="quiz-setup-card__intro">
+              <h3 id="quiz-setup-title">Quiz setup</h3>
+              <p>Choose the size and challenge level. You can edit every question before publishing.</p>
             </div>
-          </div>
 
-          <button
-            type="button"
-            className="btn-primary"
-            onClick={() => {
-              commitQuestionCountInput();
-              void qz.handleGenerate();
-            }}
-            disabled={qz.isGenerating || !qz.canGenerateQuiz}
-            title={!qz.canGenerateQuiz ? qz.generateDisabledTooltip ?? undefined : undefined}
-            style={{ padding: "0.625rem 1.5rem", fontSize: "0.9375rem", display: "flex", alignItems: "center", gap: "0.625rem" }}
-          >
-            {qz.isGenerating ? (
-              <>
-                <span className="spinner" style={{ width: "1rem", height: "1rem" }} />
-                Generating quiz…
-              </>
-            ) : (
-              <>
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
-                </svg>
-                Generate Quiz
-              </>
+            <div className="quiz-setup-field">
+              <label htmlFor="quiz-question-count">Number of questions</label>
+              <div className="quiz-setup-field__count">
+                <input
+                  id="quiz-question-count"
+                  type="number"
+                  value={questionCountInput}
+                  min={5}
+                  max={20}
+                  onChange={(e) => setQuestionCountInput(e.target.value)}
+                  onBlur={commitQuestionCountInput}
+                  aria-describedby="quiz-question-count-help"
+                />
+                <span id="quiz-question-count-help" className="quiz-setup-field__help">
+                  5–20 questions
+                </span>
+              </div>
+            </div>
+
+            <fieldset className="quiz-setup-field" style={{ border: 0, padding: 0, marginInline: 0 }}>
+              <legend>Difficulty</legend>
+              <div className="quiz-difficulty-options">
+                {DIFFICULTY_OPTIONS.map(({ value, label }) => (
+                  <button
+                    key={value}
+                    type="button"
+                    className="quiz-difficulty-option"
+                    aria-pressed={qz.difficulty === value}
+                    onClick={() => qz.setDifficulty(value)}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </fieldset>
+
+            <div className="quiz-setup-context" role="note">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+                <path d="M4 19.5A2.5 2.5 0 016.5 17H20" />
+                <path d="M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z" />
+              </svg>
+              <div>
+                <strong>Lesson context is included automatically</strong>
+                Questions are grounded in the study material students can currently access.
+              </div>
+            </div>
+
+            {!qz.canGenerateQuiz && qz.generateDisabledTooltip && (
+              <div className="quiz-setup-context" role="status">
+                <div>
+                  <strong>Quiz generation is not ready</strong>
+                  {qz.generateDisabledTooltip}
+                </div>
+              </div>
             )}
-          </button>
+
+            <div className="quiz-setup-action">
+              <p>Generation runs in the background and can be paused or resumed safely.</p>
+              <button
+                type="button"
+                className="quiz-primary-action"
+                onClick={() => {
+                  const questionCount = commitQuestionCountInput();
+                  void qz.handleGenerate(questionCount);
+                }}
+                disabled={qz.isGenerating || !qz.canGenerateQuiz}
+                title={!qz.canGenerateQuiz ? qz.generateDisabledTooltip ?? undefined : undefined}
+              >
+                {qz.isGenerating ? (
+                  <>
+                    <span className="spinner" style={{ width: "1rem", height: "1rem" }} />
+                    Generating quiz…
+                  </>
+                ) : (
+                  <>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+                      <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
+                    </svg>
+                    Generate quiz
+                  </>
+                )}
+              </button>
+            </div>
+          </section>
         </div>
 
         <QuizHistoryPanel
@@ -339,166 +374,144 @@ const QuizPage3: React.FC<QuizPage3Props> = ({ nodeTitle, qz }) => {
           isDeleting={qz.isDeletingDraft}
           viewingQuizId={qz.viewingHistoryItem?.quiz_id ?? null}
         />
+        </div>
       </div>
     );
   }
 
   const quiz = qz.quiz!;
   const difficultyLabel = DIFFICULTY_OPTIONS.find((d) => d.value === quiz.difficulty)?.label ?? quiz.difficulty;
-  const displayTitle = quiz.title || `${nodeTitle} — Quiz`;
   const rateLimited = isLlmRateLimited(quiz.qc_result);
 
   const showQcWarning = shouldShowQcWarning(quiz.qc_failed_permanently, quiz.qc_result);
 
   const needsHintsBeforePublish = !quiz.is_published && quiz.hints_status !== "complete";
   const showCombinedHintsCta = needsHintsBeforePublish && activeQuestions.length > 0;
+  const canAddQuestion = !qz.isGenerating && !quiz.is_published && !rateLimited && qz.canEditQuestions;
+
+  const publishActionLabel = showCombinedHintsCta
+    ? quiz.hints_status === "partial"
+      ? "Continue generating hints…"
+      : "Generate hints and then publish quiz"
+    : qz.isPublishing
+      ? "Making live…"
+      : qz.publishQuizButtonLabel;
 
   return (
     <div className="quiz-page">
-      <div className="quiz-page__body-row">
-        <div className="quiz-page__main">
-          <div className="quiz-page__header">
-            <div className="quiz-page__header-top">
-              <div className="quiz-page__title-block">
-                <span className="quiz-page__title">{displayTitle}</span>
-                <div className="quiz-page__meta">
-                  <span className={`quiz-page__badge ${quiz.is_published ? "quiz-page__badge--live" : "quiz-page__badge--draft"}`}>
-                    {quiz.is_published ? "Live" : "Draft"}
-                  </span>
-                  <span className="quiz-page__meta-text">
-                    {quiz.total_questions} questions · {difficultyLabel}
-                  </span>
-                </div>
-                {qz.showUpdateQuizNudge && (
-                  <div
-                    className="quiz-page__sm-update-nudge"
-                    role="status"
-                    style={{
-                      marginTop: "0.75rem",
-                      border: "1px solid #d97706",
-                      backgroundColor: "#fffbeb",
-                      borderRadius: "var(--radius-lg)",
-                      padding: "0.875rem",
-                      display: "flex",
-                      alignItems: "flex-start",
-                      gap: "0.625rem",
-                    }}
-                  >
-                    <svg
-                      width="20"
-                      height="20"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="#d97706"
-                      strokeWidth="2.5"
-                      style={{ flexShrink: 0, marginTop: "0.125rem" }}
-                      aria-hidden="true"
-                    >
-                      <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
-                      <line x1="12" y1="9" x2="12" y2="13" />
-                      <line x1="12" y1="17" x2="12.01" y2="17" />
-                    </svg>
-                    <div>
-                      <span style={{ display: "block", fontSize: "0.875rem", fontWeight: 700, color: "#92400e" }}>
-                        Study material was updated
-                      </span>
-                      <p style={{ margin: "0.25rem 0 0", fontSize: "0.8125rem", color: "#b45309", lineHeight: 1.45 }}>
-                        {qz.quizSmVersionLabel
-                          ? <>This quiz was generated for <strong>{qz.quizSmVersionLabel}</strong>. The study material has since been updated — consider regenerating the quiz so questions match the latest content.</>
-                          : "The study material has been updated — consider regenerating the quiz so questions match the latest content."
-                        }
-                      </p>
-                    </div>
-                  </div>
-                )}
-              </div>
+      <div className="quiz-page__mentor-layout">
+        <QuizMentorVisibilityBanner
+          visibility={studentVisibility}
+          statusTag={{
+            label: quiz.is_published ? "Live" : "Draft",
+            modifier: quiz.is_published ? "live" : "draft",
+          }}
+          metaText={`${quiz.total_questions} questions · ${difficultyLabel}`}
+          secondaryInfoLabel="Quiz workspace"
+          secondaryInfoValue="Review questions, answers, and publishing status here"
+          actionLabel={publishActionLabel}
+          actionDisabled={
+            showCombinedHintsCta
+              ? qz.isGenerating
+              : !qz.canPublishQuiz || qz.isPublishing || quiz.is_published
+          }
+          actionTitle={
+            showCombinedHintsCta
+              ? "Hints must be generated before the quiz can go live for students"
+              : !qz.canPublishQuiz
+                ? qz.publishDisabledTooltip ?? undefined
+                : undefined
+          }
+          onAction={
+            showCombinedHintsCta
+              ? qz.handleProceedToHints
+              : quiz.is_published
+                ? undefined
+                : qz.handlePublishQuiz
+          }
+          extraActions={
+            quiz.is_published ? (
+              <button
+                type="button"
+                className="sm-mentor-btn sm-mentor-btn--outline sm-mentor-btn--danger student-visibility-banner__action"
+                onClick={() => void qz.handleUnpublishQuiz()}
+                disabled={qz.isUnpublishing}
+              >
+                {qz.isUnpublishing ? "Removing…" : "Unpublish"}
+              </button>
+            ) : undefined
+          }
+        />
 
-              <div className="quiz-page__actions">
-                <button
-                  type="button"
-                  className="quiz-page__btn quiz-page__btn--danger"
-                  onClick={() => qz.setShowDeleteDraftModal(true)}
-                  disabled={quiz.is_published || qz.isDeletingDraft}
-                  title={quiz.is_published ? "Remove the quiz from students before deleting the draft" : undefined}
-                >
-                  Delete
-                </button>
-                {!quiz.is_published && (
-                  <button
-                    type="button"
-                    className="btn-secondary quiz-page__btn"
-                    onClick={() => {
-                      if (qz.showUpdateQuizNudge) {
-                        void qz.handleGenerate();
-                      } else {
-                        qz.setShowRegenerateModal(true);
-                      }
-                    }}
-                    disabled={
-                      qz.isGenerating
-                      || (qz.showUpdateQuizNudge ? !qz.canGenerateQuiz : !qz.canRegenerateQuiz)
-                    }
-                  >
-                    {qz.showUpdateQuizNudge ? "Regenerate for new SM" : "Regenerate"}
-                  </button>
-                )}
-                {showCombinedHintsCta ? (
-                  <button
-                    type="button"
-                    className="btn-primary quiz-page__btn"
-                    onClick={qz.handleProceedToHints}
-                    disabled={qz.isGenerating}
-                    title="Hints must be generated before the quiz can go live for students"
-                  >
-                    {quiz.hints_status === "partial"
-                      ? "Continue generating hints…"
-                      : "Generate hints and then publish quiz"}
-                  </button>
-                ) : (
-                  <>
-                    {!quiz.is_published && (
-                      <button
-                        type="button"
-                        className="btn-secondary quiz-page__btn"
-                        onClick={qz.handleProceedToHints}
-                        disabled={qz.isGenerating || activeQuestions.length === 0}
-                        title="Proceed to hint generation"
-                      >
-                        Hints →
-                      </button>
-                    )}
-                    <button
-                      type="button"
-                      className="btn-primary quiz-page__btn"
-                      onClick={qz.handlePublishQuiz}
-                      disabled={!qz.canPublishQuiz || qz.isPublishing || quiz.is_published}
-                      title={!qz.canPublishQuiz ? qz.publishDisabledTooltip ?? undefined : undefined}
-                    >
-                      {qz.isPublishing ? "Making live…" : qz.publishQuizButtonLabel}
-                    </button>
-                  </>
-                )}
-                <button
-                  type="button"
-                  className="btn-secondary quiz-page__btn"
-                  onClick={() => void qz.handleUnpublishQuiz()}
-                  disabled={!quiz.is_published || qz.isUnpublishing}
-                >
-                  {qz.isUnpublishing ? "Removing…" : "Unpublish"}
-                </button>
-              </div>
-            </div>
+        <QuizReviewToolbar
+          qz={qz}
+          showAnswerKey={qz.showAnswerKey}
+          onToggleAnswerKey={() => qz.setShowAnswerKey(!qz.showAnswerKey)}
+          onAddQuestion={() => setShowAddModal(true)}
+          onProceedToHints={qz.handleProceedToHints}
+          canAddQuestion={canAddQuestion}
+          activeQuestionsCount={activeQuestions.length}
+        />
 
-            <button
-              type="button"
-              className="quiz-page__answer-key-toggle"
-              onClick={() => qz.setShowAnswerKey(!qz.showAnswerKey)}
+        <div className="sm-version-bar">
+          <span className="sm-version-pill">
+            Quiz
+            <span className={`sm-version-tag sm-version-tag--${quiz.is_published ? "live" : "draft"}`}>
+              {quiz.is_published ? "Live for students" : "Working draft"}
+            </span>
+          </span>
+          <span
+            className={`quiz-status-chip ${
+              quiz.hints_status === "complete"
+                ? "quiz-status-chip--complete"
+                : quiz.hints_status === "partial"
+                  ? "quiz-status-chip--partial"
+                  : "quiz-status-chip--empty"
+            }`}
+          >
+            Hints: {quiz.hints_status}
+          </span>
+        </div>
+
+        {qz.showUpdateQuizNudge && (
+          <div className="quiz-page__sm-update-nudge" role="status">
+            <svg
+              width="20"
+              height="20"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="#d97706"
+              strokeWidth="2.5"
+              aria-hidden="true"
             >
-              {qz.showAnswerKey ? "Hide answer key" : "Show answer key"}
-            </button>
+              <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
+              <line x1="12" y1="9" x2="12" y2="13" />
+              <line x1="12" y1="17" x2="12.01" y2="17" />
+            </svg>
+            <div>
+              <strong>Study material was updated</strong>
+              <p>
+                {qz.quizSmVersionLabel
+                  ? <>This quiz was generated for <strong>{qz.quizSmVersionLabel}</strong>. The study material has since been updated — consider regenerating the quiz so questions match the latest content.</>
+                  : "The study material has been updated — consider regenerating the quiz so questions match the latest content."
+                }
+              </p>
+            </div>
           </div>
+        )}
 
-          <div className="quiz-page__scroll">
+        <div className="quiz-page__body-row">
+          <div className="quiz-page__main">
+            <div className="quiz-page__scroll">
+            <div className="quiz-review-summary">
+              <div>
+                <strong>Review every question before moving to hints</strong>
+                <span>Drag to reorder. Regenerating or editing a question can make its hints stale.</span>
+              </div>
+              <span className={`quiz-status-chip ${quiz.hints_status === "complete" ? "quiz-status-chip--complete" : quiz.hints_status === "partial" ? "quiz-status-chip--partial" : "quiz-status-chip--empty"}`}>
+                Hints: {quiz.hints_status}
+              </span>
+            </div>
             {qz.showAnswerKey && <QuizAnswerKeyPanel questions={quiz.questions} compact />}
 
             {!qz.isGenerating && quiz.questions.length === 0 && rateLimited && (
@@ -528,16 +541,17 @@ const QuizPage3: React.FC<QuizPage3Props> = ({ nodeTitle, qz }) => {
                   items={sortedQuestions.map((q) => q.question_id)}
                   strategy={verticalListSortingStrategy}
                 >
-                  {allQuestionsForDisplay.map((q) => (
+                  {allQuestionsForDisplay.map((q, displayIndex) => (
                     <QuizQuestionCard
                       key={q.question_id}
                       question={q}
-                      index={activeQuestions.indexOf(q)}
+                      index={displayIndex}
                       isPublished={quiz.is_published}
                       canEdit={qz.canEditQuestions}
                       isSaving={isSavingQuestion}
                       isDeleting={qz.isDeletingQuestion === q.question_id}
                       isRegenerating={qz.isRegeneratingQuestion === q.question_id}
+                      hintsStale={qz.hintsStaleQuestionIds.includes(q.question_id)}
                       onUpdate={qz.handleUpdateQuestion}
                       onDelete={qz.handleDeleteQuestion}
                       onRegenerate={qz.handleRegenerateQuestion}
@@ -548,31 +562,11 @@ const QuizPage3: React.FC<QuizPage3Props> = ({ nodeTitle, qz }) => {
             )}
 
             {/* Add question button */}
-            {!qz.isGenerating && !quiz.is_published && !rateLimited && (
+            {canAddQuestion && (
               <button
                 type="button"
                 onClick={() => setShowAddModal(true)}
-                disabled={!qz.canEditQuestions}
-                style={{
-                  width: "100%", padding: "0.75rem",
-                  border: "2px dashed var(--color-border)", borderRadius: "var(--radius-lg)",
-                  background: "none", cursor: !qz.canEditQuestions ? "not-allowed" : "pointer",
-                  color: "var(--color-text-muted)", fontSize: "0.875rem",
-                  display: "flex", alignItems: "center", justifyContent: "center", gap: "0.5rem",
-                  marginBottom: "1rem",
-                  opacity: !qz.canEditQuestions ? 0.5 : 1,
-                  transition: "border-color 0.15s, color 0.15s",
-                }}
-                onMouseEnter={(e) => {
-                  if (!qz.canEditQuestions) return;
-                  e.currentTarget.style.borderColor = "var(--color-primary)";
-                  e.currentTarget.style.color = "var(--color-primary)";
-                }}
-                onMouseLeave={(e) => {
-                  if (!qz.canEditQuestions) return;
-                  e.currentTarget.style.borderColor = "var(--color-border)";
-                  e.currentTarget.style.color = "var(--color-text-muted)";
-                }}
+                className="quiz-secondary-action quiz-add-question"
               >
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                   <line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" />
@@ -580,26 +574,26 @@ const QuizPage3: React.FC<QuizPage3Props> = ({ nodeTitle, qz }) => {
                 Add Question
               </button>
             )}
+            </div>
           </div>
+
+          {showQcWarning && (
+            <QuizQcWarningPanel
+              quiz={quiz}
+              onAcceptDraft={() => void qz.handleAcceptFailedQc()}
+              onDeleteDraft={() => qz.setShowDeleteDraftModal(true)}
+            />
+          )}
         </div>
 
-        {/* Right Column: QC Warning Panel */}
-        {showQcWarning && (
-          <QuizQcWarningPanel
-            quiz={quiz}
-            onAcceptDraft={() => void qz.handleAcceptFailedQc()}
-            onDeleteDraft={() => qz.setShowDeleteDraftModal(true)}
-          />
-        )}
-      </div>
-
-      <QuizHistoryPanel
+        <QuizHistoryPanel
         history={qz.quizHistory}
         onView={(quizId) => void qz.handleViewHistoryQuiz(quizId)}
         onDelete={(quizId) => void qz.handleDeleteHistoryQuiz(quizId)}
         isDeleting={qz.isDeletingDraft}
         viewingQuizId={qz.viewingHistoryItem?.quiz_id ?? null}
-      />
+        />
+      </div>
 
       {/* Modals */}
       {qz.showRegenerateModal && (
@@ -608,7 +602,7 @@ const QuizPage3: React.FC<QuizPage3Props> = ({ nodeTitle, qz }) => {
           quizTitle={quiz.title}
           hasGeneratedHints={quiz.hints_status !== "none"}
           isSubmitting={qz.isGenerating}
-          questionCount={qz.questionCount}
+          questionCount={Math.max(activeQuestions.length, 5)}
           setQuestionCount={qz.setQuestionCount}
           difficulty={qz.difficulty}
           setDifficulty={qz.setDifficulty}

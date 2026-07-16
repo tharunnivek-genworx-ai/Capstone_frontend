@@ -146,14 +146,15 @@ export interface QuizGenerateRequest {
   mode?: "generate" | "regenerate";
   quiz_id?: string;
   mentor_feedback?: string;
+  resize_question_count?: boolean;
 }
 
 export interface QuizQuestionCreateRequest {
   question_text: string;
   option_a: string;
   option_b: string;
-  option_c?: string | null;
-  option_d?: string | null;
+  option_c: string;
+  option_d: string;
   correct_option: CorrectOption;
   hint_1?: string | null;
   hint_2?: string | null;
@@ -165,8 +166,8 @@ export interface QuizQuestionUpdateRequest {
   question_text?: string;
   option_a?: string;
   option_b?: string;
-  option_c?: string | null;
-  option_d?: string | null;
+  option_c?: string;
+  option_d?: string;
   correct_option?: CorrectOption;
   hint_1?: string | null;
   hint_2?: string | null;
@@ -193,6 +194,12 @@ export interface QuizDeleteOut {
   quiz_id: string;
   node_id: string;
   deleted: boolean;
+}
+
+export interface QuizQuestionDeletedOut {
+  question_id: string;
+  deleted: boolean;
+  message: string;
 }
 
 export interface QuizUnpublishPreviewOut {

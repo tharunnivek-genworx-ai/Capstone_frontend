@@ -14,6 +14,8 @@ import {
   type MentorDepartment,
 } from "../utils/mentorDepartment";
 import type { SpaceCreateRequest, SpaceResponse } from "../types/space.types";
+import { Building2, Plus, X } from "lucide-react";
+import ModalPortal from "../../../components/ModalPortal";
 
 interface CreateSpaceModalProps {
   onClose: () => void;
@@ -60,6 +62,14 @@ const CreateSpaceModal: React.FC<CreateSpaceModalProps> = ({
     loadMentorDepartment();
   }, []);
 
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape" && !isSubmitting) onClose();
+    };
+    document.addEventListener("keydown", handleKeyDown);
+    return () => document.removeEventListener("keydown", handleKeyDown);
+  }, [isSubmitting, onClose]);
+
   const departmentId = mentorDepartment?.departmentid ?? "";
   const departmentLabel = formatDepartmentLabel(mentorDepartment);
 
@@ -85,104 +95,38 @@ const CreateSpaceModal: React.FC<CreateSpaceModalProps> = ({
   };
 
   return (
-    <>
-      {/* Backdrop */}
-      <div
-        onClick={onClose}
-        style={{
-          position: "fixed",
-          inset: 0,
-          background: "rgba(0,0,0,0.65)",
-          zIndex: 50,
-          backdropFilter: "blur(4px)",
-        }}
-      />
-
-      {/* Modal Center Wrapper */}
-      <div
-        style={{
-          position: "fixed",
-          inset: 0,
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          zIndex: 60,
-          pointerEvents: "none",
-        }}
-      >
-        {/* Modal */}
-        <div
-          className="animate-fade-in"
-          style={{
-            pointerEvents: "auto",
-            width: "min(520px, 95vw)",
-            background: "var(--color-surface-2)",
-            border: "1px solid var(--color-border)",
-            borderRadius: "var(--radius-xl)",
-            boxShadow: "0 24px 80px rgba(0,0,0,0.6)",
-            overflow: "hidden",
-          }}
-        >
-        {/* Header */}
-        <div
-          style={{
-            padding: "1.25rem 1.5rem",
-            borderBottom: "1px solid var(--color-border)",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-          }}
-        >
-          <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
-            <div
-              style={{
-                width: "36px",
-                height: "36px",
-                borderRadius: "10px",
-                background: "linear-gradient(135deg, #2563eb, #1d4ed8)",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-              }}
-            >
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2">
-                <path d="M12 5v14M5 12h14" />
-              </svg>
+    <ModalPortal>
+      <div className="learning-experience">
+        <div className="space-entry-modal__backdrop" onMouseDown={() => !isSubmitting && onClose()} />
+        <div className="space-entry-modal__positioner">
+          <section
+            className="space-entry-modal animate-fade-in"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="create-space-title"
+            aria-describedby="create-space-description"
+          >
+        <header className="space-entry-modal__header">
+          <div className="space-entry-modal__title">
+            <span className="space-entry-modal__icon" aria-hidden="true"><Plus size={19} /></span>
+            <div>
+              <h2 id="create-space-title">Create Learning Space</h2>
+              <p id="create-space-description">Set up a home for your topics and learners.</p>
             </div>
-            <h2
-              style={{
-                margin: 0,
-                fontSize: "1.0625rem",
-                fontWeight: 700,
-                color: "var(--color-text-primary)",
-              }}
-            >
-              Create Learning Space
-            </h2>
           </div>
           <button
+            type="button"
             onClick={onClose}
-            style={{
-              background: "none",
-              border: "none",
-              cursor: "pointer",
-              color: "var(--color-text-muted)",
-              padding: "0.25rem",
-              borderRadius: "var(--radius-sm)",
-            }}
-            aria-label="Close"
+            className="space-entry-modal__close"
+            aria-label="Close create learning space dialog"
+            disabled={isSubmitting}
           >
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <line x1="18" y1="6" x2="6" y2="18" />
-              <line x1="6" y1="6" x2="18" y2="18" />
-            </svg>
+            <X size={20} aria-hidden="true" />
           </button>
-        </div>
+        </header>
 
-        {/* Form */}
-        <form onSubmit={handleSubmit} noValidate style={{ padding: "1.5rem" }}>
-          {/* Space name */}
-          <div style={{ marginBottom: "1.25rem" }}>
+        <form onSubmit={handleSubmit} noValidate className="space-entry-modal__form">
+          <div className="space-entry-modal__field">
             <label htmlFor="cs-name" className="label">
               Space Name <span style={{ color: "var(--color-danger)" }}>*</span>
             </label>
@@ -199,8 +143,7 @@ const CreateSpaceModal: React.FC<CreateSpaceModalProps> = ({
             />
           </div>
 
-          {/* Description */}
-          <div style={{ marginBottom: "1.25rem" }}>
+          <div className="space-entry-modal__field">
             <label htmlFor="cs-desc" className="label">
               Description{" "}
               <span style={{ color: "var(--color-text-muted)", fontWeight: 400 }}>
@@ -214,104 +157,51 @@ const CreateSpaceModal: React.FC<CreateSpaceModalProps> = ({
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               rows={3}
-              style={{ resize: "vertical", minHeight: "80px" }}
+              maxLength={1000}
             />
+            <span className="space-entry-modal__counter">{description.length}/1000</span>
           </div>
 
-          {/* Department — read-only, mentor's assigned department only */}
-          <div style={{ marginBottom: "1.5rem" }}>
+          <div className="space-entry-modal__field">
             <label htmlFor="cs-dept" className="label">
               Your Department <span style={{ color: "var(--color-danger)" }}>*</span>
             </label>
             {loadingProfile ? (
-              <div
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: "0.5rem",
-                  color: "var(--color-text-muted)",
-                  fontSize: "0.875rem",
-                  padding: "0.625rem 0",
-                }}
-              >
-                <span className="spinner" style={{ borderTopColor: "var(--color-primary)", width: "1rem", height: "1rem" }} />
+              <div className="space-entry-modal__inline-status" role="status">
+                <span className="spinner" />
                 Loading your department…
               </div>
             ) : profileError ? (
-              <div
-                style={{
-                  background: "rgba(239,68,68,0.1)",
-                  border: "1px solid rgba(239,68,68,0.3)",
-                  borderRadius: "var(--radius-md)",
-                  padding: "0.75rem 1rem",
-                  fontSize: "0.8125rem",
-                  color: "var(--color-danger)",
-                }}
-              >
+              <div className="space-entry-modal__error" role="alert">
                 {profileError}
               </div>
             ) : (
               <>
                 <div
                   id="cs-dept"
-                  className="input-field"
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    minHeight: "2.75rem",
-                    cursor: "default",
-                    background: "var(--color-surface-1)",
-                    color: "var(--color-text-primary)",
-                    fontWeight: 600,
-                  }}
+                  className="space-entry-modal__department"
                 >
+                  <Building2 size={17} aria-hidden="true" />
                   {departmentLabel || "—"}
                 </div>
-                <p
-                  style={{
-                    margin: "0.5rem 0 0",
-                    fontSize: "0.75rem",
-                    color: "var(--color-text-muted)",
-                  }}
-                >
+                <p className="space-entry-modal__help">
                   Assigned by your administrator. You cannot create spaces in other departments.
                 </p>
               </>
             )}
           </div>
 
-          {/* Error */}
           {error && (
-            <div
-              style={{
-                background: "rgba(239,68,68,0.1)",
-                border: "1px solid rgba(239,68,68,0.3)",
-                borderRadius: "var(--radius-md)",
-                padding: "0.75rem 1rem",
-                marginBottom: "1.25rem",
-                fontSize: "0.8125rem",
-                color: "var(--color-danger)",
-                display: "flex",
-                alignItems: "center",
-                gap: "0.5rem",
-              }}
-            >
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <circle cx="12" cy="12" r="10" />
-                <line x1="12" y1="8" x2="12" y2="12" />
-                <line x1="12" y1="16" x2="12.01" y2="16" />
-              </svg>
+            <div className="space-entry-modal__error" role="alert">
               {error}
             </div>
           )}
 
-          {/* Actions */}
-          <div style={{ display: "flex", gap: "0.75rem" }}>
+          <footer className="space-entry-modal__actions">
             <button
               type="button"
               onClick={onClose}
               className="btn-secondary"
-              style={{ flex: 1 }}
               disabled={isSubmitting}
             >
               Cancel
@@ -319,7 +209,6 @@ const CreateSpaceModal: React.FC<CreateSpaceModalProps> = ({
             <button
               type="submit"
               className="btn-primary"
-              style={{ flex: 2 }}
               disabled={
                 isSubmitting ||
                 !spaceName.trim() ||
@@ -335,18 +224,17 @@ const CreateSpaceModal: React.FC<CreateSpaceModalProps> = ({
                 </>
               ) : (
                 <>
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <path d="M12 5v14M5 12h14" />
-                  </svg>
+                  <Plus size={17} aria-hidden="true" />
                   Create Learning Space
                 </>
               )}
             </button>
-          </div>
+          </footer>
         </form>
+          </section>
+        </div>
       </div>
-    </div>
-    </>
+    </ModalPortal>
   );
 };
 

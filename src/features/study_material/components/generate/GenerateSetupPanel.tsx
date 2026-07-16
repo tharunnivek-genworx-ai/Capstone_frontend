@@ -1,4 +1,12 @@
-import { FileText, Link2, Pause, RefreshCw, Sparkles, Upload } from "lucide-react";
+import {
+  BookOpen,
+  FileText,
+  Image,
+  Pause,
+  RefreshCw,
+  Sparkles,
+  Upload,
+} from "lucide-react";
 import type { NodeTreeNode, EffectiveInstructionPart } from "../../../spaces/types/node.types";
 import type { ReferenceMaterialOut } from "../../types/studyMaterial.types";
 import type { InstructionMode } from "./instructionMode.types";
@@ -16,6 +24,7 @@ interface GenerateSetupPanelProps {
   onBranchDefaultChange: (val: string) => void;
   previewParts: EffectiveInstructionPart[];
   isSaving: boolean;
+  showSavedConfirm: boolean;
   onSave: () => void;
   onDiscard: () => void;
   branchDefaultDirty: boolean;
@@ -27,14 +36,19 @@ interface GenerateSetupPanelProps {
   clearDraftsBlockReason?: string | null;
   isGenerating: boolean;
   isDeletingDrafts: boolean;
+  isLoadingGenerationSource: boolean;
+  isLoadingTopicResources: boolean;
   isWaitingForGenerateAll?: boolean;
   /** A study-material run is paused (resumable) — block new generation until resumed/deleted. */
   runPaused?: boolean;
+  /** A resumable failed run blocks fresh generation until continued or deleted. */
+  runFailed?: boolean;
   onOpenRefModal: () => void;
   onOpenMediaModal: () => void;
   onOpenExisting: () => void;
   onGenerate: () => void;
   onRegenerate: () => void;
+  onNavigateToNode?: (nodeId: string) => void;
 }
 
 export default function GenerateSetupPanel({
@@ -47,6 +61,7 @@ export default function GenerateSetupPanel({
   onBranchDefaultChange,
   previewParts,
   isSaving,
+  showSavedConfirm,
   onSave,
   onDiscard,
   branchDefaultDirty,
@@ -58,193 +73,82 @@ export default function GenerateSetupPanel({
   clearDraftsBlockReason,
   isGenerating,
   isDeletingDrafts,
+  isLoadingGenerationSource,
+  isLoadingTopicResources,
   isWaitingForGenerateAll = false,
   runPaused = false,
+  runFailed = false,
   onOpenRefModal,
   onOpenMediaModal,
   onOpenExisting,
   onGenerate,
   onRegenerate,
+  onNavigateToNode,
 }: GenerateSetupPanelProps) {
   const isWorking = isGenerating || isDeletingDrafts;
-  const blockManualGenerate = isWorking || isWaitingForGenerateAll || runPaused;
+  const hasUnsavedSettings = branchDefaultDirty || approachDirty;
+  const blockManualGenerate =
+    isWorking || isWaitingForGenerateAll || runPaused || runFailed || hasUnsavedSettings;
   const pausedTitle =
     "Generation is paused. Resume or delete it from the Material tab before creating a new draft.";
 
   return (
     <div className="gsm-setup">
-      <section className="gsm-setup-hero" aria-labelledby="gsm-setup-hero-title">
-        <div className="gsm-setup-hero__layout">
-          <div className="gsm-setup-hero__main">
-            {runPaused ? (
-              <div className="gsm-ready-status gsm-ready-status--paused">
-                <span className="gsm-ready-status__dot" aria-hidden="true" />
-                <span className="gsm-ready-status__text">Generation paused</span>
-              </div>
-            ) : hasWorkspaceStudyMaterial ? (
-              <div className="gsm-ready-status">
-                <span className="gsm-ready-status__dot" aria-hidden="true" />
-                <span className="gsm-ready-status__text">Draft ready to review</span>
-              </div>
-            ) : null}
-
-            <p className="gsm-setup-hero__eyebrow">Start here</p>
-            <h2 id="gsm-setup-hero-title" className="gsm-setup-hero__title">
-              {isWaitingForGenerateAll
-                ? "Waiting in generate-all"
-                : runPaused
-                  ? "Generation paused"
-                  : hasWorkspaceStudyMaterial
-                    ? "Your lesson draft is ready"
-                    : "Generate your lesson draft"}
-            </h2>
-            <p className="gsm-setup-hero__sub">
-              {isWaitingForGenerateAll
-                ? "This topic will start automatically after earlier sections finish."
-                : runPaused
-                  ? "This topic has a paused generation run. Resume or delete it from the Material tab before starting a new draft."
-                  : hasWorkspaceStudyMaterial
-                    ? `${node.title} already has a draft. Open it to review, or create a new version below.`
-                    : "Click below when you're ready. You can customize how AI teaches first — or skip straight to a draft."}
-            </p>
-
-            {isWaitingForGenerateAll && !isGenerating && (
-              <p className="gsm-ready-waiting">Waiting for generate-all to reach this topic…</p>
-            )}
-
-            <div className="gsm-setup-hero__actions">
-              {runPaused ? (
-                <>
-                  <button
-                    type="button"
-                    className="gsm-btn gsm-btn--primary gsm-btn--block gsm-btn--lg"
-                    onClick={onOpenExisting}
-                  >
-                    <Pause size={16} strokeWidth={1.8} aria-hidden />
-                    Go to paused run
-                  </button>
-                  <button
-                    type="button"
-                    className="gsm-btn gsm-btn--outline-primary gsm-btn--block"
-                    disabled
-                    title={pausedTitle}
-                  >
-                    <Sparkles size={14} strokeWidth={1.8} aria-hidden />
-                    Run paused
-                  </button>
-                </>
-              ) : hasWorkspaceStudyMaterial ? (
-                <>
-                  <button
-                    type="button"
-                    className="gsm-btn gsm-btn--primary gsm-btn--block gsm-btn--lg"
-                    onClick={onOpenExisting}
-                  >
-                    <FileText size={16} strokeWidth={1.8} aria-hidden />
-                    Open your draft
-                  </button>
-                  <button
-                    type="button"
-                    className="gsm-btn gsm-btn--outline-primary gsm-btn--block"
-                    onClick={onRegenerate}
-                    disabled={blockManualGenerate || !canClearAllDrafts}
-                    title={
-                      isWaitingForGenerateAll
-                        ? "Blocked until generate-all reaches this topic"
-                        : !canClearAllDrafts
-                          ? (clearDraftsBlockReason ?? "Cannot regenerate at this time")
-                          : undefined
-                    }
-                  >
-                    <RefreshCw size={14} strokeWidth={1.8} aria-hidden />
-                    {isWorking ? "Working…" : "Generate a new draft"}
-                  </button>
-                </>
-              ) : (
-                <button
-                  type="button"
-                  id="generate-study-material-btn"
-                  className="gsm-btn gsm-btn--primary gsm-btn--block gsm-btn--lg"
-                  onClick={onGenerate}
-                  disabled={blockManualGenerate}
-                  title={
-                    isWaitingForGenerateAll
-                      ? "Blocked until generate-all reaches this topic"
-                      : undefined
-                  }
-                >
-                  <Sparkles size={16} strokeWidth={1.8} aria-hidden />
-                  {isGenerating
-                    ? "Generating…"
-                    : isWaitingForGenerateAll
-                      ? "Waiting…"
-                      : "Generate draft"}
-                </button>
-              )}
-            </div>
+      {showSavedConfirm && (
+        <div className="gsm-sync-banner" role="status">
+          <span className="gsm-sync-banner__mark" aria-hidden="true">✓</span>
+          <div>
+            <strong>Style configuration saved</strong>
+            <span>The latest teaching instructions will be used for this topic.</span>
           </div>
-
-          <aside className="gsm-setup-hero__extras" aria-label="Optional extras">
-            <button
-              type="button"
-              className="gsm-setup-hero-extra"
-              onClick={onOpenRefModal}
-              title={
-                referenceMaterial
-                  ? `Reference: ${referenceMaterial.title}`
-                  : "Add a reference PDF for the AI to use"
-              }
-            >
-              <span className="gsm-setup-hero-extra__icon" aria-hidden="true">
-                <Upload size={20} strokeWidth={1.8} />
-              </span>
-              <span className="gsm-setup-hero-extra__title">
-                {referenceMaterial ? referenceMaterial.title : "Reference PDF for AI"}
-              </span>
-              <span className="gsm-setup-hero-extra__sub">
-                Optional — material AI reads before writing
-              </span>
-            </button>
-
-            <button
-              type="button"
-              className="gsm-setup-hero-extra"
-              onClick={onOpenMediaModal}
-              title="Images, links and videos for learners"
-            >
-              <span className="gsm-setup-hero-extra__icon" aria-hidden="true">
-                <Link2 size={20} strokeWidth={1.8} />
-              </span>
-              <span className="gsm-setup-hero-extra__title">For students reference</span>
-              <span className="gsm-setup-hero-extra__sub">
-                {nodeMediaCount > 0
-                  ? `${nodeMediaCount} linked — links, images, or videos`
-                  : "Links, images, or videos for students"}
-              </span>
-            </button>
-          </aside>
         </div>
-      </section>
+      )}
 
-      <section className="gsm-setup-card" aria-labelledby="gsm-setup-card-title">
-        <div className="gsm-setup-card__intro">
-          <h3 id="gsm-setup-card-title" className="gsm-setup-card__title">
-            Customize how AI teaches
-          </h3>
-          <p className="gsm-setup-card__lead">
-            Work through the steps below if you want more control.
-          </p>
+      <header className="gsm-page-heading">
+        <p>Lesson setup</p>
+        <h2>Build a lesson for {node.title}</h2>
+        <span>Shape the teaching approach, choose what the AI can read, then create a reviewable draft.</span>
+      </header>
+
+      {(runPaused || runFailed || isWaitingForGenerateAll || hasWorkspaceStudyMaterial) && (
+        <div className={`gsm-run-banner${runPaused || runFailed ? " gsm-run-banner--paused" : ""}`} role="status">
+          <div>
+            <strong>
+              {runPaused
+                ? "Generation paused"
+                : runFailed
+                  ? "Generation needs attention"
+                : isWaitingForGenerateAll
+                  ? "Queued in Generate All"
+                  : "A draft is ready to review"}
+            </strong>
+            <span>
+              {runPaused
+                ? "Resume or delete the saved run from Material before starting again."
+                : runFailed
+                  ? "Continue the saved run after its retry cooldown, or delete it before starting again."
+                : isWaitingForGenerateAll
+                  ? "This topic starts automatically after the topics ahead of it finish."
+                  : `${node.title} already has workspace material. You can review it or replace the unpublished drafts.`}
+            </span>
+          </div>
+          <button type="button" className="gsm-btn gsm-btn--outline-primary" onClick={onOpenExisting}>
+            {runPaused || runFailed ? <Pause size={15} aria-hidden /> : <FileText size={15} aria-hidden />}
+            {runPaused ? "Open paused run" : runFailed ? "Review failed run" : "Open material"}
+          </button>
         </div>
+      )}
 
-        <div className="gsm-setup-step">
+      <div className="gsm-setup-flow">
+        <section className="gsm-setup-step-card" aria-labelledby="gsm-style-step-title">
           <div className="gsm-setup-step__head">
             <span className="gsm-setup-step__num" aria-hidden="true">
               1
             </span>
             <div>
-              <h4 className="gsm-setup-step__title">Default style for this section</h4>
+              <h3 id="gsm-style-step-title" className="gsm-setup-step__title">Lesson style</h3>
               <p className="gsm-setup-step__hint">
-                Applies to {node.title} and every subtopic inside it.
+                Set a reusable teaching standard for {node.title} and its subtopics.
               </p>
             </div>
           </div>
@@ -255,18 +159,19 @@ export default function GenerateSetupPanel({
             value={branchDefault}
             onChange={onBranchDefaultChange}
             onSave={onSave}
+            onDiscard={() => onBranchDefaultChange(node.tree_default_instruction ?? "")}
             isSaving={isSaving}
             isDirty={branchDefaultDirty}
           />
-        </div>
+        </section>
 
-        <div className="gsm-setup-step">
+        <section className="gsm-setup-step-card" aria-labelledby="gsm-instruction-step-title">
           <div className="gsm-setup-step__head">
             <span className="gsm-setup-step__num" aria-hidden="true">
               2
             </span>
             <div>
-              <h4 className="gsm-setup-step__title">How AI teaches this topic</h4>
+              <h3 id="gsm-instruction-step-title" className="gsm-setup-step__title">AI generation instructions</h3>
               <p className="gsm-setup-step__hint">
                 Add a note for {node.title}, or turn off the default to write custom instructions.
               </p>
@@ -284,16 +189,109 @@ export default function GenerateSetupPanel({
             onSave={onSave}
             onDiscard={onDiscard}
           />
-        </div>
+        </section>
 
-        <InstructionPreviewAccordion
-          embedded
-          mode={mode}
-          modeText={modeText}
-          branchDefault={branchDefault}
-          previewParts={previewParts}
-          isRootTopic={!node.parent_id}
-        />
+        <section className="gsm-setup-step-card" aria-labelledby="gsm-source-step-title">
+          <div className="gsm-setup-step__head">
+            <span className="gsm-setup-step__num" aria-hidden="true">3</span>
+            <div>
+              <h3 id="gsm-source-step-title" className="gsm-setup-step__title">Sources and learner resources</h3>
+              <p className="gsm-setup-step__hint">Generation sources and student-visible resources stay separate.</p>
+            </div>
+          </div>
+          <div className="gsm-source-row">
+            <button type="button" className="gsm-source-btn" onClick={onOpenRefModal}>
+              <span className="gsm-source-btn__icon" aria-hidden="true"><Upload size={18} /></span>
+              <span className="gsm-source-btn__text">
+                <b>{isLoadingGenerationSource ? "Loading source…" : referenceMaterial?.title ?? "Upload a source PDF"}</b>
+                <span>Private input the AI reads while writing</span>
+              </span>
+              {referenceMaterial && <span className="gsm-badge-count">1 source</span>}
+            </button>
+            <button type="button" className="gsm-source-btn" onClick={onOpenMediaModal}>
+              <span className="gsm-source-btn__icon" aria-hidden="true"><Image size={18} /></span>
+              <span className="gsm-source-btn__text">
+                <b>{isLoadingTopicResources ? "Loading resources…" : "Student resources"}</b>
+                <span>Visible links, images, PDFs, and videos</span>
+              </span>
+              {nodeMediaCount > 0 && <span className="gsm-badge-count">{nodeMediaCount}</span>}
+            </button>
+          </div>
+          <div className="gsm-source-separation-note">
+            <BookOpen size={15} aria-hidden />
+            Student resources are not automatically used as AI generation context.
+          </div>
+        </section>
+
+        <section className="gsm-setup-step-card gsm-setup-step-card--preview">
+          <InstructionPreviewAccordion
+            embedded
+            mode={mode}
+            modeText={modeText}
+            branchDefault={branchDefault}
+            previewParts={previewParts}
+            isRootTopic={!node.parent_id}
+            hasUnsavedChanges={hasUnsavedSettings}
+            generationSourceTitle={referenceMaterial?.title ?? null}
+            learnerResourceCount={nodeMediaCount}
+            onNavigateToNode={onNavigateToNode}
+          />
+        </section>
+      </div>
+
+      <section className="gsm-final-action" aria-label="Create lesson draft">
+        <div>
+          <h3>{hasWorkspaceStudyMaterial ? "Create a fresh lesson draft" : "Ready to create the lesson?"}</h3>
+          <p>
+            {hasUnsavedSettings
+              ? "Save your instruction changes above before starting generation."
+              : "The run is durable. You can leave this topic and return while generation continues."}
+          </p>
+        </div>
+        {runPaused || runFailed ? (
+          <button type="button" className="gsm-btn gsm-btn--primary gsm-btn--lg" onClick={onOpenExisting}>
+            <Pause size={16} aria-hidden /> {runPaused ? "Go to paused run" : "Review failed run"}
+          </button>
+        ) : hasWorkspaceStudyMaterial ? (
+          <button
+            type="button"
+            className="gsm-btn gsm-btn--primary gsm-btn--lg"
+            onClick={onRegenerate}
+            disabled={blockManualGenerate || !canClearAllDrafts}
+            title={
+              hasUnsavedSettings
+                ? "Save instruction changes before generating"
+                : isWaitingForGenerateAll
+                ? "Blocked until Generate All reaches this topic"
+                : !canClearAllDrafts
+                  ? (clearDraftsBlockReason ?? "Cannot regenerate at this time")
+                  : undefined
+            }
+          >
+            <RefreshCw size={16} aria-hidden />
+            {isWorking ? "Working…" : "Generate new draft"}
+          </button>
+        ) : (
+          <button
+            type="button"
+            id="generate-study-material-btn"
+            className="gsm-btn gsm-btn--primary gsm-btn--lg"
+            onClick={onGenerate}
+            disabled={blockManualGenerate}
+            title={
+              hasUnsavedSettings
+                ? "Save instruction changes before generating"
+                : runPaused
+                  ? pausedTitle
+                  : isWaitingForGenerateAll
+                    ? "Waiting in Generate All"
+                    : undefined
+            }
+          >
+            <Sparkles size={17} aria-hidden />
+            {isGenerating ? "Generating…" : isWaitingForGenerateAll ? "Waiting…" : "Create lesson draft with AI"}
+          </button>
+        )}
       </section>
     </div>
   );

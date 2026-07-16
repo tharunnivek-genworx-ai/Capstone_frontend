@@ -1,0 +1,503 @@
+.learning-experience .learning-progress {
+  height: 100%;
+  overflow-y: auto;
+  padding: var(--as-page-gutter);
+  font-family: var(--as-font-sans);
+  color: var(--as-on-surface);
+  background-color: var(--as-surface);
+  background-image:
+    linear-gradient(rgb(225 227 228 / 24%) 1px, transparent 1px),
+    linear-gradient(90deg, rgb(225 227 228 / 24%) 1px, transparent 1px);
+  background-size: 20px 20px;
+}
+
+.learning-experience .learning-progress__inner {
+  width: min(100%, var(--as-content-width));
+  margin: 0 auto;
+}
+
+.learning-experience .learning-progress__header {
+  margin-bottom: var(--as-space-6);
+}
+
+.learning-experience .learning-progress__eyebrow {
+  margin: 0 0 var(--as-space-1);
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--as-primary);
+}
+
+.learning-experience .learning-progress__title {
+  margin: 0;
+  font: 600 clamp(1.6rem, 4vw, 2.25rem)/1.2 var(--as-font-serif);
+  color: var(--as-on-surface);
+}
+
+.learning-experience .learning-progress__subtitle {
+  margin: var(--as-space-2) 0 0;
+  color: var(--as-outline);
+}
+
+.learning-experience .learning-progress__metrics {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  gap: var(--as-space-4);
+  margin-bottom: var(--as-space-6);
+}
+
+.learning-experience .learning-progress__card,
+.learning-experience .learning-progress__section,
+.learning-experience .learning-progress__learner {
+  border: var(--as-border);
+  border-radius: var(--as-radius-xl);
+  background: var(--as-paper);
+  box-shadow: var(--as-shadow-overlay);
+}
+
+.learning-experience .learning-progress__card {
+  padding: var(--as-space-5);
+}
+
+.learning-experience .learning-progress__metric-label,
+.learning-experience .learning-progress__meta-label {
+  margin: 0;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--as-outline);
+}
+
+.learning-experience .learning-progress__metric-value {
+  margin: var(--as-space-1) 0 0;
+  font: 600 1.75rem/1.2 var(--as-font-serif);
+  color: var(--as-primary);
+}
+
+.learning-experience .learning-progress__section {
+  overflow: hidden;
+}
+
+.learning-experience .learning-progress__section-title {
+  margin: 0 0 var(--as-space-3);
+  font: 600 1.2rem/1.3 var(--as-font-serif);
+  color: var(--as-on-surface);
+}
+
+.learning-experience .learning-progress__section-toggle,
+.learning-experience .learning-progress__learner-toggle {
+  width: 100%;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.learning-experience .learning-progress__section-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--as-space-4) var(--as-space-5);
+  background: var(--as-surface-low);
+}
+
+.learning-experience .learning-progress__toggle-label {
+  font-weight: 700;
+}
+
+.learning-experience .learning-progress__toggle-state {
+  color: var(--as-primary);
+}
+
+.learning-experience .learning-progress__list {
+  display: flex;
+  max-height: 440px;
+  overflow-y: auto;
+  flex-direction: column;
+  gap: var(--as-space-2);
+  padding: var(--as-space-3);
+}
+
+.learning-experience .learning-progress__topic {
+  width: 100%;
+  padding: var(--as-space-3) var(--as-space-4);
+  border: 1px solid var(--as-outline-variant);
+  border-radius: var(--as-radius-lg);
+  background: var(--as-surface-lowest);
+  color: var(--as-on-surface);
+  text-align: left;
+  cursor: pointer;
+}
+
+.learning-experience .learning-progress__topic:hover {
+  border-color: var(--as-primary);
+  background: var(--as-primary-soft);
+}
+
+.learning-experience .learning-progress__topic-head {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--as-space-3);
+}
+
+.learning-experience .learning-progress__topic-title {
+  font-weight: 700;
+}
+
+.learning-experience .learning-progress__topic-value {
+  font-weight: 700;
+  color: var(--as-primary);
+}
+
+.learning-experience .learning-progress__topic-meta,
+.learning-experience .learning-progress__meta-value {
+  margin: var(--as-space-1) 0 0;
+  font-size: 0.78rem;
+  color: var(--as-outline);
+}
+
+.learning-experience .learning-progress__stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--as-space-5);
+  margin-top: var(--as-space-5);
+}
+
+.learning-experience .learning-progress-stat {
+  display: flex;
+  align-items: center;
+  gap: var(--as-space-3);
+}
+
+.learning-experience .learning-progress-stat__ring {
+  display: grid;
+  flex-shrink: 0;
+  place-items: center;
+  border-radius: var(--as-radius-full);
+}
+
+.learning-experience .learning-progress-stat__value {
+  display: grid;
+  place-items: center;
+  border-radius: var(--as-radius-full);
+  background: var(--as-paper);
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: var(--as-on-surface);
+}
+
+.learning-experience .learning-progress-stat__label,
+.learning-experience .learning-progress-stat__percent {
+  margin: 0;
+  font-size: 0.75rem;
+}
+
+.learning-experience .learning-progress-stat__label {
+  color: var(--as-outline);
+}
+
+.learning-experience .learning-progress-stat__percent {
+  font-weight: 700;
+  color: var(--as-on-surface);
+}
+
+.learning-experience .learning-progress-preview {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--as-space-3);
+  padding: var(--as-space-3);
+  border: var(--as-border);
+  border-radius: var(--as-radius-lg);
+  background: var(--as-surface-low);
+}
+
+.learning-experience .learning-progress-preview--loading {
+  justify-content: center;
+}
+
+.learning-experience .learning-progress__learners {
+  display: flex;
+  flex-direction: column;
+  gap: var(--as-space-3);
+}
+
+.learning-experience .learning-progress__learner {
+  overflow: hidden;
+}
+
+.learning-experience .learning-progress__learner-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--as-space-4);
+  padding: var(--as-space-5);
+}
+
+.learning-experience .learning-progress__learner-toggle:hover {
+  background: var(--as-primary-soft);
+}
+
+.learning-experience .learning-progress__learner-name {
+  margin: 0;
+  font-weight: 700;
+  color: var(--as-on-surface);
+}
+
+.learning-experience .learning-progress__learner-email {
+  margin: var(--as-space-1) 0 0;
+  font-size: 0.8rem;
+  color: var(--as-outline);
+}
+
+.learning-experience .learning-progress__learner-summary {
+  display: flex;
+  align-items: center;
+  gap: var(--as-space-4);
+}
+
+.learning-experience .learning-progress__learner-body {
+  padding: var(--as-space-5);
+  border-top: 1px solid var(--as-outline-variant);
+  background: var(--as-surface-low);
+}
+
+.learning-experience .learning-progress__meta-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: var(--as-space-4);
+}
+
+.learning-experience .learning-progress__actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: var(--as-space-4);
+}
+
+.learning-experience .learning-progress__empty {
+  padding: var(--as-space-12);
+  border: var(--as-border);
+  border-radius: var(--as-radius-xl);
+  background: var(--as-paper);
+  color: var(--as-outline);
+  text-align: center;
+}
+
+.learning-experience .learning-progress-modal {
+  position: fixed;
+  z-index: 1000;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: var(--as-space-6);
+  background: rgb(25 28 29 / 42%);
+}
+
+.learning-experience .learning-progress-modal__dialog {
+  display: flex;
+  width: min(100%, 840px);
+  max-height: 85vh;
+  overflow: hidden;
+  flex-direction: column;
+  border: var(--as-border);
+  border-radius: var(--as-radius-xl);
+  background: var(--as-paper);
+  box-shadow: var(--as-shadow-overlay);
+}
+
+.learning-experience .learning-progress-modal__header,
+.learning-experience .learning-progress-modal__footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--as-space-4);
+  padding: var(--as-space-4) var(--as-space-5);
+  background: var(--as-surface-low);
+}
+
+.learning-experience .learning-progress-modal__header {
+  border-bottom: 1px solid var(--as-outline-variant);
+}
+
+.learning-experience .learning-progress-modal__footer {
+  justify-content: flex-end;
+  border-top: 1px solid var(--as-outline-variant);
+}
+
+.learning-experience .learning-progress-modal__body {
+  overflow: auto;
+  padding: var(--as-space-5);
+}
+
+.learning-experience .learning-progress-modal__title {
+  margin: 0;
+  font: 600 1.25rem/1.3 var(--as-font-serif);
+}
+
+.learning-experience .learning-progress-modal__close {
+  display: grid;
+  width: 40px;
+  height: 40px;
+  place-items: center;
+  border: 0;
+  border-radius: var(--as-radius);
+  background: transparent;
+  color: var(--as-outline);
+  cursor: pointer;
+}
+
+.learning-experience .learning-progress-table-wrap {
+  overflow-x: auto;
+  border: var(--as-border);
+  border-radius: var(--as-radius-lg);
+}
+
+.learning-experience .learning-progress-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.8rem;
+  text-align: left;
+}
+
+.learning-experience .learning-progress-table th,
+.learning-experience .learning-progress-table td {
+  padding: var(--as-space-3) var(--as-space-4);
+  border-bottom: 1px solid var(--as-outline-variant);
+}
+
+.learning-experience .learning-progress-table th {
+  background: var(--as-surface-low);
+  color: var(--as-outline);
+}
+
+.learning-experience .learning-progress-table__row--clickable {
+  cursor: pointer;
+}
+
+.learning-experience .learning-progress-table__row--clickable:hover {
+  background: var(--as-primary-soft);
+}
+
+.learning-experience .learning-progress__status {
+  display: inline-flex;
+  padding: 2px 8px;
+  border-radius: var(--as-radius-full);
+  background: var(--as-surface-container);
+  color: var(--as-on-surface-variant);
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: capitalize;
+}
+
+.learning-experience .learning-progress__status--completed {
+  background: var(--as-success-soft);
+  color: var(--as-success);
+}
+
+.learning-experience .learning-progress__status--in-progress {
+  background: var(--as-warning-soft);
+  color: var(--as-warning);
+}
+
+/* The mentor rollup retains its existing data wiring while inheriting the
+   shared paper/card vocabulary. These selectors bridge its legacy inline UI. */
+.learning-experience .mentor-learning-progress {
+  background-color: var(--as-surface) !important;
+  background-image:
+    linear-gradient(rgb(225 227 228 / 24%) 1px, transparent 1px),
+    linear-gradient(90deg, rgb(225 227 228 / 24%) 1px, transparent 1px) !important;
+  background-size: 20px 20px !important;
+}
+
+.learning-experience .mentor-learning-progress > div:first-child > div,
+.learning-experience .mentor-learning-progress > div:nth-child(2) > div > div,
+.learning-experience .mentor-learning-progress > div:nth-child(2) > div[style*="text-align"] {
+  border: var(--as-border) !important;
+  border-radius: var(--as-radius-xl) !important;
+  background: var(--as-paper) !important;
+  box-shadow: var(--as-shadow-overlay) !important;
+}
+
+.learning-experience .mentor-learning-progress :is(h3, h4) {
+  font-family: var(--as-font-serif);
+  color: var(--as-on-surface) !important;
+}
+
+.learning-experience .mentor-learning-progress > div:nth-child(2) > h3 {
+  font-size: 1.35rem !important;
+  font-weight: 600 !important;
+}
+
+.learning-experience .mentor-learning-progress [style*="background: #fafbfd"],
+.learning-experience .mentor-learning-progress [style*="background: \"#fafbfd\""] {
+  background: var(--as-surface-low) !important;
+}
+
+.learning-experience .mentor-learning-progress .btn-primary {
+  border-color: var(--as-primary);
+  background: var(--as-primary);
+  color: var(--as-on-primary);
+}
+
+.learning-experience .mentor-learning-progress .btn-primary:hover {
+  background: var(--as-primary-hover);
+}
+
+.learning-experience .mentor-learning-progress .learning-progress-modal {
+  padding: var(--as-space-6) !important;
+  background: rgb(25 28 29 / 42%) !important;
+}
+
+.learning-experience .mentor-learning-progress .learning-progress-modal__dialog {
+  border: var(--as-border);
+  border-radius: var(--as-radius-xl) !important;
+  background: var(--as-paper) !important;
+  box-shadow: var(--as-shadow-overlay) !important;
+}
+
+.learning-experience .mentor-learning-progress .learning-progress-modal__dialog > div:first-child,
+.learning-experience .mentor-learning-progress .learning-progress-modal__dialog > div:last-child {
+  border-color: var(--as-outline-variant) !important;
+  background: var(--as-surface-low) !important;
+}
+
+.learning-experience .mentor-learning-progress table {
+  font-family: var(--as-font-sans);
+}
+
+.learning-experience .mentor-learning-progress thead tr {
+  border-color: var(--as-outline-variant) !important;
+  background: var(--as-surface-low) !important;
+  color: var(--as-outline) !important;
+}
+
+.learning-experience .mentor-learning-progress tbody tr {
+  border-color: var(--as-outline-variant) !important;
+}
+
+.learning-experience .mentor-learning-progress tbody tr[style*="cursor: pointer"]:hover {
+  background: var(--as-primary-soft) !important;
+}
+
+@media (max-width: 640px) {
+  .learning-experience .learning-progress {
+    padding: var(--as-space-4);
+  }
+
+  .learning-experience .learning-progress__learner-toggle {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .learning-experience .learning-progress__learner-summary {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .learning-experience .learning-progress-modal {
+    padding: var(--as-space-3);
+  }
+}

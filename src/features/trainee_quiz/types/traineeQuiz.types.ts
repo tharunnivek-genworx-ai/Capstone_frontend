@@ -33,6 +33,7 @@ export interface TraineeQuizQuestionOut {
   hint_3: string | null;
   hint_level_reached: number;
   was_skipped: boolean;
+  is_flagged: boolean;
   was_locked: boolean;
   selected_option: CorrectOption | null;
   is_correct: boolean | null;
@@ -82,6 +83,23 @@ export interface TraineeQuizAttemptListOut {
 export interface QuizQuestionResponseRequest {
   question_id: string;
   selected_option?: CorrectOption | null;
+}
+
+export interface QuizAttemptStatePatch {
+  question_id: string;
+  is_visited?: boolean;
+  is_flagged?: boolean;
+  was_skipped?: boolean;
+  resume_question_id?: string;
+}
+
+export interface QuizAttemptStateOut {
+  attempt_id: string;
+  question_id: string;
+  is_visited: boolean;
+  is_flagged: boolean;
+  was_skipped: boolean;
+  resume_question_id: string | null;
 }
 
 export interface QuizQuestionResponseOut {
@@ -134,7 +152,7 @@ export interface QuestionState {
 
 export interface TraineeArchivedQuizItem {
   quiz_id: string;
-  study_material_version_id: string;
+  study_material_version_id: string | null;
   title: string;
   difficulty: QuizDifficulty;
   total_questions: number;
@@ -144,7 +162,7 @@ export interface TraineeArchivedQuizItem {
 }
 
 export interface TraineeArchivedQuizGroup {
-  study_material_version_id: string;
+  study_material_version_id: string | null;
   version_number: number;
   version_label: string;
   quizzes: TraineeArchivedQuizItem[];
@@ -161,7 +179,7 @@ export interface ArchivedQuizReviewOut {
   title: string;
   difficulty: QuizDifficulty;
   total_questions: number;
-  study_material_version_id: string;
+  study_material_version_id: string | null;
   version_label: string;
   is_archived_reference: boolean;
   attempt_id: string | null;

@@ -55,7 +55,10 @@ function partitionVersions(versions: StudyMaterialVersionSummary[]) {
   const workspace: StudyMaterialVersionSummary[] = [];
   const studentArchive: StudyMaterialVersionSummary[] = [];
   for (const version of versions) {
-    if (version.mentor_display_badge === "Previous for students") {
+    if (
+      version.mentor_display_badge === "Previous for students" ||
+      version.mentor_display_badge === "In student archive"
+    ) {
       studentArchive.push(version);
     } else {
       workspace.push(version);

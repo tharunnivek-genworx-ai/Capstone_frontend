@@ -53,42 +53,25 @@ const QuizHistoryPanel: React.FC<QuizHistoryPanelProps> = ({
   }
 
   return (
-    <div
-      style={{
-        marginTop: "1rem",
-        border: "1px solid var(--color-border)",
-        borderRadius: "var(--radius-lg)",
-        background: "var(--color-bg-surface-alt)",
-        overflow: "hidden",
-        flexShrink: 0,
-      }}
-    >
+    <section className="quiz-history" aria-label="Quiz history">
       <button
         type="button"
         onClick={() => setExpanded((value) => !value)}
-        style={{
-          width: "100%",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-          padding: "0.75rem 1rem",
-          background: "none",
-          border: "none",
-          cursor: "pointer",
-          textAlign: "left",
-        }}
+        className="quiz-history__toggle"
+        aria-expanded={expanded}
       >
-        <span style={{ fontSize: "0.8125rem", fontWeight: 700, color: "var(--color-text-primary)" }}>
-          Quiz history ({history.length})
+        <span>
+          Quiz history
+          <span className="quiz-history__count">{history.length}</span>
         </span>
-        <span style={{ fontSize: "0.75rem", color: "var(--color-text-muted)" }}>
+        <span>
           {expanded ? "Hide" : "Show"}
         </span>
       </button>
 
       {expanded && (
-        <div style={{ borderTop: "1px solid var(--color-border)", padding: "0.75rem 1rem", display: "flex", flexDirection: "column", gap: "0.625rem" }}>
-          <p style={{ margin: 0, fontSize: "0.6875rem", color: "var(--color-text-muted)", lineHeight: 1.45 }}>
+        <div className="quiz-history__body">
+          <p className="quiz-history__legend">
             <strong>Was live</strong> — previously published for students.
             {" "}
             <strong>In Previous versions</strong> — was live; students can still review.
@@ -96,22 +79,10 @@ const QuizHistoryPanel: React.FC<QuizHistoryPanelProps> = ({
             <strong>Removed</strong> — hidden from students; you can delete it here.
           </p>
           {history.map((item) => (
-            <div
-              key={item.quiz_id}
-              style={{
-                display: "flex",
-                alignItems: "flex-start",
-                justifyContent: "space-between",
-                gap: "0.75rem",
-                padding: "0.625rem 0.75rem",
-                borderRadius: "var(--radius-md)",
-                border: "1px solid var(--color-border)",
-                background: "var(--color-bg-surface)",
-              }}
-            >
+            <div key={item.quiz_id} className="quiz-history__item">
               <div style={{ minWidth: 0, flex: 1 }}>
                 <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", flexWrap: "wrap", marginBottom: "0.25rem" }}>
-                  <span style={{ fontSize: "0.8125rem", fontWeight: 600, color: "var(--color-text-primary)" }}>
+                  <span className="quiz-history__item-title">
                     {item.title}
                   </span>
                   <span
@@ -127,17 +98,16 @@ const QuizHistoryPanel: React.FC<QuizHistoryPanelProps> = ({
                     {item.status_badge}
                   </span>
                 </div>
-                <p style={{ margin: 0, fontSize: "0.75rem", color: "var(--color-text-muted)" }}>
+                <p className="quiz-history__item-meta">
                   {item.version_label} · {item.total_questions} questions · {item.difficulty}
                 </p>
               </div>
-              <div style={{ display: "flex", gap: "0.375rem", flexShrink: 0 }}>
+              <div className="quiz-history__item-actions">
                 {item.can_view && viewingQuizId !== item.quiz_id && (
                   <button
                     type="button"
-                    className="btn-secondary"
+                    className="quiz-secondary-action"
                     onClick={() => onView(item.quiz_id)}
-                    style={{ padding: "0.3rem 0.625rem", fontSize: "0.75rem" }}
                   >
                     View
                   </button>
@@ -152,16 +122,7 @@ const QuizHistoryPanel: React.FC<QuizHistoryPanelProps> = ({
                     type="button"
                     onClick={() => onDelete(item.quiz_id)}
                     disabled={isDeleting}
-                    style={{
-                      padding: "0.3rem 0.625rem",
-                      fontSize: "0.75rem",
-                      borderRadius: "var(--radius-md)",
-                      border: "1px solid var(--color-danger, #dc2626)",
-                      background: "none",
-                      color: "var(--color-danger, #dc2626)",
-                      cursor: isDeleting ? "not-allowed" : "pointer",
-                      opacity: isDeleting ? 0.5 : 1,
-                    }}
+                    className="quiz-danger-action"
                   >
                     Delete
                   </button>
@@ -171,7 +132,7 @@ const QuizHistoryPanel: React.FC<QuizHistoryPanelProps> = ({
           ))}
         </div>
       )}
-    </div>
+    </section>
   );
 };
 

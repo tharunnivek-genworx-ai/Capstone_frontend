@@ -21,6 +21,7 @@ import { traineeSpaceProgressService } from "../../trainee_space_progress/servic
 import type { TraineeOwnSpaceProgressOut } from "../../trainee_space_progress/types/traineeSpaceProgress.types";
 import { mentorProgressService } from "../../mentor_progress_view/services/mentorProgressService";
 import type { MentorSpaceProgressSummaryOut } from "../../mentor_progress_view/types/mentorProgress.types";
+import { BookOpen, Plus, Users } from "lucide-react";
 
 
 const SpacesListPage: React.FC = () => {
@@ -56,8 +57,6 @@ const SpacesListPage: React.FC = () => {
 
   useEffect(() => {
     if (isMentor || spaces.length === 0) {
-      setSpaceProgressById({});
-      setLoadingProgressIds({});
       return;
     }
     const load = async () => {
@@ -86,8 +85,6 @@ const SpacesListPage: React.FC = () => {
 
   useEffect(() => {
     if (!isMentor || spaces.length === 0) {
-      setMentorProgressById({});
-      setLoadingMentorProgressIds({});
       return;
     }
     const load = async () => {
@@ -165,144 +162,79 @@ const SpacesListPage: React.FC = () => {
     }
   };
 
+  const openEntryModal = () => isMentor ? setShowCreate(true) : setShowJoin(true);
+
   return (
-    <div className="animate-fade-in" style={{ padding: "2rem", maxWidth: "1200px", margin: "0 auto" }}>
-      <div
-        style={{
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-          marginBottom: "2rem",
-          flexWrap: "wrap",
-          gap: "1rem",
-        }}
-      >
-        <div>
-          <h1
-            style={{
-              fontSize: "1.625rem",
-              fontWeight: 800,
-              margin: "0 0 0.25rem",
-              color: "var(--color-text-primary)",
-            }}
-          >
-            My Learning Spaces
-          </h1>
-          <p style={{ color: "var(--color-text-secondary)", fontSize: "0.875rem", margin: 0 }}>
+    <div className="space-entry-page animate-fade-in">
+      <header className="space-entry-page__header">
+        <div className="space-entry-page__heading">
+          <span className="space-entry-page__eyebrow">
+            {isMentor ? "Educator workspace" : "Your learning"}
+          </span>
+          <h1>My Learning Spaces</h1>
+          <p>
             {isLoading
-              ? "Loading…"
-              : `${total} space${total !== 1 ? "s" : ""} in your account`}
+              ? "Loading your spaces…"
+              : isMentor
+                ? `${total} space${total !== 1 ? "s" : ""} ready to build and share`
+                : `${total} space${total !== 1 ? "s" : ""} available to continue learning`}
           </p>
         </div>
         {isMentor ? (
           <button
             onClick={() => setShowCreate(true)}
-            className="btn-primary"
-            style={{ padding: "0.75rem 1.25rem" }}
+            className="btn-primary space-entry-page__primary-action"
           >
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <path d="M12 5v14M5 12h14" />
-            </svg>
+            <Plus size={18} aria-hidden="true" />
             Create Learning Space
           </button>
         ) : (
           <button
             onClick={() => setShowJoin(true)}
-            className="btn-primary"
-            style={{ padding: "0.75rem 1.25rem" }}
+            className="btn-primary space-entry-page__primary-action"
           >
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4M10 17l5-5-5-5M15 12H3" />
-            </svg>
+            <Users size={18} aria-hidden="true" />
             Join Space
           </button>
         )}
-      </div>
+      </header>
 
       {isLoading && (
-        <div style={{ display: "flex", justifyContent: "center", padding: "4rem" }}>
-          <span
-            className="spinner"
-            style={{ borderTopColor: "var(--color-primary)", width: "2.5rem", height: "2.5rem" }}
-          />
+        <div className="space-entry-page__loading" role="status">
+          <span className="spinner" />
+          <span>Preparing your learning spaces…</span>
         </div>
       )}
 
       {!isLoading && spaces.length === 0 && (
-        <div
-          style={{
-            textAlign: "center",
-            padding: "5rem 2rem",
-            display: "flex",
-            flexDirection: "column",
-            alignItems: "center",
-            gap: "1.25rem",
-          }}
-        >
-          <div
-            style={{
-              width: "80px",
-              height: "80px",
-              borderRadius: "24px",
-              background: "linear-gradient(135deg, rgba(37,99,235,0.12), rgba(37,99,235,0.04))",
-              border: "1px solid rgba(37,99,235,0.15)",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-            }}
-          >
-            <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="var(--color-primary)" strokeWidth="1.5">
-              <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" />
-            </svg>
+        <section className="space-entry-empty" aria-labelledby="space-entry-empty-title">
+          <div className="space-entry-empty__paper-stack" aria-hidden="true">
+            <div className="space-entry-empty__paper">
+              <BookOpen size={42} strokeWidth={1.4} />
+            </div>
           </div>
-          <div>
-            <h2 style={{ margin: "0 0 0.5rem", fontSize: "1.25rem", fontWeight: 700, color: "var(--color-text-primary)" }}>
-              No spaces yet
-            </h2>
-            <p style={{ margin: 0, color: "var(--color-text-muted)", fontSize: "0.875rem", lineHeight: 1.6 }}>
-              {isMentor ? (
-                <>Create your first learning space to start building your outline<br />and sharing knowledge with your learners.</>
-              ) : (
-                <>You haven't been added to any spaces yet.<br />Wait for a mentor to add you or provide an invite code.</>
-              )}
-            </p>
-          </div>
-          {isMentor ? (
-            <button
-              onClick={() => setShowCreate(true)}
-              className="btn-primary"
-              style={{ padding: "0.875rem 2rem" }}
-            >
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M12 5v14M5 12h14" />
-              </svg>
-              Create your first space
-            </button>
-          ) : (
-            <button
-              onClick={() => setShowJoin(true)}
-              className="btn-primary"
-              style={{ padding: "0.875rem 2rem" }}
-            >
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4M10 17l5-5-5-5M15 12H3" />
-              </svg>
-              Join a Space
-            </button>
+          <h2 id="space-entry-empty-title">
+            {isMentor ? "Create your first learning space" : "Join your first learning space"}
+          </h2>
+          <p>
+            {isMentor
+              ? "Build a clear topic outline, create study material, and invite learners when you are ready."
+              : "Enter the invite code shared by your mentor to access topics, materials, quizzes, and progress."}
+          </p>
+          <button onClick={openEntryModal} className="btn-primary space-entry-empty__action">
+            {isMentor ? <Plus size={18} aria-hidden="true" /> : <Users size={18} aria-hidden="true" />}
+            {isMentor ? "Create your first space" : "Join a Space"}
+          </button>
+          {!isMentor && (
+            <span className="space-entry-empty__note">
+              Don&apos;t have a code? Ask your mentor to share the space invite.
+            </span>
           )}
-        </div>
+        </section>
       )}
 
       {!isLoading && spaces.length > 0 && (
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: isMentor
-              ? "repeat(auto-fill, minmax(300px, 1fr))"
-              : "repeat(auto-fill, minmax(360px, 1fr))",
-            gap: "1.25rem",
-          }}
-        >
+        <section className={`space-entry-grid${isMentor ? "" : " space-entry-grid--trainee"}`} aria-label="Learning spaces">
           {spaces.map((space) => (
             <SpaceCard
               key={space.space_id}
@@ -319,7 +251,7 @@ const SpacesListPage: React.FC = () => {
               isMentorProgressLoading={Boolean(loadingMentorProgressIds[space.space_id])}
             />
           ))}
-        </div>
+        </section>
       )}
 
       {showCreate && (

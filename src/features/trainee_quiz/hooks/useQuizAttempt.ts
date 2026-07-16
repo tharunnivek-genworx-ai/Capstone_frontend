@@ -1,52 +1,115 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import toast from "react-hot-toast";
 import { traineeQuizService } from "../services/traineeQuizService";
 import type { CorrectOption, QuestionState, TraineeQuizOut } from "../types/traineeQuiz.types";
 import { buildQuestionState } from "../utils/questionState";
+import {
+  parseAttemptError,
+  type AbandonedAttemptTarget,
+} from "../utils/attemptErrors";
 
 interface UseQuizAttemptOptions {
   attemptId: string;
   spaceId: string;
 }
 
-function applyQuizData(data: TraineeQuizOut, flaggedQuestionIds: Set<string>) {
+function applyQuizData(data: TraineeQuizOut) {
   const sorted = [...data.questions].sort((a, b) => a.order_index - b.order_index);
   const questionStates: Record<string, QuestionState> = {};
   for (const q of sorted) {
-    questionStates[q.question_id] = buildQuestionState(q, flaggedQuestionIds.has(q.question_id));
+    questionStates[q.question_id] = buildQuestionState(
+      q,
+      q.is_flagged,
+    );
   }
   return { sorted, questionStates, resumeId: data.resume_question_id };
 }
 
-export function useQuizAttempt({ attemptId, spaceId: _spaceId }: UseQuizAttemptOptions) {
+export function useQuizAttempt({ attemptId }: UseQuizAttemptOptions) {
   const [quiz, setQuiz] = useState<TraineeQuizOut | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [currentQuestionId, setCurrentQuestionId] = useState<string | null>(null);
   const [questions, setQuestions] = useState<TraineeQuizOut["questions"]>([]);
   const [questionStates, setQuestionStates] = useState<Record<string, QuestionState>>({});
-  const [_flaggedQuestionIds, setFlaggedQuestionIds] = useState<Set<string>>(new Set());
   const [pendingSelection, setPendingSelection] = useState<CorrectOption | null>(null);
   const [isSubmittingAnswer, setIsSubmittingAnswer] = useState(false);
   const [isSubmittingQuiz, setIsSubmittingQuiz] = useState(false);
   const [feedback, setFeedback] = useState<"success" | "incorrect" | null>(null);
+  const [abandonedTarget, setAbandonedTarget] = useState<AbandonedAttemptTarget | null>(null);
+  const pendingStateRef = useRef<Map<string, {
+    is_visited?: boolean;
+    is_flagged?: boolean;
+    was_skipped?: boolean;
+    resume_question_id?: string;
+  }>>(new Map());
+  const stateFlushTimerRef = useRef<number | null>(null);
+
+  const flushNavigationState = useCallback(async () => {
+    if (stateFlushTimerRef.current !== null) {
+      window.clearTimeout(stateFlushTimerRef.current);
+      stateFlushTimerRef.current = null;
+    }
+    const pending = [...pendingStateRef.current.entries()];
+    pendingStateRef.current.clear();
+    try {
+      await Promise.all(
+        pending.map(([questionId, patch]) =>
+          traineeQuizService.patchAttemptState(attemptId, {
+            question_id: questionId,
+            ...patch,
+          }),
+        ),
+      );
+    } catch (error) {
+      for (const [questionId, patch] of pending) {
+        pendingStateRef.current.set(questionId, {
+          ...patch,
+          ...pendingStateRef.current.get(questionId),
+        });
+      }
+      throw error;
+    }
+  }, [attemptId]);
+
+  const queueNavigationState = useCallback((
+    questionId: string,
+    patch: {
+      is_visited?: boolean;
+      is_flagged?: boolean;
+      was_skipped?: boolean;
+      resume_question_id?: string;
+    },
+  ) => {
+    pendingStateRef.current.set(questionId, {
+      ...pendingStateRef.current.get(questionId),
+      ...patch,
+    });
+    if (stateFlushTimerRef.current !== null) {
+      window.clearTimeout(stateFlushTimerRef.current);
+    }
+    stateFlushTimerRef.current = window.setTimeout(() => {
+      void flushNavigationState().catch(() => {
+        // Navigation persistence is retried by the next interaction or Save & Exit.
+      });
+    }, 250);
+  }, [flushNavigationState]);
 
   const loadAttempt = useCallback(async (preferredQuestionId?: string | null) => {
     setIsLoading(true);
     setLoadError(null);
+    setAbandonedTarget(null);
     try {
       const data = await traineeQuizService.getAttempt(attemptId);
-      setFlaggedQuestionIds((currentFlags) => {
-        const applied = applyQuizData(data, currentFlags);
-        setQuiz(data);
-        setQuestions(applied.sorted);
-        setQuestionStates(applied.questionStates);
-        setCurrentQuestionId(preferredQuestionId ?? applied.resumeId);
-        return currentFlags;
-      });
+      const applied = applyQuizData(data);
+      setQuiz(data);
+      setQuestions(applied.sorted);
+      setQuestionStates(applied.questionStates);
+      setCurrentQuestionId(preferredQuestionId ?? applied.resumeId);
     } catch (err) {
-      const e = err as { response?: { data?: { detail?: string } }; message?: string };
-      setLoadError(e?.response?.data?.detail ?? e?.message ?? "Failed to load quiz attempt.");
+      const parsed = parseAttemptError(err, "Failed to load quiz attempt.");
+      setLoadError(parsed.message);
+      setAbandonedTarget(parsed.abandonedTarget);
     } finally {
       setIsLoading(false);
     }
@@ -56,12 +119,24 @@ export function useQuizAttempt({ attemptId, spaceId: _spaceId }: UseQuizAttemptO
     void loadAttempt();
   }, [loadAttempt]);
 
+  useEffect(() => () => {
+    void flushNavigationState().catch(() => {});
+  }, [flushNavigationState]);
+
   const currentQuestion = useMemo(
     () => questions.find((q) => q.question_id === currentQuestionId) ?? null,
     [questions, currentQuestionId],
   );
 
   const currentState = currentQuestion ? questionStates[currentQuestion.question_id] : null;
+
+  useEffect(() => {
+    if (!currentQuestionId || quiz?.attempt_status !== "in_progress") return;
+    queueNavigationState(currentQuestionId, {
+      is_visited: true,
+      resume_question_id: currentQuestionId,
+    });
+  }, [currentQuestionId, quiz?.attempt_status, queueNavigationState]);
 
   useEffect(() => {
     if (!currentQuestion) {
@@ -77,25 +152,28 @@ export function useQuizAttempt({ attemptId, spaceId: _spaceId }: UseQuizAttemptO
 
   const selectQuestion = useCallback((questionId: string) => {
     setCurrentQuestionId(questionId);
-  }, []);
+    queueNavigationState(questionId, {
+      is_visited: true,
+      resume_question_id: questionId,
+    });
+  }, [queueNavigationState]);
 
   const toggleFlag = useCallback(() => {
     if (!currentQuestionId) return;
-    setFlaggedQuestionIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(currentQuestionId)) next.delete(currentQuestionId);
-      else next.add(currentQuestionId);
-      return next;
-    });
     setQuestionStates((prev) => {
       const existing = prev[currentQuestionId];
       if (!existing) return prev;
+      queueNavigationState(currentQuestionId, {
+        is_flagged: !existing.isFlagged,
+        is_visited: true,
+        resume_question_id: currentQuestionId,
+      });
       return {
         ...prev,
         [currentQuestionId]: { ...existing, isFlagged: !existing.isFlagged },
       };
     });
-  }, [currentQuestionId]);
+  }, [currentQuestionId, queueNavigationState]);
 
   const clearSelection = useCallback(() => {
     if (!currentQuestion?.can_answer) return;
@@ -135,8 +213,14 @@ export function useQuizAttempt({ attemptId, spaceId: _spaceId }: UseQuizAttemptO
   );
 
   const skipQuestion = useCallback(() => {
+    if (currentQuestionId) {
+      queueNavigationState(currentQuestionId, {
+        is_visited: true,
+        was_skipped: true,
+      });
+    }
     goToAdjacent(1);
-  }, [goToAdjacent]);
+  }, [currentQuestionId, goToAdjacent, queueNavigationState]);
 
   const expandHints = useCallback(() => {
     if (!currentQuestionId || !currentState) return;
@@ -209,6 +293,7 @@ export function useQuizAttempt({ attemptId, spaceId: _spaceId }: UseQuizAttemptO
     feedback,
     isSubmittingAnswer,
     isSubmittingQuiz,
+    abandonedTarget,
     selectQuestion,
     toggleFlag,
     clearSelection,
@@ -219,6 +304,7 @@ export function useQuizAttempt({ attemptId, spaceId: _spaceId }: UseQuizAttemptO
     collapseHints,
     goToAdjacent,
     submitQuiz,
+    flushNavigationState,
     reload: loadAttempt,
   };
 }

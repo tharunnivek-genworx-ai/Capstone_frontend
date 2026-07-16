@@ -6,6 +6,15 @@ import EspaceUnpublishConfirmModal from "./EspaceUnpublishConfirmModal";
 import type { TraineeOwnSpaceProgressOut } from "../../trainee_space_progress/types/traineeSpaceProgress.types";
 import SpaceCardProgressPreview from "../../trainee_space_progress/components/SpaceCardProgressPreview";
 import type { MentorSpaceProgressSummaryOut } from "../../mentor_progress_view/types/mentorProgress.types";
+import {
+  ArrowRight,
+  BookOpen,
+  Check,
+  Clipboard,
+  Copy,
+  TriangleAlert,
+  Users,
+} from "lucide-react";
 
 interface SpaceCardProps {
   space: SpaceResponse;
@@ -72,121 +81,41 @@ const SpaceCard: React.FC<SpaceCardProps> = ({
   };
 
   return (
-    <div
-      className="card"
+    <article
+      className={`space-entry-card${space.is_published ? " space-entry-card--published" : ""}`}
       onClick={onNavigate}
-      style={{
-        cursor: "pointer",
-        transition: "border-color 0.2s, transform 0.15s, box-shadow 0.2s",
-        display: "flex",
-        flexDirection: "column",
-        gap: "1rem",
-        minHeight: isMentor ? "unset" : "270px",
-        position: "relative",
-        overflow: "hidden",
+      onKeyDown={(event) => {
+        if (event.currentTarget !== event.target) return;
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          onNavigate();
+        }
       }}
-      onMouseEnter={(e) => {
-        e.currentTarget.style.borderColor = "var(--color-primary)";
-        e.currentTarget.style.transform = "translateY(-2px)";
-        e.currentTarget.style.boxShadow = "var(--shadow-subtle)";
-      }}
-      onMouseLeave={(e) => {
-        e.currentTarget.style.borderColor = "var(--color-border)";
-        e.currentTarget.style.transform = "translateY(0)";
-        e.currentTarget.style.boxShadow = "var(--shadow-subtle)";
-      }}
+      tabIndex={0}
+      role="link"
+      aria-label={`Open ${space.space_name}`}
     >
-      <div
-        style={{
-          position: "absolute",
-          top: 0,
-          left: 0,
-          right: 0,
-          height: "3px",
-          background: space.is_published
-            ? "var(--color-success)"
-            : "var(--color-border)",
-          borderRadius: "var(--radius-lg) var(--radius-lg) 0 0",
-        }}
-      />
-
-      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: "0.75rem", paddingTop: "0.25rem" }}>
-        <div
-          style={{
-            width: "44px",
-            height: "44px",
-            borderRadius: "12px",
-            background: "linear-gradient(135deg, #2563eb22, #1d4ed822)",
-            border: "1px solid rgba(37,99,235,0.2)",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            flexShrink: 0,
-          }}
-        >
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--color-primary)" strokeWidth="2">
-            <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" />
-          </svg>
-        </div>
+      <div className="space-entry-card__topline" />
+      <div className="space-entry-card__header">
+        <span className="space-entry-card__icon" aria-hidden="true">
+          <BookOpen size={21} />
+        </span>
+        <span className={`space-entry-card__status${space.is_published ? " space-entry-card__status--live" : ""}`}>
+          {space.is_published ? "Published" : "Draft"}
+        </span>
       </div>
 
-      <div style={{ flex: 1 }}>
-        <h3
-          style={{
-            margin: "0 0 0.375rem",
-            fontSize: "1rem",
-            fontWeight: 700,
-            color: "var(--color-text-primary)",
-            overflow: "hidden",
-            textOverflow: "ellipsis",
-            whiteSpace: "nowrap",
-          }}
-          title={space.space_name}
-        >
-          {space.space_name}
-        </h3>
+      <div className="space-entry-card__content">
+        <h2 title={space.space_name}>{space.space_name}</h2>
         {space.description ? (
-          <p
-            style={{
-              margin: 0,
-              fontSize: "0.8125rem",
-              color: "var(--color-text-muted)",
-              overflow: "hidden",
-              display: "-webkit-box",
-              WebkitLineClamp: 2,
-              WebkitBoxOrient: "vertical",
-              lineHeight: 1.5,
-            }}
-          >
-            {space.description}
-          </p>
+          <p>{space.description}</p>
         ) : (
-          <p style={{ margin: 0, fontSize: "0.8125rem", color: "var(--color-text-muted)", fontStyle: "italic" }}>
-            No description
-          </p>
+          <p className="space-entry-card__description--empty">No description added</p>
         )}
         {space.is_transferred_away && (
-          <div
-            style={{
-              marginTop: "0.5rem",
-              padding: "0.5rem 0.75rem",
-              background: "rgba(239, 68, 68, 0.08)",
-              border: "1px solid rgba(239, 68, 68, 0.2)",
-              borderRadius: "8px",
-              color: "var(--color-danger)",
-              fontSize: "0.75rem",
-              fontWeight: 500,
-              display: "flex",
-              alignItems: "center",
-              gap: "0.375rem",
-            }}
-          >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" style={{ flexShrink: 0 }}>
-              <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
-              <line x1="12" y1="9" x2="12" y2="13" />
-              <line x1="12" y1="17" x2="12.01" y2="17" />
-            </svg>
-            <span>Learning spaces has been transferred, contact your ITadmin.</span>
+          <div className="space-entry-card__warning" role="status">
+            <TriangleAlert size={15} aria-hidden="true" />
+            <span>This space was transferred. Contact your IT admin for changes.</span>
           </div>
         )}
       </div>
@@ -199,166 +128,62 @@ const SpaceCard: React.FC<SpaceCardProps> = ({
       )}
 
       {isMentor && (
-        <div
-          style={{
-            border: "1px solid var(--color-border)",
-            borderRadius: "12px",
-            padding: "0.625rem",
-            background: "#f8fafc",
-            display: "flex",
-            gap: "0.75rem",
-            justifyContent: "space-between",
-            alignItems: "center",
-          }}
-        >
+        <div className="space-entry-card__metrics">
           {isMentorProgressLoading ? (
-            <div style={{ display: "flex", justifyContent: "center", width: "100%", padding: "0.5rem 0" }}>
-              <span className="spinner" style={{ width: "1.1rem", height: "1.1rem", borderTopColor: "var(--color-primary)" }} />
+            <div className="space-entry-card__metric-loading" role="status">
+              <span className="spinner" />
+              <span className="sr-only">Loading progress summary</span>
             </div>
           ) : mentorProgress ? (
             <>
-              {/* Total Topics */}
-              <div style={{ display: "flex", alignItems: "center", gap: "0.625rem" }}>
-                <div
-                  style={{
-                    width: "40px",
-                    height: "40px",
-                    borderRadius: "999px",
-                    background: "rgba(37,99,235,0.08)",
-                    border: "1px solid rgba(37,99,235,0.15)",
-                    display: "grid",
-                    placeItems: "center",
-                    flexShrink: 0,
-                    color: "var(--color-primary)",
-                  }}
-                >
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                    <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" />
-                    <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" />
-                  </svg>
-                </div>
+              <div className="space-entry-card__metric">
+                <BookOpen size={17} aria-hidden="true" />
                 <div>
-                  <p style={{ margin: 0, fontSize: "0.6875rem", color: "#6b7280" }}>Total topics</p>
-                  <p style={{ margin: "1px 0 0", fontSize: "0.75rem", fontWeight: 700, color: "#111827" }}>
-                    {mentorProgress.total_nodes}
-                  </p>
+                  <span>Total topics</span>
+                  <strong>{mentorProgress.total_nodes}</strong>
                 </div>
               </div>
-
-              {/* Enrolled Trainees */}
-              <div style={{ display: "flex", alignItems: "center", gap: "0.625rem" }}>
-                <div
-                  style={{
-                    width: "40px",
-                    height: "40px",
-                    borderRadius: "999px",
-                    background: "rgba(22,163,74,0.08)",
-                    border: "1px solid rgba(22,163,74,0.15)",
-                    display: "grid",
-                    placeItems: "center",
-                    flexShrink: 0,
-                    color: "#16a34a",
-                  }}
-                >
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                    <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
-                    <circle cx="9" cy="7" r="4" />
-                  </svg>
-                </div>
+              <div className="space-entry-card__metric">
+                <Users size={17} aria-hidden="true" />
                 <div>
-                  <p style={{ margin: 0, fontSize: "0.6875rem", color: "#6b7280" }}>Enrolled trainees</p>
-                  <p style={{ margin: "1px 0 0", fontSize: "0.75rem", fontWeight: 700, color: "#111827" }}>
-                    {mentorProgress.total_enrolled_trainees}
-                  </p>
+                  <span>Enrolled learners</span>
+                  <strong>{mentorProgress.total_enrolled_trainees}</strong>
                 </div>
               </div>
             </>
           ) : (
-            <div style={{ fontSize: "0.75rem", color: "#6b7280", textAlign: "center", width: "100%" }}>
-              No progress summary
-            </div>
+            <div className="space-entry-card__metric-empty">Progress appears after topics are added.</div>
           )}
         </div>
       )}
-
 
       {isMentor && space.invite_code && (
-        <div
+        <button
+          type="button"
           onClick={handleCopy}
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: "0.625rem",
-            padding: "0.625rem 0.875rem",
-            background: "var(--color-surface)",
-            border: "1px solid var(--color-border)",
-            borderRadius: "var(--radius-md)",
-            cursor: "copy",
-            transition: "border-color 0.15s",
-          }}
-          onMouseEnter={(e) => (e.currentTarget.style.borderColor = "var(--color-primary)")}
-          onMouseLeave={(e) => (e.currentTarget.style.borderColor = "var(--color-border)")}
-          title="Click to copy invite code"
+          className="space-entry-card__invite"
+          aria-label={`Copy invite code ${space.invite_code}`}
         >
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--color-text-muted)" strokeWidth="2" style={{ flexShrink: 0 }}>
-            <path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6" />
-            <polyline points="15 3 21 3 21 9" />
-            <line x1="10" y1="14" x2="21" y2="3" />
-          </svg>
-          <code
-            style={{
-              fontSize: "0.875rem",
-              fontWeight: 700,
-              letterSpacing: "0.1em",
-              color: "var(--color-primary)",
-              fontFamily: "monospace",
-              flex: 1,
-            }}
-          >
-            {space.invite_code}
-          </code>
-          {codeCopied ? (
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--color-success)" strokeWidth="2.5" style={{ flexShrink: 0 }}>
-              <polyline points="20 6 9 17 4 12" />
-            </svg>
-          ) : (
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--color-text-muted)" strokeWidth="2" style={{ flexShrink: 0 }}>
-              <rect x="9" y="9" width="13" height="13" rx="2" />
-              <path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1" />
-            </svg>
-          )}
-        </div>
+          <Clipboard size={15} aria-hidden="true" />
+          <span>Invite code</span>
+          <code>{space.invite_code}</code>
+          {codeCopied ? <Check size={15} aria-hidden="true" /> : <Copy size={15} aria-hidden="true" />}
+        </button>
       )}
 
-      <div
-        style={{
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-          borderTop: "1px solid var(--color-border)",
-          paddingTop: "0.75rem",
-        }}
-      >
-        <p style={{ margin: 0, fontSize: "0.75rem", color: "var(--color-text-muted)" }}>
+      <footer className="space-entry-card__footer">
+        <time dateTime={space.created_at}>
           {new Date(space.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
-        </p>
-        <div style={{ display: "flex", gap: "0.5rem" }} onClick={(e) => e.stopPropagation()}>
+        </time>
+        <div className="space-entry-card__actions" onClick={(e) => e.stopPropagation()}>
           {isMentor && (
             <button
               onClick={handlePublishClick}
               className={space.is_published ? "btn-danger" : "btn-primary"}
-              style={{ padding: "0.3rem 0.7rem", fontSize: "0.75rem" }}
               disabled={isPublishing || isLoadingPreview}
             >
               {isPublishing || isLoadingPreview ? (
-                <span
-                  className="spinner"
-                  style={{
-                    borderTopColor: space.is_published ? "var(--color-danger)" : "var(--color-primary)",
-                    width: "0.875rem",
-                    height: "0.875rem",
-                  }}
-                />
+                <span className="spinner" />
               ) : space.is_published ? (
                 "Unpublish"
               ) : (
@@ -368,16 +193,13 @@ const SpaceCard: React.FC<SpaceCardProps> = ({
           )}
           <button
             onClick={onNavigate}
-            className="btn-primary"
-            style={{ padding: "0.3rem 0.7rem", fontSize: "0.75rem" }}
+            className="btn-secondary"
           >
             Open
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <polyline points="9 18 15 12 9 6" />
-            </svg>
+            <ArrowRight size={14} aria-hidden="true" />
           </button>
         </div>
-      </div>
+      </footer>
 
       {unpublishPreview && (
         <EspaceUnpublishConfirmModal
@@ -387,7 +209,7 @@ const SpaceCard: React.FC<SpaceCardProps> = ({
           isSubmitting={isPublishing}
         />
       )}
-    </div>
+    </article>
   );
 };
 

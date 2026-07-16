@@ -1,9 +1,10 @@
 import React, { useEffect, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { traineeQuizService } from "../services/traineeQuizService";
 import type { ArchivedQuizReviewOut } from "../types/traineeQuiz.types";
 import { traineeSpaceUrl } from "../../trainee_study_material/utils/traineeSpaceNavigation";
 import QuizRichText from "./QuizRichText";
+import { parseAttemptError } from "../utils/attemptErrors";
 import "../styles/traineeQuiz.css";
 
 const ArchivedQuizReviewPage: React.FC = () => {
@@ -13,6 +14,8 @@ const ArchivedQuizReviewPage: React.FC = () => {
     quizId: string;
   }>();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const attemptId = searchParams.get("attempt");
   const [review, setReview] = useState<ArchivedQuizReviewOut | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -22,17 +25,16 @@ const ArchivedQuizReviewPage: React.FC = () => {
     const load = async () => {
       setIsLoading(true);
       try {
-        const data = await traineeQuizService.reviewArchivedQuiz(nodeId, quizId);
+        const data = await traineeQuizService.reviewArchivedQuiz(nodeId, quizId, attemptId);
         setReview(data);
       } catch (err) {
-        const e = err as { response?: { data?: { detail?: string } }; message?: string };
-        setError(e?.response?.data?.detail ?? e?.message ?? "Failed to load quiz review.");
+        setError(parseAttemptError(err, "Failed to load quiz review.").message);
       } finally {
         setIsLoading(false);
       }
     };
     void load();
-  }, [nodeId, quizId]);
+  }, [nodeId, quizId, attemptId]);
 
   const handleBack = () => {
     if (spaceId) navigate(traineeSpaceUrl(spaceId, nodeId));

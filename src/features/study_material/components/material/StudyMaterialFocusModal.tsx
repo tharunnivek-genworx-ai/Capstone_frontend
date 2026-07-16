@@ -41,7 +41,8 @@ const StudyMaterialFocusModal: React.FC<StudyMaterialFocusModalProps> = ({
   }, [onClose]);
 
   return createPortal(
-    <div
+    <div className="learning-experience learning-portal">
+      <div
       className="study-material-focus-modal"
       role="dialog"
       aria-modal="true"
@@ -83,6 +84,7 @@ const StudyMaterialFocusModal: React.FC<StudyMaterialFocusModalProps> = ({
           documentLayout
           hideReferenceImages
         />
+      </div>
       </div>
     </div>,
     document.body

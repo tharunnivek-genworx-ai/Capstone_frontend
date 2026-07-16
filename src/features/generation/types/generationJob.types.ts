@@ -32,12 +32,30 @@ export interface GenerationRunActionsOut {
 export interface GenerationRunOut {
   run_id: string;
   pipeline: GenerationPipeline;
+  resource_type: "node" | "quiz";
+  resource_id: string;
+  node_id: string;
+  space_id: string;
+  mentor_id: string;
   status: string;
+  last_completed_node?: string | null;
+  generation_mode: string;
+  artifact_run_id?: string | null;
+  progress_step_index: number;
   error_message?: string | null;
   error_type?: string | null;
+  next_llm_retry_at?: string | null;
   resumable: boolean;
   seconds_until_retry?: number | null;
-  attempt_count?: number;
+  attempt_count: number;
+  created_at: string;
+  updated_at: string;
+  completed_at?: string | null;
+  paused_at?: string | null;
+  abandoned_at?: string | null;
+  pause_reason?: string | null;
+  abandon_reason?: string | null;
+  fingerprint_mismatch?: boolean;
   actions?: GenerationRunActionsOut | null;
 }
 

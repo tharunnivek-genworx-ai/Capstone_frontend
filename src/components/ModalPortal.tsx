@@ -7,6 +7,9 @@ interface ModalPortalProps {
 
 /** Renders modals on document.body so they sit above the node detail header. */
 const ModalPortal: React.FC<ModalPortalProps> = ({ children }) =>
-  createPortal(children, document.body);
+  createPortal(
+    <div className="learning-experience learning-portal">{children}</div>,
+    document.body,
+  );
 
 export default ModalPortal;

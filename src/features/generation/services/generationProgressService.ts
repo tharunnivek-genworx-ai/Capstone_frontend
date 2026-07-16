@@ -78,15 +78,87 @@ export const generationJobService = {
     return response.data;
   },
 
+  /**
+   * After POST /resume, progress can briefly still read "paused" from a stale
+   * snapshot. Wait until the durable run row says running (or a real terminal).
+   */
+  async waitUntilResumeLive(
+    runId: string,
+    onProgress?: (progress: GenerationProgressOut) => void,
+  ): Promise<GenerationProgressOut> {
+    for (let attempt = 0; attempt < MAX_NOT_FOUND_RETRIES + 4; attempt += 1) {
+      try {
+        const run = await this.getRun(runId);
+        if (run.status === "running") {
+          const live = await generationProgressService.get(runId);
+          // Prefer run-row authority when progress storage lags the resume write.
+          const normalized: GenerationProgressOut =
+            live.status === "running"
+              ? live
+              : { ...live, status: "running" };
+          onProgress?.(normalized);
+          return normalized;
+        }
+        if (
+          run.status === "completed"
+          || run.status === "paused"
+          || run.status === "failed"
+          || run.status === "abandoned"
+        ) {
+          const live = await generationProgressService.get(runId);
+          const status =
+            run.status === "abandoned" || run.status === "failed"
+              ? "failed"
+              : run.status === "completed"
+                ? "completed"
+                : "paused";
+          const terminal: GenerationProgressOut = {
+            ...live,
+            status,
+            error:
+              status === "failed"
+                ? live.error ?? run.error_message ?? "Generation failed."
+                : live.error,
+          };
+          onProgress?.(terminal);
+          return terminal;
+        }
+      } catch (error) {
+        if (!isNotFoundError(error) || attempt >= MAX_NOT_FOUND_RETRIES) {
+          throw error;
+        }
+      }
+      await sleep(POLL_INTERVAL_MS);
+    }
+    throw new Error("Resume did not become active in time. Please try again.");
+  },
+
   async resumeJob(
     runId: string,
     onProgress?: (progress: GenerationProgressOut) => void,
+    options?: {
+      /** Fires only after the run is confirmed running with live progress. */
+      onResumeLive?: (runId: string) => void;
+    },
   ): Promise<{
     runId: string;
     progress: GenerationProgressOut;
     result: GenerationRunResultOut | null;
   }> {
     await this.resumeRun(runId);
+    const live = await this.waitUntilResumeLive(runId, onProgress);
+    if (live.status !== "running") {
+      if (live.status === "paused") {
+        return { runId, progress: live, result: null };
+      }
+      if (live.status === "failed") {
+        throw new GenerationJobFailedError(live.error ?? "Generation failed.", runId);
+      }
+      const result = await this.getResult(runId);
+      return { runId, progress: live, result };
+    }
+
+    options?.onResumeLive?.(runId);
     const progress = await this.waitForCompletion(runId, onProgress);
     if (progress.status === "paused") {
       return { runId, progress, result: null };
@@ -108,33 +180,46 @@ export const generationJobService = {
       try {
         const progress = await generationProgressService.get(runId);
         notFoundRetries = 0;
-        onProgress?.(progress);
-        if (
-          progress.status === "completed"
-          || progress.status === "failed"
-          || progress.status === "paused"
-        ) {
-          return progress;
-        }
 
-        // Progress polling can lag behind the durable run row — reconcile.
+        // Progress storage can lag the durable run row (especially right after
+        // resume). Always reconcile before treating paused/failed as terminal.
         try {
           const run = await this.getRun(runId);
-          if (run.status === "completed") {
-            return { ...progress, status: "completed" };
-          }
-          if (run.status === "paused") {
-            return { ...progress, status: "paused" };
-          }
-          if (run.status === "failed" || run.status === "abandoned") {
-            return {
+          if (run.status === "running") {
+            const normalized: GenerationProgressOut =
+              progress.status === "running"
+                ? progress
+                : { ...progress, status: "running" };
+            onProgress?.(normalized);
+            // keep polling
+          } else if (run.status === "completed") {
+            const done: GenerationProgressOut = { ...progress, status: "completed" };
+            onProgress?.(done);
+            return done;
+          } else if (run.status === "paused") {
+            const paused: GenerationProgressOut = { ...progress, status: "paused" };
+            onProgress?.(paused);
+            return paused;
+          } else if (run.status === "failed" || run.status === "abandoned") {
+            const failed: GenerationProgressOut = {
               ...progress,
               status: "failed",
               error: progress.error ?? run.error_message ?? "Generation failed.",
             };
+            onProgress?.(failed);
+            return failed;
+          } else {
+            onProgress?.(progress);
           }
         } catch {
-          // Keep polling progress when run metadata is temporarily unavailable.
+          onProgress?.(progress);
+          if (
+            progress.status === "completed"
+            || progress.status === "failed"
+            || progress.status === "paused"
+          ) {
+            return progress;
+          }
         }
       } catch (error) {
         if (isNotFoundError(error) && notFoundRetries < MAX_NOT_FOUND_RETRIES) {

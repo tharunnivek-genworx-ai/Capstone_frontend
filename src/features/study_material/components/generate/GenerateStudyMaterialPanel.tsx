@@ -1,10 +1,13 @@
 // GenerateStudyMaterialPanel.tsx
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import ModalPortal from "../../../../components/ModalPortal";
 import "../../styles/generateStudyMaterial.css";
 import type { NodeTreeNode, EffectiveInstructionPart } from "../../../spaces/types/node.types";
 import type { UseStudyMaterialReturn } from "../../hooks/useStudyMaterial";
 import type { InstructionMode } from "./instructionMode.types";
+import {
+  isApproachDirty as checkApproachDirty,
+} from "./instructionModeUtils";
 import GenerateSetupPanel from "./GenerateSetupPanel";
 
 export interface GenerateStudyMaterialPanelProps {
@@ -27,18 +30,8 @@ export interface GenerateStudyMaterialPanelProps {
   isWaitingForGenerateAll?: boolean;
   /** A study-material run is paused (resumable). Blocks new generation until resumed/deleted. */
   runPaused?: boolean;
-}
-
-function detectSavedMode(node: NodeTreeNode): InstructionMode {
-  if ((node.node_specific_instruction ?? "").trim()) return "replace";
-  if ((node.node_additive_instruction ?? "").trim()) return "extend";
-  return "inherit";
-}
-
-function getSavedModeText(node: NodeTreeNode, savedMode: InstructionMode): string {
-  if (savedMode === "replace") return (node.node_specific_instruction ?? "").trim();
-  if (savedMode === "extend") return (node.node_additive_instruction ?? "").trim();
-  return "";
+  /** A failed durable run can still be resumed or deleted from Material. */
+  runFailed?: boolean;
 }
 
 function isApproachDirty(
@@ -46,9 +39,7 @@ function isApproachDirty(
   mode: InstructionMode,
   modeText: string
 ): boolean {
-  const savedMode = detectSavedMode(node);
-  if (mode !== savedMode) return true;
-  return modeText.trim() !== getSavedModeText(node, savedMode);
+  return checkApproachDirty(node, mode, modeText);
 }
 
 export default function GenerateStudyMaterialPanel({
@@ -61,15 +52,27 @@ export default function GenerateStudyMaterialPanel({
   onBranchDefaultChange,
   previewParts,
   isSaving,
+  showSavedConfirm,
   onSave,
   onDiscard,
+  onNavigateToNode,
   sm,
   onOpenRefModal,
   onOpenMediaModal,
   isWaitingForGenerateAll = false,
   runPaused = false,
+  runFailed = false,
 }: GenerateStudyMaterialPanelProps) {
   const [showNoInstructionWarning, setShowNoInstructionWarning] = useState(false);
+
+  useEffect(() => {
+    if (!showNoInstructionWarning) return;
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setShowNoInstructionWarning(false);
+    };
+    document.addEventListener("keydown", handleKeyDown);
+    return () => document.removeEventListener("keydown", handleKeyDown);
+  }, [showNoInstructionWarning]);
 
   const branchDefaultDirty =
     branchDefault.trim() !== (node.tree_default_instruction ?? "").trim();
@@ -78,8 +81,16 @@ export default function GenerateStudyMaterialPanel({
   const handleOpenExisting = useCallback(() => sm.setCurrentPage(2), [sm]);
 
   const handleGenerateClick = useCallback(() => {
-    if (runPaused) return;
+    if (runPaused || runFailed) return;
     if (isWaitingForGenerateAll && !sm.isGenerating) return;
+    if (branchDefaultDirty || approachDirty) return;
+
+    const ignoringSectionDefaults = mode === "replace" && !modeText.trim();
+    if (ignoringSectionDefaults) {
+      void sm.handleGenerateStudyMaterial();
+      return;
+    }
+
     const hasInherited = previewParts.some(
       (p) => p.type === "inherited" || p.type === "branch-default"
     );
@@ -93,20 +104,39 @@ export default function GenerateStudyMaterialPanel({
     } else {
       void sm.handleGenerateStudyMaterial();
     }
-  }, [previewParts, mode, modeText, branchDefault, sm, isWaitingForGenerateAll, runPaused]);
+  }, [
+    previewParts,
+    mode,
+    modeText,
+    branchDefault,
+    branchDefaultDirty,
+    approachDirty,
+    sm,
+    isWaitingForGenerateAll,
+    runPaused,
+    runFailed,
+  ]);
 
   const handleContinueFromWarning = useCallback(() => {
-    if (runPaused) return;
+    if (runPaused || runFailed) return;
     if (isWaitingForGenerateAll && !sm.isGenerating) return;
     setShowNoInstructionWarning(false);
     void sm.handleGenerateStudyMaterial();
-  }, [sm, isWaitingForGenerateAll, runPaused]);
+  }, [sm, isWaitingForGenerateAll, runPaused, runFailed]);
 
   const handleRegenerate = useCallback(() => {
-    if (runPaused) return;
+    if (runPaused || runFailed) return;
     if (isWaitingForGenerateAll && !sm.isGenerating) return;
+    if (branchDefaultDirty || approachDirty) return;
     sm.setShowRegenerateConfirmModal(true);
-  }, [sm, isWaitingForGenerateAll, runPaused]);
+  }, [
+    sm,
+    isWaitingForGenerateAll,
+    runPaused,
+    runFailed,
+    branchDefaultDirty,
+    approachDirty,
+  ]);
 
   const handleAddInstructionFromWarning = useCallback(() => {
     setShowNoInstructionWarning(false);
@@ -159,6 +189,7 @@ export default function GenerateStudyMaterialPanel({
         onBranchDefaultChange={onBranchDefaultChange}
         previewParts={previewParts}
         isSaving={isSaving}
+        showSavedConfirm={showSavedConfirm}
         onSave={onSave}
         onDiscard={onDiscard}
         branchDefaultDirty={branchDefaultDirty}
@@ -170,99 +201,59 @@ export default function GenerateStudyMaterialPanel({
         clearDraftsBlockReason={sm.clearDraftsBlockReason}
         isGenerating={sm.isGenerating}
         isDeletingDrafts={sm.isDeletingDrafts}
+        isLoadingGenerationSource={sm.isLoadingGenerationSource}
+        isLoadingTopicResources={sm.isLoadingTopicResources}
         isWaitingForGenerateAll={isWaitingForGenerateAll && !sm.isGenerating}
         runPaused={runPaused}
+        runFailed={runFailed}
         onOpenRefModal={onOpenRefModal}
         onOpenMediaModal={onOpenMediaModal}
         onOpenExisting={handleOpenExisting}
         onGenerate={handleGenerateClick}
         onRegenerate={handleRegenerate}
+        onNavigateToNode={onNavigateToNode}
       />
 
       {showNoInstructionWarning && (
         <ModalPortal>
           <div
             onClick={() => setShowNoInstructionWarning(false)}
-            style={{
-              position: "fixed",
-              inset: 0,
-              background: "rgba(0,0,0,0.65)",
-              zIndex: 120,
-              backdropFilter: "blur(4px)",
-            }}
+            className="gsm-queue-modal__backdrop"
           />
-          <div
-            style={{
-              position: "fixed",
-              inset: 0,
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              zIndex: 130,
-              pointerEvents: "none",
-            }}
-          >
+          <div className="gsm-queue-modal__layer">
             <div
-              className="animate-fade-in"
+              className="gsm-queue-modal animate-fade-in"
               role="dialog"
               aria-modal="true"
               aria-labelledby="gsm-no-instruction-warning-title"
-              style={{
-                pointerEvents: "auto",
-                width: "min(440px, 95vw)",
-                background: "var(--color-surface-2)",
-                border: "1px solid var(--color-border)",
-                borderRadius: "var(--radius-xl)",
-                boxShadow: "0 24px 80px rgba(0,0,0,0.6)",
-                overflow: "hidden",
-              }}
             >
-              <div
-                style={{
-                  padding: "1.25rem 1.5rem",
-                  borderBottom: "1px solid var(--color-border)",
-                }}
-              >
-                <h2
-                  id="gsm-no-instruction-warning-title"
-                  style={{
-                    margin: 0,
-                    fontSize: "1rem",
-                    fontWeight: 700,
-                    color: "var(--color-text-primary)",
-                  }}
-                >
+              <div className="gsm-queue-modal__header gsm-queue-modal__header--warning">
+                <span>Before generation</span>
+                <h2 id="gsm-no-instruction-warning-title">
                   Generate without instructions?
                 </h2>
               </div>
 
-              <div style={{ padding: "1.5rem" }}>
-                <p
-                  style={{
-                    fontSize: "0.875rem",
-                    color: "var(--color-text-secondary)",
-                    margin: "0 0 1.5rem",
-                    lineHeight: 1.6,
-                  }}
-                >
+              <div className="gsm-queue-modal__body">
+                <p className="gsm-queue-modal__copy">
                   You haven&apos;t set any teaching instructions for this topic or
                   section. The AI will write a generic draft.
                 </p>
-
-                <div style={{ display: "flex", gap: "0.75rem" }}>
+              </div>
+              <div className="gsm-queue-modal__footer">
+                <span />
+                <div>
                   <button
                     type="button"
                     onClick={handleContinueFromWarning}
-                    className="btn-secondary"
-                    style={{ flex: 1 }}
+                    className="as-button as-button--secondary"
                   >
                     Continue
                   </button>
                   <button
                     type="button"
                     onClick={handleAddInstructionFromWarning}
-                    className="btn-primary"
-                    style={{ flex: 1 }}
+                    className="as-button as-button--primary"
                   >
                     Add a note
                   </button>

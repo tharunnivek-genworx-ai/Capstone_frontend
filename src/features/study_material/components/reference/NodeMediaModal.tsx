@@ -107,7 +107,7 @@ const NodeMediaModal: React.FC<NodeMediaModalProps> = ({
           added += 1;
         }
         toast.success(
-          added === 1 ? "Topic resource added." : `${added} topic resources added.`
+          added === 1 ? "Student resource added." : `${added} student resources added.`
         );
       } else if (needsLink) {
         if (!linkUrl.trim()) return;
@@ -117,7 +117,7 @@ const NodeMediaModal: React.FC<NodeMediaModalProps> = ({
           linkUrl.trim(),
           title.trim() || undefined
         );
-        toast.success("Topic resource added.");
+        toast.success("Student resource added.");
       }
       resetForm();
       await onRefresh();
@@ -164,7 +164,7 @@ const NodeMediaModal: React.FC<NodeMediaModalProps> = ({
       <div className="reference-material-modal">
         <div className="reference-material-modal__header">
           <div>
-            <h3 className="reference-material-modal__title">Topic resources</h3>
+            <h3 className="reference-material-modal__title">Student resources</h3>
             <p className="reference-material-modal__subtitle">{nodeTitle}</p>
           </div>
           <button type="button" className="reference-material-modal__close" onClick={onClose} aria-label="Close">
@@ -184,7 +184,7 @@ const NodeMediaModal: React.FC<NodeMediaModalProps> = ({
           <section className="reference-material-modal__section">
             <h4 className="reference-material-modal__section-title">Attached resources</h4>
             {nodeMedia.length === 0 ? (
-              <p className="reference-material-modal__empty">No topic resources yet.</p>
+              <p className="reference-material-modal__empty">No student resources yet.</p>
             ) : (
               <ul className="reference-material-modal__list">
                 {nodeMedia.map((media) => {

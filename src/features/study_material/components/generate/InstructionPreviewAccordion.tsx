@@ -2,7 +2,7 @@ import { useState } from "react";
 import { ChevronDown, Eye, Shield } from "lucide-react";
 import type { EffectiveInstructionPart } from "../../../spaces/types/node.types";
 import type { InstructionMode } from "./instructionMode.types";
-import { buildInstructionPreviewRows } from "./instructionPreviewContent";
+import { buildFromAboveTopicsContent, buildInstructionPreviewRows } from "./instructionPreviewContent";
 
 interface InstructionPreviewAccordionProps {
   mode: InstructionMode;
@@ -11,6 +11,10 @@ interface InstructionPreviewAccordionProps {
   previewParts: EffectiveInstructionPart[];
   isRootTopic?: boolean;
   embedded?: boolean;
+  hasUnsavedChanges?: boolean;
+  generationSourceTitle?: string | null;
+  learnerResourceCount?: number;
+  onNavigateToNode?: (nodeId: string) => void;
 }
 
 export default function InstructionPreviewAccordion({
@@ -20,14 +24,28 @@ export default function InstructionPreviewAccordion({
   previewParts,
   isRootTopic = false,
   embedded = false,
+  hasUnsavedChanges = false,
+  generationSourceTitle = null,
+  learnerResourceCount = 0,
+  onNavigateToNode,
 }: InstructionPreviewAccordionProps) {
   const [isOpen, setIsOpen] = useState(false);
 
   const { defaultStyle: defaultStyleContent, topicNote: topicNoteContent, override: overrideContent } =
-    buildInstructionPreviewRows(mode, modeText, branchDefault, previewParts, isRootTopic);
+    buildInstructionPreviewRows(mode, modeText, branchDefault, previewParts);
+
+  const fromAboveTopicsContent = !isRootTopic
+    ? buildFromAboveTopicsContent(previewParts, mode, onNavigateToNode)
+    : null;
 
   const previewBody = (
     <div id="gsm-preview-body" className="gsm-preview__body" role="region">
+      {!isRootTopic && (
+        <div className="gsm-preview__row">
+          <div className="gsm-preview__plabel">From the above topics</div>
+          <div className="gsm-preview__pval">{fromAboveTopicsContent}</div>
+        </div>
+      )}
       <div className="gsm-preview__row">
         <div className="gsm-preview__plabel">Default style (whole section)</div>
         <div className="gsm-preview__pval">{defaultStyleContent}</div>
@@ -40,9 +58,25 @@ export default function InstructionPreviewAccordion({
         <div className="gsm-preview__plabel">Custom override</div>
         <div className="gsm-preview__pval">{overrideContent}</div>
       </div>
+      <div className="gsm-preview__row">
+        <div className="gsm-preview__plabel">Generation source</div>
+        <div className={`gsm-preview__pval${generationSourceTitle ? "" : " gsm-preview__pval--empty"}`}>
+          {generationSourceTitle ?? "No source document selected"}
+        </div>
+      </div>
+      <div className="gsm-preview__row">
+        <div className="gsm-preview__plabel">Student resources</div>
+        <div className="gsm-preview__pval gsm-preview__pval--empty">
+          {learnerResourceCount > 0
+            ? `${learnerResourceCount} resource${learnerResourceCount === 1 ? "" : "s"} excluded from AI context`
+            : "None — student resources are never added to AI context automatically"}
+        </div>
+      </div>
       <p className="gsm-preview__footnote">
         <Shield size={13} strokeWidth={1.8} aria-hidden />
-        This is the exact instruction AI receives — nothing hidden, nothing extra.
+        {hasUnsavedChanges
+          ? "Preview includes unsaved edits. Save them before generation so the backend receives this configuration."
+          : "This is the saved instruction and source configuration the next generation run will use."}
       </p>
     </div>
   );

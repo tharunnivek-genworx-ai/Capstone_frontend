@@ -17,5 +17,4 @@ export interface GenerationProgressOut {
   current_step_index: number;
   steps: GenerationProgressStep[];
   error?: string | null;
-  pause_reason?: string | null;
 }

@@ -69,6 +69,11 @@ describe("partitionHistoryVersions", () => {
         display_label: "v10",
       }),
       makeVersion({
+        version_id: "student-archive-1",
+        mentor_display_badge: "In student archive",
+        display_label: "v9",
+      }),
+      makeVersion({
         version_id: "removed-1",
         mentor_display_badge: "Removed from students",
         display_label: "v11",
@@ -96,7 +101,10 @@ describe("partitionHistoryVersions", () => {
 
     const partitions = partitionHistoryVersions(versionHistory, archivedVersionHistory);
 
-    expect(partitions.studentArchive.map((v) => v.version_id)).toEqual(["prev-1"]);
+    expect(partitions.studentArchive.map((v) => v.version_id)).toEqual([
+      "prev-1",
+      "student-archive-1",
+    ]);
     expect(partitions.removedFromStudents.map((v) => v.version_id)).toEqual(["removed-1"]);
     expect(partitions.mentorArchive.map((v) => v.version_id)).toEqual(["archived-1"]);
     expect(partitions.workspaceDrafts.map((v) => v.version_id)).toEqual(["draft-1"]);

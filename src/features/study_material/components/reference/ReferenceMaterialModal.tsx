@@ -91,7 +91,9 @@ const ReferenceMaterialModal: React.FC<ReferenceMaterialModalProps> = ({
   };
 
   const handleVisibilityChange = async (next: boolean) => {
-    if (!existing) {
+    // While a replacement is staged, this switch configures the new upload.
+    // It must not mutate the currently active source before Upload is confirmed.
+    if (!existing || selectedFile) {
       setIsVisibleToTrainees(next);
       return;
     }
@@ -105,7 +107,7 @@ const ReferenceMaterialModal: React.FC<ReferenceMaterialModalProps> = ({
       onUploaded(material);
       toast.success(
         next
-          ? "Source document is now visible to students in topic resources."
+          ? "Source document is now visible to students in student resources."
           : "Source document hidden from students."
       );
     } catch (err) {
@@ -157,7 +159,7 @@ const ReferenceMaterialModal: React.FC<ReferenceMaterialModalProps> = ({
           {!isViewMode && (
             <p className="reference-material-modal__hint">
               Upload a PDF or document that the AI will read when generating study material for this topic.
-              Optionally share the same file with students in topic resources.
+              Optionally share the same file with students in student resources.
             </p>
           )}
 
@@ -288,7 +290,7 @@ const ReferenceMaterialModal: React.FC<ReferenceMaterialModalProps> = ({
                 <span className="reference-material-modal__visibility-text">
                   <strong>Share with students</strong>
                   <span>
-                    Show this source document in topic resources for trainees. Extracted
+                    Show this source document in student resources for trainees. Extracted
                     figures from the PDF are shared automatically when study material is
                     generated — you do not need to upload images separately.
                   </span>

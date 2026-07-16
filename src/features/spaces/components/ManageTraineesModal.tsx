@@ -586,7 +586,10 @@ const ManageTraineesModal: React.FC<ManageTraineesModalProps> = ({ spaceId, onCl
     </>
   );
 
-  return createPortal(modalContent, document.body);
+  return createPortal(
+    <div className="learning-experience learning-portal">{modalContent}</div>,
+    document.body,
+  );
 };
 
 export default ManageTraineesModal;

@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState } from "react";
 import type {
   DetFailureDisplayOut,
   QcWarningPresentationOut,
@@ -19,8 +19,10 @@ import {
 
 interface StudyMaterialQcWarningPanelProps {
   activeVersion: StudyMaterialVersionOut;
-  onAcceptDraft: () => void;
+  onAcceptDraft: () => Promise<void>;
   onDiscardDrafts: () => void;
+  canDiscardDrafts?: boolean;
+  discardBlockReason?: string | null;
 }
 
 function DetFailureList({
@@ -79,7 +81,10 @@ const StudyMaterialQcWarningPanel: React.FC<StudyMaterialQcWarningPanelProps> = 
   activeVersion,
   onAcceptDraft,
   onDiscardDrafts,
+  canDiscardDrafts = true,
+  discardBlockReason = null,
 }) => {
+  const [isAccepting, setIsAccepting] = useState(false);
   const qcResult = activeVersion.qc_result;
   const llmFailure = isLlmGenerationFailure(qcResult);
   const rateLimited = isLlmRateLimited(qcResult);
@@ -102,6 +107,16 @@ const StudyMaterialQcWarningPanel: React.FC<StudyMaterialQcWarningPanelProps> = 
       : warningPresentation?.alert_body ?? QC_LLM_FAILED_BODY;
 
   const isDetFormattingOnly = warningPresentation?.is_formatting_only ?? false;
+
+  const handleAccept = async () => {
+    if (isAccepting) return;
+    setIsAccepting(true);
+    try {
+      await onAcceptDraft();
+    } finally {
+      setIsAccepting(false);
+    }
+  };
 
   return (
     <div className="study-material-qc-warning-panel animate-fade-in">
@@ -133,13 +148,20 @@ const StudyMaterialQcWarningPanel: React.FC<StudyMaterialQcWarningPanelProps> = 
           <div className="study-material-qc-warning-panel__choices">
             <span className="sm-qc-warning__choices-label">How do you want to proceed?</span>
             <div className="sm-qc-warning__choices">
-              <button type="button" className="btn-primary sm-qc-warning__choice-btn" onClick={onAcceptDraft}>
-                Continue with this draft
+              <button
+                type="button"
+                className="btn-primary sm-qc-warning__choice-btn"
+                onClick={() => void handleAccept()}
+                disabled={isAccepting}
+              >
+                {isAccepting ? "Accepting…" : "Continue with this draft"}
               </button>
               <button
                 type="button"
                 className="btn-secondary sm-qc-warning__choice-btn sm-qc-warning__choice-btn--danger"
                 onClick={onDiscardDrafts}
+                disabled={!canDiscardDrafts || isAccepting}
+                title={!canDiscardDrafts ? discardBlockReason ?? "Drafts cannot be discarded yet" : undefined}
               >
                 Discard unpublished drafts
               </button>

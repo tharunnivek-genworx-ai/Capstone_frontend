@@ -16,28 +16,28 @@ async function waitForSpaceReady(page: Page): Promise<void> {
   if (await loading.isVisible().catch(() => false)) {
     await loading.waitFor({ state: "hidden", timeout: 120_000 });
   }
-  await page.waitForTimeout(1_000);
 }
 
 async function tryOpenSpaceAtIndex(page: Page, index: number): Promise<boolean> {
   await page.goto("/mentor/spaces");
-  await page.waitForTimeout(500);
   const openButtons = page.getByRole("button", { name: /^Open$/i });
+  await expect(openButtons.first()).toBeVisible({ timeout: 60_000 });
   if (index >= (await openButtons.count())) return false;
 
   await openButtons.nth(index).click();
   await page.waitForURL(/\/mentor\/spaces\/[^/]+/, { timeout: 60_000 });
   await waitForSpaceReady(page);
 
-  const nodes = page.locator(".tree-node__title");
+  const nodes = page.getByRole("treeitem");
   return nodes.first().isVisible({ timeout: 120_000 }).catch(() => false);
 }
 
 export async function openSpaceWithTopics(page: Page): Promise<void> {
-  // Index order from deployed mentor1 account: 0=HTML (empty), 1=Organic, 2=React
-  const preferredIndices = [2, 1, 0];
-
-  for (const index of preferredIndices) {
+  await page.goto("/mentor/spaces");
+  const openButtons = page.getByRole("button", { name: /^Open$/i });
+  await expect(openButtons.first()).toBeVisible({ timeout: 60_000 });
+  const count = await openButtons.count();
+  for (let index = 0; index < count; index += 1) {
     if (await tryOpenSpaceAtIndex(page, index)) {
       return;
     }
@@ -47,20 +47,17 @@ export async function openSpaceWithTopics(page: Page): Promise<void> {
 }
 
 /** @deprecated Use openSpaceWithTopics — first card may be an empty space. */
-export async function openSpaceByIndex(page: Page, index = 0): Promise<void> {
+export async function openSpaceByIndex(page: Page): Promise<void> {
   await openSpaceWithTopics(page);
 }
 
 export async function selectNodeForGeneration(page: Page): Promise<void> {
-  const nodes = page.locator(".tree-node__select");
-  const fallbackNodes = page.locator(".tree-node__title");
-  const nodeLocator = (await nodes.count()) > 0 ? nodes : fallbackNodes;
+  const nodeLocator = page.getByRole("treeitem");
   await expect(nodeLocator.first()).toBeVisible({ timeout: 30_000 });
   const count = await nodeLocator.count();
 
   for (let i = 0; i < count; i += 1) {
     await nodeLocator.nth(i).click({ force: true });
-    await page.waitForTimeout(800);
     await goToGenerateTab(page);
 
     const generateDraft = page.getByRole("button", { name: /^Generate draft$/i });
@@ -80,17 +77,19 @@ export async function selectNodeForGeneration(page: Page): Promise<void> {
 }
 
 export async function selectTreeNode(page: Page, index = 0): Promise<void> {
-  const nodes = page.locator(".tree-node__title");
+  const nodes = page.getByRole("treeitem");
   await expect(nodes.first()).toBeVisible({ timeout: 30_000 });
   const count = await nodes.count();
   const target = Math.min(index, count - 1);
   await nodes.nth(target).click();
-  await page.waitForTimeout(800);
+  await expect(page.locator(".tree-node--selected")).toContainText(
+    (await nodes.nth(target).textContent())?.trim() ?? "",
+  );
 
   const selectPrompt = page.getByText(/Select a topic from your outline/i);
   if (await selectPrompt.isVisible().catch(() => false)) {
     await nodes.nth(target).click();
-    await page.waitForTimeout(800);
+    await expect(selectPrompt).toBeHidden();
   }
 }
 
@@ -105,7 +104,7 @@ export async function goToMaterialTab(page: Page): Promise<void> {
   const materialTab = page.getByRole("tab", { name: /^Material tab$/i });
   if (await materialTab.isVisible().catch(() => false)) {
     await materialTab.click({ force: true });
-    await page.waitForTimeout(500);
+    await expect(materialTab).toHaveAttribute("aria-selected", "true");
   }
 }
 
@@ -197,7 +196,6 @@ export async function waitForGenerationComplete(page: Page): Promise<void> {
 }
 
 export async function expectNotStuckOnStarting(page: Page): Promise<void> {
-  await page.waitForTimeout(5_000);
   const starting = page.getByText(/^Starting…$/i);
   await expect(starting).toBeHidden({ timeout: 30_000 });
 }
@@ -214,7 +212,7 @@ export async function removeReferenceIfPresent(page: Page): Promise<void> {
   const deleteBtn = page.getByRole("button", { name: /Remove|Delete/i });
   if (await deleteBtn.isVisible().catch(() => false)) {
     await deleteBtn.click();
-    await page.waitForTimeout(1_500);
+    await expect(deleteBtn).toBeHidden({ timeout: 30_000 });
   }
   const closeBtn = page.getByRole("button", { name: /Close/i });
   if (await closeBtn.isVisible().catch(() => false)) {

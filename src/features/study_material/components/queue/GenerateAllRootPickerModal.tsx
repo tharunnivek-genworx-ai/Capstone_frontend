@@ -1,4 +1,5 @@
-import { useCallback, useMemo, useState, type CSSProperties } from "react";
+import { useCallback, useMemo, useState } from "react";
+import { ChevronRight, Search } from "lucide-react";
 import type { NodeTreeNode } from "../../../spaces/types/node.types";
 
 export type RootQueueBusyStatus = "running" | "queued";
@@ -34,18 +35,6 @@ function nodeMatchesQuery(node: NodeTreeNode, query: string): boolean {
   if (node.title.toLowerCase().includes(q)) return true;
   return node.children.some((child) => nodeMatchesQuery(child, query));
 }
-
-const branchActionStyle: CSSProperties = {
-  border: "none",
-  background: "transparent",
-  padding: 0,
-  fontSize: "0.72rem",
-  fontWeight: 600,
-  color: "var(--color-primary)",
-  cursor: "pointer",
-  textDecoration: "underline",
-  textUnderlineOffset: "2px",
-};
 
 interface TreeRowProps {
   node: NodeTreeNode;
@@ -87,108 +76,46 @@ function TreeRow({
   return (
     <>
       <div
-        style={{
-          display: "flex",
-          alignItems: "center",
-          gap: "0.5rem",
-          padding: "0.45rem 0.55rem",
-          paddingLeft: `${0.55 + depth * 1.1}rem`,
-          borderRadius: "var(--radius-md)",
-          background: isBusy ? "var(--color-surface)" : "transparent",
-          opacity: isBusy ? 0.72 : 1,
-        }}
+        className={`batch-topic-row${isChecked ? " batch-topic-row--selected" : ""}${isBusy ? " batch-topic-row--busy" : ""}`}
+        style={{ paddingLeft: `${0.65 + depth * 1.25}rem` }}
       >
         <button
           type="button"
           onClick={() => hasChildren && onToggleExpand(node.node_id)}
           aria-label={isExpanded ? "Collapse section" : "Expand section"}
-          style={{
-            width: "1.25rem",
-            height: "1.25rem",
-            display: "inline-flex",
-            alignItems: "center",
-            justifyContent: "center",
-            border: "none",
-            background: "transparent",
-            color: "var(--color-text-muted)",
-            cursor: hasChildren ? "pointer" : "default",
-            visibility: hasChildren ? "visible" : "hidden",
-            flexShrink: 0,
-          }}
+          className="batch-topic-row__chevron"
+          data-visible={hasChildren}
         >
-          <svg
-            width="12"
-            height="12"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-            style={{
-              transform: isExpanded ? "rotate(90deg)" : "rotate(0deg)",
-              transition: "transform 0.15s ease",
-            }}
-          >
-            <polyline points="9 18 15 12 9 6" />
-          </svg>
+          <ChevronRight size={14} className={isExpanded ? "batch-topic-row__chevron-icon--expanded" : ""} />
         </button>
 
         <button
           type="button"
           onClick={() => hasChildren && onToggleExpand(node.node_id)}
-          style={{
-            flex: 1,
-            textAlign: "left",
-            border: "none",
-            background: "transparent",
-            color: "var(--color-text-primary)",
-            fontSize: "0.88rem",
-            fontWeight: depth === 0 ? 600 : 500,
-            cursor: hasChildren ? "pointer" : "default",
-            padding: 0,
-            minWidth: 0,
-          }}
+          className={`batch-topic-row__title${depth === 0 ? " batch-topic-row__title--root" : ""}`}
+          title={node.title}
         >
           {node.title}
         </button>
 
-        <div
-          style={{
-            display: "inline-flex",
-            alignItems: "center",
-            gap: "0.5rem",
-            flexShrink: 0,
-          }}
-        >
+        <div className="batch-topic-row__controls">
           {isBusy && (
-            <span
-              style={{
-                fontSize: "0.72rem",
-                color: "var(--color-primary)",
-                fontWeight: 600,
-              }}
-            >
+            <span className="batch-topic-row__status">
               Generating…
             </span>
           )}
           {isPartiallyBusy && !isBusy && (
-            <span style={{ fontSize: "0.72rem", color: "var(--color-text-muted)" }}>
+            <span className="batch-topic-row__status batch-topic-row__status--muted">
               Partly queued
             </span>
           )}
           {hasChildren && selectableDescendantIds.length > 0 && !isBusy && (
-            <span
-              style={{
-                display: "inline-flex",
-                alignItems: "center",
-                gap: "0.35rem",
-                whiteSpace: "nowrap",
-              }}
-            >
+            <span className="batch-topic-row__branch-actions">
               {!allDescendantsSelected && (
                 <button
                   type="button"
                   onClick={() => onSelectAllDescendants(node)}
-                  style={branchActionStyle}
+                  className="batch-topic-row__branch-action"
                 >
                   Select all subtopics
                 </button>
@@ -196,21 +123,21 @@ function TreeRow({
               {selectedDescendantCount > 0 && (
                 <>
                   {!allDescendantsSelected && (
-                    <span style={{ color: "var(--color-text-muted)", fontSize: "0.72rem" }}>
+                    <span className="batch-topic-row__divider">
                       ·
                     </span>
                   )}
                   <button
                     type="button"
                     onClick={() => onClearDescendants(node)}
-                    style={branchActionStyle}
+                    className="batch-topic-row__branch-action"
                   >
                     Clear subtopics
                   </button>
                 </>
               )}
               {selectedDescendantCount > 0 && selectedDescendantCount < selectableDescendantIds.length && (
-                <span style={{ fontSize: "0.72rem", color: "var(--color-text-muted)" }}>
+                <span className="batch-topic-row__status batch-topic-row__status--muted">
                   ({selectedDescendantCount}/{selectableDescendantIds.length})
                 </span>
               )}
@@ -222,11 +149,7 @@ function TreeRow({
             disabled={isBusy || busyNodeIds.has(node.node_id)}
             onChange={() => onToggleSelect(node)}
             aria-label={`Select ${node.title}`}
-            style={{
-              width: "1rem",
-              height: "1rem",
-              cursor: isBusy || busyNodeIds.has(node.node_id) ? "not-allowed" : "pointer",
-            }}
+            className="batch-topic-row__checkbox"
           />
         </div>
       </div>
@@ -346,34 +269,19 @@ export default function GenerateAllRootPickerModal({
     <>
       <div
         onClick={onClose}
-        style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.65)", zIndex: 120 }}
+        className="batch-topic-picker__backdrop"
       />
-      <div
-        style={{
-          position: "fixed",
-          inset: 0,
-          display: "grid",
-          placeItems: "center",
-          zIndex: 130,
-          pointerEvents: "none",
-        }}
-      >
+      <div className="batch-topic-picker__layer">
         <div
-          style={{
-            pointerEvents: "auto",
-            width: "min(780px, 96vw)",
-            maxHeight: "min(88vh, 720px)",
-            display: "flex",
-            flexDirection: "column",
-            background: "var(--color-surface-2)",
-            border: "1px solid var(--color-border)",
-            borderRadius: "var(--radius-xl)",
-            boxShadow: "0 24px 80px rgba(0,0,0,0.6)",
-          }}
+          className="batch-topic-picker"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="batch-topic-picker-title"
         >
-          <div style={{ padding: "1.1rem 1.35rem", borderBottom: "1px solid var(--color-border)" }}>
-            <h2 style={{ margin: 0, fontSize: "1.05rem" }}>Choose topics to generate</h2>
-            <p style={{ margin: "0.45rem 0 0", color: "var(--color-text-muted)", fontSize: "0.84rem", lineHeight: 1.45 }}>
+          <div className="batch-topic-picker__header">
+            <span className="topic-tree-modal__eyebrow">Generate all</span>
+            <h2 id="batch-topic-picker-title">Choose topics to generate</h2>
+            <p>
               Each checkbox selects only that topic&apos;s material. Use{" "}
               <strong style={{ fontWeight: 600, color: "var(--color-text-primary)" }}>
                 Select all subtopics
@@ -383,33 +291,25 @@ export default function GenerateAllRootPickerModal({
             </p>
           </div>
 
-          <div style={{ padding: "1rem 1.35rem", display: "grid", gap: "0.75rem", flex: 1, minHeight: 0 }}>
-            <div style={{ display: "flex", gap: "0.6rem", flexWrap: "wrap" }}>
-              <input
-                className="input-field"
-                placeholder="Search topics…"
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                style={{ flex: "1 1 200px" }}
-              />
+          <div className="batch-topic-picker__body">
+            <div className="batch-topic-picker__tools">
+              <label className="batch-topic-picker__search">
+                <Search size={16} aria-hidden="true" />
+                <input
+                  className="input-field"
+                  placeholder="Search topics…"
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                />
+              </label>
               <button type="button" className="btn-secondary" onClick={handleClearSelection}>
                 Clear all
               </button>
             </div>
 
-            <div
-              style={{
-                flex: 1,
-                minHeight: "280px",
-                maxHeight: "420px",
-                overflowY: "auto",
-                border: "1px solid var(--color-border)",
-                borderRadius: "var(--radius-md)",
-                padding: "0.35rem",
-              }}
-            >
+            <div className="batch-topic-picker__tree" role="tree" aria-label="Topics available for generation">
               {filteredRoots.length === 0 ? (
-                <p style={{ margin: "1rem", fontSize: "0.84rem", color: "var(--color-text-muted)" }}>
+                <p className="batch-topic-picker__empty">
                   No topics match your search.
                 </p>
               ) : (
@@ -430,28 +330,20 @@ export default function GenerateAllRootPickerModal({
               )}
             </div>
 
-            <p style={{ margin: 0, fontSize: "0.8rem", color: "var(--color-text-muted)" }}>
+            <p className="batch-topic-picker__summary" aria-live="polite">
               {selectedCount === 0
                 ? "No topics selected yet."
                 : `${selectedCount} topic${selectedCount === 1 ? "" : "s"} selected for generation.`}
             </p>
 
             {selectableCount === 0 && roots.length > 0 && (
-              <p style={{ margin: 0, fontSize: "0.8rem", color: "var(--color-text-muted)" }}>
+              <p className="batch-topic-picker__summary">
                 All topics are already generating. Keep this tab open until the run finishes.
               </p>
             )}
           </div>
 
-          <div
-            style={{
-              padding: "0.95rem 1.35rem",
-              borderTop: "1px solid var(--color-border)",
-              display: "flex",
-              justifyContent: "flex-end",
-              gap: "0.6rem",
-            }}
-          >
+          <div className="batch-topic-picker__footer">
             <button type="button" className="btn-secondary" onClick={onClose}>
               Cancel
             </button>
