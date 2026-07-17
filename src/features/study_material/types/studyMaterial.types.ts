@@ -34,6 +34,18 @@ export interface ReferenceMaterialListOut {
 /** First-time generate — backend no longer accepts generation_type on this endpoint. */
 export interface StudyMaterialGenerateRequest {
   reference_material_id?: string | null;
+  /** Mutually exclusive with reference_material_id (API returns 400 if both). */
+  external_research_enabled?: boolean;
+}
+
+/** Persisted on versions when External Research degraded to fail-soft (§14). */
+export interface GenerationOutcomeDetail {
+  message?: string | null;
+  reason?: string | null;
+  topic_received?: string | null;
+  raw_preview?: string | null;
+  external_research_fail_soft?: boolean | null;
+  fail_reason?: string | null;
 }
 
 export interface StudyMaterialRegenerateRequest {
@@ -213,6 +225,7 @@ export interface StudyMaterialVersionOut {
   qc_result?: QualityCheckResultOut | null;
   concept_plan?: ConceptPlanOut | null;
   next_llm_retry_at?: string | null;
+  generation_outcome_detail?: GenerationOutcomeDetail | null;
 }
 
 export interface StudyMaterialVersionSummary {

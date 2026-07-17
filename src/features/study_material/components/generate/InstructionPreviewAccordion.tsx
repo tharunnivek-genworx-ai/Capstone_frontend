@@ -61,7 +61,7 @@ export default function InstructionPreviewAccordion({
       <div className="gsm-preview__row">
         <div className="gsm-preview__plabel">Generation source</div>
         <div className={`gsm-preview__pval${generationSourceTitle ? "" : " gsm-preview__pval--empty"}`}>
-          {generationSourceTitle ?? "No source document selected"}
+          {generationSourceTitle ?? "No generation source selected"}
         </div>
       </div>
       <div className="gsm-preview__row">

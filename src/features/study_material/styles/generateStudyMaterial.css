@@ -487,9 +487,15 @@
 
 .gsm-source-row {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 12px;
   margin-top: 18px;
+}
+
+@media (max-width: 900px) {
+  .gsm-source-row {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 
 @media (max-width: 600px) {
@@ -515,6 +521,38 @@
 .gsm-source-btn:hover {
   border-color: var(--gsm-primary-tint-2);
   background: var(--gsm-primary-tint);
+}
+
+.gsm-source-btn--active {
+  border-color: var(--gsm-primary);
+  background: var(--gsm-primary-tint);
+}
+
+.gsm-source-btn--active .gsm-source-btn__icon {
+  border-color: var(--gsm-primary-tint-2);
+  background: var(--gsm-primary-tint-2);
+  color: var(--gsm-primary-dark);
+}
+
+.gsm-source-btn--disabled,
+.gsm-source-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+  background: var(--gsm-surface);
+  border-color: var(--gsm-border);
+}
+
+.gsm-source-btn--disabled:hover,
+.gsm-source-btn:disabled:hover {
+  border-color: var(--gsm-border);
+  background: var(--gsm-surface);
+}
+
+.gsm-source-mutex-hint {
+  margin: 10px 0 0;
+  color: var(--gsm-muted);
+  font-size: 12px;
+  line-height: 1.45;
 }
 
 .gsm-source-btn__icon {
@@ -1372,6 +1410,30 @@
   background: var(--gsm-primary-tint);
 }
 
+.gsm-source-btn--active {
+  border-color: var(--gsm-primary);
+  background: var(--gsm-primary-tint);
+  box-shadow: inset 0 0 0 1px rgb(35 104 99 / 18%);
+}
+
+.gsm-source-btn--active .gsm-source-btn__icon {
+  border-color: var(--gsm-primary);
+  background: var(--gsm-primary-tint-2);
+  color: var(--gsm-primary-dark);
+}
+
+.gsm-source-btn--disabled,
+.gsm-source-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.gsm-source-btn--disabled:hover,
+.gsm-source-btn:disabled:hover {
+  border-color: var(--gsm-border);
+  background: var(--as-paper, #fcfcfb);
+}
+
 .gsm-source-btn:focus-visible,
 .gsm-btn:focus-visible,
 .gsm-link-btn:focus-visible {
@@ -1393,11 +1455,17 @@
 
 .gsm-source-separation-note {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 7px;
   margin-top: 12px;
   color: var(--gsm-muted);
   font-size: 11.5px;
+  line-height: 1.45;
+}
+
+.gsm-source-separation-note svg {
+  flex-shrink: 0;
+  margin-top: 1px;
 }
 
 .gsm-setup-step-card--preview {

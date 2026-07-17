@@ -1,6 +1,7 @@
 import {
   BookOpen,
   FileText,
+  Globe,
   Image,
   Pause,
   RefreshCw,
@@ -30,6 +31,8 @@ interface GenerateSetupPanelProps {
   branchDefaultDirty: boolean;
   approachDirty: boolean;
   referenceMaterial: ReferenceMaterialOut | null;
+  externalResearchEnabled: boolean;
+  onExternalResearchChange: (enabled: boolean) => void;
   nodeMediaCount: number;
   hasWorkspaceStudyMaterial: boolean;
   canClearAllDrafts: boolean;
@@ -67,6 +70,8 @@ export default function GenerateSetupPanel({
   branchDefaultDirty,
   approachDirty,
   referenceMaterial,
+  externalResearchEnabled,
+  onExternalResearchChange,
   nodeMediaCount,
   hasWorkspaceStudyMaterial,
   canClearAllDrafts,
@@ -91,6 +96,13 @@ export default function GenerateSetupPanel({
     isWorking || isWaitingForGenerateAll || runPaused || runFailed || hasUnsavedSettings;
   const pausedTitle =
     "Generation is paused. Resume or delete it from the Material tab before creating a new draft.";
+
+  const pdfDisabled = externalResearchEnabled;
+  const researchDisabled = Boolean(referenceMaterial);
+  const showMutualExclusivityHint = pdfDisabled || researchDisabled;
+
+  const generationSourceTitle = referenceMaterial?.title
+    ?? (externalResearchEnabled ? "External research" : null);
 
   return (
     <div className="gsm-setup">
@@ -200,13 +212,60 @@ export default function GenerateSetupPanel({
             </div>
           </div>
           <div className="gsm-source-row">
-            <button type="button" className="gsm-source-btn" onClick={onOpenRefModal}>
+            <button
+              type="button"
+              className={`gsm-source-btn${referenceMaterial ? " gsm-source-btn--active" : ""}${
+                pdfDisabled ? " gsm-source-btn--disabled" : ""
+              }`}
+              onClick={onOpenRefModal}
+              disabled={pdfDisabled}
+              aria-disabled={pdfDisabled}
+              title={
+                pdfDisabled
+                  ? "Turn off External research to upload a source PDF"
+                  : referenceMaterial
+                    ? `Reference: ${referenceMaterial.title}`
+                    : "Add a reference PDF for the AI to use"
+              }
+            >
               <span className="gsm-source-btn__icon" aria-hidden="true"><Upload size={18} /></span>
               <span className="gsm-source-btn__text">
                 <b>{isLoadingGenerationSource ? "Loading source…" : referenceMaterial?.title ?? "Upload a source PDF"}</b>
-                <span>Private input the AI reads while writing</span>
+                <span>
+                  {pdfDisabled
+                    ? "Unavailable while External research is on"
+                    : "Private input the AI reads while writing"}
+                </span>
               </span>
               {referenceMaterial && <span className="gsm-badge-count">1 source</span>}
+            </button>
+            <button
+              type="button"
+              className={`gsm-source-btn${externalResearchEnabled ? " gsm-source-btn--active" : ""}${
+                researchDisabled ? " gsm-source-btn--disabled" : ""
+              }`}
+              onClick={() => onExternalResearchChange(!externalResearchEnabled)}
+              disabled={researchDisabled}
+              aria-pressed={externalResearchEnabled}
+              aria-disabled={researchDisabled}
+              title={
+                researchDisabled
+                  ? "Clear the source PDF to use External research"
+                  : externalResearchEnabled
+                    ? "External research is on — click to turn off"
+                    : "Search the web for ground-truth notes the AI can read"
+              }
+            >
+              <span className="gsm-source-btn__icon" aria-hidden="true"><Globe size={18} /></span>
+              <span className="gsm-source-btn__text">
+                <b>External research</b>
+                <span>
+                  {researchDisabled
+                    ? "Unavailable while a source PDF is attached"
+                    : "Search the web for ground-truth notes the AI can read"}
+                </span>
+              </span>
+              {externalResearchEnabled && <span className="gsm-badge-count">On</span>}
             </button>
             <button type="button" className="gsm-source-btn" onClick={onOpenMediaModal}>
               <span className="gsm-source-btn__icon" aria-hidden="true"><Image size={18} /></span>
@@ -217,9 +276,19 @@ export default function GenerateSetupPanel({
               {nodeMediaCount > 0 && <span className="gsm-badge-count">{nodeMediaCount}</span>}
             </button>
           </div>
+          {showMutualExclusivityHint && (
+            <p className="gsm-source-mutex-hint" role="status">
+              {pdfDisabled
+                ? "PDF and external research can’t be combined. Turn off External research to upload a PDF."
+                : "PDF and external research can’t be combined. Clear the source PDF to enable External research."}
+            </p>
+          )}
           <div className="gsm-source-separation-note">
             <BookOpen size={15} aria-hidden />
-            Student resources are not automatically used as AI generation context.
+            <span>
+              Student resources are not automatically used as AI generation context.
+              Research sources may appear under student resources as article links after a successful run.
+            </span>
           </div>
         </section>
 
@@ -232,7 +301,7 @@ export default function GenerateSetupPanel({
             previewParts={previewParts}
             isRootTopic={!node.parent_id}
             hasUnsavedChanges={hasUnsavedSettings}
-            generationSourceTitle={referenceMaterial?.title ?? null}
+            generationSourceTitle={generationSourceTitle}
             learnerResourceCount={nodeMediaCount}
             onNavigateToNode={onNavigateToNode}
           />

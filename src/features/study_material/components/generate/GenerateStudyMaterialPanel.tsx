@@ -195,6 +195,8 @@ export default function GenerateStudyMaterialPanel({
         branchDefaultDirty={branchDefaultDirty}
         approachDirty={approachDirty}
         referenceMaterial={sm.referenceMaterial}
+        externalResearchEnabled={sm.externalResearchEnabled}
+        onExternalResearchChange={sm.setExternalResearchEnabled}
         nodeMediaCount={sm.nodeMedia.length}
         hasWorkspaceStudyMaterial={sm.hasWorkspaceStudyMaterial}
         canClearAllDrafts={sm.canClearAllDrafts}

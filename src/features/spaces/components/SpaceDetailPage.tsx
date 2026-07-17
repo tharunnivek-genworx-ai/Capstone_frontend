@@ -310,23 +310,6 @@ const SpaceDetailPage: React.FC = () => {
     }
   }, [mentorSpaceProgressError]);
 
-  // Keep selected node in sync after tree changes (e.g. move/reorder)
-  useEffect(() => {
-    if (!selectedNode || roots.length === 0) return;
-    const findNode = (nodes: NodeTreeNode[], id: string): NodeTreeNode | null => {
-      for (const n of nodes) {
-        if (n.node_id === id) return n;
-        const found = findNode(n.children, id);
-        if (found) return found;
-      }
-      return null;
-    };
-    const updated = findNode(roots, selectedNode.node_id);
-    if (updated && updated !== selectedNode) {
-      setSelectedNode(updated);
-    }
-  }, [roots, selectedNode?.node_id]);
-
   // Restore selected topic from ?node= when returning from quiz or deep-linking.
   useEffect(() => {
     if (isMentor || roots.length === 0) return;
@@ -334,10 +317,15 @@ const SpaceDetailPage: React.FC = () => {
     const nodeIdFromUrl = searchParams.get("node");
     if (!nodeIdFromUrl) return;
     const node = findNodeInTree(roots, nodeIdFromUrl);
-    if (node && selectedNode?.node_id !== nodeIdFromUrl) {
-      setSelectedNode(node);
+    if (node) {
+      if (selectedNode?.node_id !== nodeIdFromUrl) {
+        setSelectedNode(node);
+      }
+    } else {
+      // Stale deep-link after the topic was deleted.
+      setSearchParams({}, { replace: true });
     }
-  }, [isMentor, roots, searchParams, selectedNode?.node_id, showSpaceProgress]);
+  }, [isMentor, roots, searchParams, selectedNode?.node_id, showSpaceProgress, setSearchParams]);
 
   useEffect(() => {
     const handleMouseMove = (e: MouseEvent) => {
@@ -510,6 +498,22 @@ const SpaceDetailPage: React.FC = () => {
       updateNodeStudyState,
     ],
   );
+
+  // Keep selected node in sync after tree changes (e.g. move/reorder/delete).
+  // If the selected topic was removed (or its ancestor), return to the empty canvas.
+  useEffect(() => {
+    if (!selectedNode) return;
+    if (roots.length === 0) {
+      selectNode(null);
+      return;
+    }
+    const updated = findNodeInTree(roots, selectedNode.node_id);
+    if (!updated) {
+      selectNode(null);
+    } else if (updated !== selectedNode) {
+      setSelectedNode(updated);
+    }
+  }, [roots, selectedNode, selectNode]);
 
   const handleNavigateToNode = useCallback(
     (nodeId: string) => {

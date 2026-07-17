@@ -864,6 +864,35 @@
   line-height: 1.45;
 }
 
+/* Mild External Research fail-soft notice — not QC “permanently failed” tone. */
+.study-material-external-research-fail-soft-banner {
+  flex: 1 1 100%;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.625rem 0.875rem;
+  background: var(--as-primary-soft, #e8f4f4);
+  border: 1px solid rgb(35 104 99 / 28%);
+  border-radius: var(--radius-lg);
+  font-size: 0.8125rem;
+  color: var(--as-on-surface, #1a2b2a);
+  line-height: 1.45;
+}
+
+.study-material-external-research-fail-soft-banner__dismiss {
+  background: none;
+  border: none;
+  color: var(--as-primary-hover, #1f5c58);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  cursor: pointer;
+  text-decoration: underline;
+  padding: 0;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
 /* ─── QC warning panel helpers ──────────────────────────────────── */
 .sm-qc-warning__title-row {
   display: flex;
