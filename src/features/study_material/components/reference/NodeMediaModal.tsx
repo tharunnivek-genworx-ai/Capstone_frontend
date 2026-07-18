@@ -11,7 +11,7 @@ interface NodeMediaModalProps {
   nodeTitle: string;
   nodeMedia: NodeMediaOut[];
   onClose: () => void;
-  onRefresh: () => Promise<void>;
+  onRefresh: () => Promise<unknown>;
 }
 
 type UploadMode = "image" | "pdf" | "video_url" | "article_link";

@@ -227,7 +227,7 @@ export interface UseStudyMaterialReturn {
   setReferenceMaterial: (m: ReferenceMaterialOut | null) => void;
   setReferenceMaterialForNode: (nodeId: string, m: ReferenceMaterialOut | null) => void;
   refreshGenerationSource: () => Promise<void>;
-  refreshTopicResources: () => Promise<void>;
+  refreshTopicResources: () => Promise<NodeMediaOut[]>;
   handleAcceptFailedQc: () => Promise<void>;
 }
 
@@ -397,18 +397,33 @@ export function useStudyMaterial({
     }
   }, [node, isMentor, patchNodeStudyState]);
 
-  const refreshTopicResources = useCallback(async () => {
-    if (!node || !isMentor) return;
+  const refreshTopicResources = useCallback(async (): Promise<NodeMediaOut[]> => {
+    if (!node || !isMentor) return [];
     setIsLoadingTopicResources(true);
     try {
       const mediaRes = await referenceMaterialService.listNodeMedia(node.node_id);
       setNodeMedia(mediaRes.items);
+      return mediaRes.items;
     } catch {
       /* non-critical */
+      return [];
     } finally {
       setIsLoadingTopicResources(false);
     }
   }, [node, isMentor]);
+
+  /** After external generate/regenerate: refresh resources and toast when article links exist. */
+  const refreshExternalSourcesAfterGenerate = useCallback(
+    async (usedExternalResearch: boolean) => {
+      if (!usedExternalResearch) return;
+      const items = await refreshTopicResources();
+      const hasArticleLinks = items.some((item) => item.media_type === "article_link");
+      if (hasArticleLinks) {
+        toast.success("External sources have been added for student reference.");
+      }
+    },
+    [refreshTopicResources],
+  );
 
   const applyVersion = (nodeId: string, version: StudyMaterialVersionOut, clearViewing = true) => {
     if (clearViewing) setViewingVersionId(null);
@@ -1245,6 +1260,9 @@ export function useStudyMaterial({
   const handleGenerateStudyMaterial = async () => {
     if (!node || isGenerating) return;
     const nodeId = node.node_id;
+    const usedExternalResearch = Boolean(
+      externalResearchByNode[nodeId] && !referenceMaterial,
+    );
     generatingNodeIds.add(nodeId);
     let latestRunId: string | null = null;
     patchNodeStudyState(nodeId, {
@@ -1264,9 +1282,7 @@ export function useStudyMaterial({
         () =>
           studyMaterialService.startGenerate(nodeId, {
             reference_material_id: referenceMaterial?.material_id ?? null,
-            external_research_enabled: Boolean(
-              externalResearchByNode[nodeId] && !referenceMaterial,
-            ),
+            external_research_enabled: usedExternalResearch,
           }),
         (progressUpdate) => {
           latestRunId = progressUpdate.session_id;
@@ -1288,6 +1304,7 @@ export function useStudyMaterial({
       if (isViewingNode(nodeId)) {
         await refreshVersionHistory(nodeId);
         await refreshMentorUiStateRef.current(nodeId, null);
+        await refreshExternalSourcesAfterGenerate(usedExternalResearch);
       }
       patchNodeStudyState(nodeId, patchForGenerationJobSuccess());
       toast.success(`Study material saved as ${version.display_label}.`);
@@ -1318,6 +1335,9 @@ export function useStudyMaterial({
   const handleRegenerateStudyMaterialFresh = async () => {
     if (!node || isGenerating || isDeletingDrafts) return;
     const nodeId = node.node_id;
+    const usedExternalResearch = Boolean(
+      externalResearchByNode[nodeId] && !referenceMaterial,
+    );
     generatingNodeIds.add(nodeId);
     let latestRunId: string | null = null;
     setIsDeletingDrafts(true);
@@ -1354,9 +1374,7 @@ export function useStudyMaterial({
         () =>
           studyMaterialService.startGenerate(nodeId, {
             reference_material_id: referenceMaterial?.material_id ?? null,
-            external_research_enabled: Boolean(
-              externalResearchByNode[nodeId] && !referenceMaterial,
-            ),
+            external_research_enabled: usedExternalResearch,
           }),
         (progressUpdate) => {
           latestRunId = progressUpdate.session_id;
@@ -1382,6 +1400,7 @@ export function useStudyMaterial({
         // the deleted versions bleeds through and shows a phantom "Unpublish"
         // button on the new version, which then 409s when clicked.
         await refreshMentorUiStateRef.current(nodeId, null);
+        await refreshExternalSourcesAfterGenerate(usedExternalResearch);
       }
       patchNodeStudyState(nodeId, patchForGenerationJobSuccess());
       toast.success(`Study material regenerated as ${version.display_label}.`);
