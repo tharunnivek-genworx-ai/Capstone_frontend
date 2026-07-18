@@ -153,6 +153,23 @@ const StudyMaterialMentorWorkspace: React.FC<StudyMaterialMentorWorkspaceProps> 
         </div>
       )}
 
+      {sm.showExternalResearchFailSoftBanner && (
+        <div
+          className="study-material-external-research-fail-soft-banner"
+          role="status"
+        >
+          <span>{sm.externalResearchFailSoftMessage}</span>
+          <button
+            type="button"
+            className="study-material-external-research-fail-soft-banner__dismiss"
+            onClick={sm.dismissExternalResearchFailSoftBanner}
+            aria-label="Dismiss warning"
+          >
+            Dismiss
+          </button>
+        </div>
+      )}
+
       {sm.displayedVersionBaseLabel && (
         <div className="sm-version-bar">
           {showBackToHistory && (

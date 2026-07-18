@@ -7,6 +7,108 @@ export const QC_LLM_FAILED_TITLE = "Quality review recommended";
 export const QC_LLM_FAILED_BODY =
   "This study material did not pass our quality analysis. That does not mean the content is invalid or weak — it means it did not meet our company-set standards. Read the draft carefully and review the report below before discarding or proceeding with this draft.";
 
+const PLACEMENT_ONLY_CHECK_IDS = new Set([
+  "det_equation_in_content",
+  "det_math_in_code_block",
+  "det_pseudocode_in_code_block",
+  "det_code_in_formula_block",
+  "det_empty_block_explanation",
+  "det_conceptual_has_blocks",
+]);
+
+interface QcDisplayCheck {
+  id?: string | null;
+  check_id?: string | null;
+  passed?: boolean | null;
+  evidence?: string | null;
+  corrective_hint?: string | null;
+}
+
+interface QcDisplayPresentationItem {
+  user_message?: string | null;
+}
+
+interface QcDisplayResult extends LlmDiagnosticsFields {
+  mentorDismissedQcWarning?: boolean | null;
+  checks?: QcDisplayCheck[] | null;
+  failed_checks?: QcDisplayCheck[] | null;
+  issues?: string[] | null;
+  humanized_issues?: string[] | null;
+  corrective_instructions?: string | null;
+  humanized_corrective_instructions?: string | null;
+  summary?: string | null;
+  flagged_questions?: Array<{ flags?: string[] | null }> | null;
+  warning_presentation?: {
+    det_summary?: string | null;
+    reassurance?: string | null;
+    formatting_items?: QcDisplayPresentationItem[] | null;
+    structure_items?: QcDisplayPresentationItem[] | null;
+    evidence_items?: QcDisplayPresentationItem[] | null;
+  } | null;
+}
+
+function hasText(value: string | null | undefined): boolean {
+  return typeof value === "string" && value.trim().length > 0;
+}
+
+function failedChecks(qcResult: QcDisplayResult): QcDisplayCheck[] {
+  const fromChecks = (qcResult.checks ?? []).filter(
+    (check) => check.passed === false,
+  );
+  return fromChecks.length > 0 ? fromChecks : (qcResult.failed_checks ?? []);
+}
+
+function isPlacementOnlyFailure(qcResult: QcDisplayResult): boolean {
+  const failures = failedChecks(qcResult);
+  return (
+    failures.length > 0 &&
+    failures.every((check) =>
+      PLACEMENT_ONLY_CHECK_IDS.has(check.check_id ?? check.id ?? ""),
+    )
+  );
+}
+
+function hasUserFacingQcDetail(qcResult: QcDisplayResult): boolean {
+  if (
+    hasText(qcResult.suggestion) ||
+    hasText(qcResult.corrective_instructions) ||
+    hasText(qcResult.humanized_corrective_instructions) ||
+    hasText(qcResult.summary) ||
+    qcResult.issues?.some(hasText) ||
+    qcResult.humanized_issues?.some(hasText)
+  ) {
+    return true;
+  }
+
+  if (
+    failedChecks(qcResult).some(
+      (check) => hasText(check.evidence) || hasText(check.corrective_hint),
+    )
+  ) {
+    return true;
+  }
+
+  const presentation = qcResult.warning_presentation;
+  const presentationItems = [
+    ...(presentation?.formatting_items ?? []),
+    ...(presentation?.structure_items ?? []),
+    ...(presentation?.evidence_items ?? []),
+  ];
+  if (
+    hasText(presentation?.det_summary) ||
+    hasText(presentation?.reassurance) ||
+    presentationItems.some((item) => hasText(item.user_message))
+  ) {
+    return true;
+  }
+
+  return (
+    qcResult.flagged_questions?.some((question) =>
+      question.flags?.some(hasText),
+    ) ?? false
+  );
+}
+
 /** Show code-quality scoring only for programming-focused topics. */
 export function shouldShowCodeQualityScore(
   domain: "STEM" | "Programming" | "Conceptual" | "Mixed" | "" | null | undefined,
@@ -22,9 +124,12 @@ export function isQcWarningDismissed(
 
 export function shouldShowQcWarning(
   qcFailedPermanently: boolean | undefined,
-  qcResult?: (LlmDiagnosticsFields & { mentorDismissedQcWarning?: boolean | null }) | null,
+  qcResult?: QcDisplayResult | null,
 ): boolean {
   if (!qcFailedPermanently) return false;
   if (isLlmRateLimited(qcResult)) return true;
-  return !isQcWarningDismissed(qcResult);
+  if (!qcResult || isQcWarningDismissed(qcResult)) return false;
+  if (qcResult.errorType) return true;
+  if (isPlacementOnlyFailure(qcResult)) return false;
+  return hasUserFacingQcDetail(qcResult);
 }

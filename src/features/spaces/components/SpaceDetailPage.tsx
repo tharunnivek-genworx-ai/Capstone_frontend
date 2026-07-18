@@ -78,6 +78,12 @@ const SpaceDetailPage: React.FC = () => {
   const [showPolicyModal, setShowPolicyModal] = useState(false);
   const [showWarningModal, setShowWarningModal] = useState(false);
   const [selectedBatchNodeIds, setSelectedBatchNodeIds] = useState<string[]>([]);
+  const [selectedBatchExternalResearchNodeIds, setSelectedBatchExternalResearchNodeIds] =
+    useState<string[]>([]);
+  /** Space-scoped mentor prefs: which topics should use external research. */
+  const [externalResearchByNodeId, setExternalResearchByNodeId] = useState<
+    Record<string, boolean>
+  >({});
   const [batchPreview, setBatchPreview] = useState<StudyMaterialBatchPreviewResponse | null>(null);
   const [existingPolicy, setExistingPolicy] = useState<ExistingMaterialPolicy>("skip");
   const [isSubmittingBatchFlow, setIsSubmittingBatchFlow] = useState(false);
@@ -310,23 +316,6 @@ const SpaceDetailPage: React.FC = () => {
     }
   }, [mentorSpaceProgressError]);
 
-  // Keep selected node in sync after tree changes (e.g. move/reorder)
-  useEffect(() => {
-    if (!selectedNode || roots.length === 0) return;
-    const findNode = (nodes: NodeTreeNode[], id: string): NodeTreeNode | null => {
-      for (const n of nodes) {
-        if (n.node_id === id) return n;
-        const found = findNode(n.children, id);
-        if (found) return found;
-      }
-      return null;
-    };
-    const updated = findNode(roots, selectedNode.node_id);
-    if (updated && updated !== selectedNode) {
-      setSelectedNode(updated);
-    }
-  }, [roots, selectedNode?.node_id]);
-
   // Restore selected topic from ?node= when returning from quiz or deep-linking.
   useEffect(() => {
     if (isMentor || roots.length === 0) return;
@@ -334,10 +323,15 @@ const SpaceDetailPage: React.FC = () => {
     const nodeIdFromUrl = searchParams.get("node");
     if (!nodeIdFromUrl) return;
     const node = findNodeInTree(roots, nodeIdFromUrl);
-    if (node && selectedNode?.node_id !== nodeIdFromUrl) {
-      setSelectedNode(node);
+    if (node) {
+      if (selectedNode?.node_id !== nodeIdFromUrl) {
+        setSelectedNode(node);
+      }
+    } else {
+      // Stale deep-link after the topic was deleted.
+      setSearchParams({}, { replace: true });
     }
-  }, [isMentor, roots, searchParams, selectedNode?.node_id, showSpaceProgress]);
+  }, [isMentor, roots, searchParams, selectedNode?.node_id, showSpaceProgress, setSearchParams]);
 
   useEffect(() => {
     const handleMouseMove = (e: MouseEvent) => {
@@ -511,6 +505,22 @@ const SpaceDetailPage: React.FC = () => {
     ],
   );
 
+  // Keep selected node in sync after tree changes (e.g. move/reorder/delete).
+  // If the selected topic was removed (or its ancestor), return to the empty canvas.
+  useEffect(() => {
+    if (!selectedNode) return;
+    if (roots.length === 0) {
+      selectNode(null);
+      return;
+    }
+    const updated = findNodeInTree(roots, selectedNode.node_id);
+    if (!updated) {
+      selectNode(null);
+    } else if (updated !== selectedNode) {
+      setSelectedNode(updated);
+    }
+  }, [roots, selectedNode, selectNode]);
+
   const handleNavigateToNode = useCallback(
     (nodeId: string) => {
       const node = findNodeInTree(roots, nodeId);
@@ -669,6 +679,14 @@ const SpaceDetailPage: React.FC = () => {
     setShowWarningModal(false);
     setBatchPreview(null);
     setSelectedBatchNodeIds([]);
+    setSelectedBatchExternalResearchNodeIds([]);
+  }, []);
+
+  const setExternalResearchForNode = useCallback((nodeId: string, enabled: boolean) => {
+    setExternalResearchByNodeId((prev) => {
+      if (Boolean(prev[nodeId]) === enabled) return prev;
+      return { ...prev, [nodeId]: enabled };
+    });
   }, []);
 
   const startGenerateAllFromWizard = useCallback(async (policy: ExistingMaterialPolicy) => {
@@ -680,6 +698,10 @@ const SpaceDetailPage: React.FC = () => {
       toast.error("None of the selected topics can be queued for generation.");
       return;
     }
+    const eligibleSet = new Set(eligibleNodeIds);
+    const externalResearchNodeIds = selectedBatchExternalResearchNodeIds.filter((id) =>
+      eligibleSet.has(id),
+    );
 
     setIsSubmittingBatchFlow(true);
     closeBatchWizard();
@@ -689,6 +711,7 @@ const SpaceDetailPage: React.FC = () => {
         root_node_ids: [],
         node_ids: eligibleNodeIds,
         policy,
+        external_research_node_ids: externalResearchNodeIds,
       });
       setActiveBatchId(created.batch_id);
       setShowBatchProgressPanel(true);
@@ -704,18 +727,35 @@ const SpaceDetailPage: React.FC = () => {
     } finally {
       setIsSubmittingBatchFlow(false);
     }
-  }, [spaceId, selectedBatchNodeIds, batchPreview, closeBatchWizard]);
+  }, [
+    spaceId,
+    selectedBatchNodeIds,
+    selectedBatchExternalResearchNodeIds,
+    batchPreview,
+    closeBatchWizard,
+  ]);
 
-  const handleContinueRootPicker = useCallback(async (nodeIds: string[]) => {
-    if (!spaceId || nodeIds.length === 0) return;
+  const handleContinueRootPicker = useCallback(async (selection: {
+    nodeIds: string[];
+    externalResearchNodeIds: string[];
+  }) => {
+    if (!spaceId || selection.nodeIds.length === 0) return;
     setIsSubmittingBatchFlow(true);
     try {
       const preview = await studyMaterialBatchService.preview(spaceId, {
         root_node_ids: [],
-        node_ids: nodeIds,
+        node_ids: selection.nodeIds,
       });
       setBatchPreview(preview);
-      setSelectedBatchNodeIds(nodeIds);
+      setSelectedBatchNodeIds(selection.nodeIds);
+      setSelectedBatchExternalResearchNodeIds(selection.externalResearchNodeIds);
+      setExternalResearchByNodeId((prev) => {
+        const next = { ...prev };
+        for (const nodeId of selection.nodeIds) {
+          next[nodeId] = selection.externalResearchNodeIds.includes(nodeId);
+        }
+        return next;
+      });
       setShowRootPickerModal(false);
       setShowPolicyModal(true);
     } catch (err) {
@@ -1201,6 +1241,13 @@ const SpaceDetailPage: React.FC = () => {
                 studyState={selectedNode ? getNodeStudyState(selectedNode.node_id) : undefined}
                 onStudyStateChange={selectedNode ? handleStudyStateChange : undefined}
                 onMentorProgressRefresh={handleMentorProgressRefresh}
+                externalResearchEnabled={
+                  selectedNode ? Boolean(externalResearchByNodeId[selectedNode.node_id]) : false
+                }
+                onExternalResearchChange={(enabled) => {
+                  if (!selectedNode) return;
+                  setExternalResearchForNode(selectedNode.node_id, enabled);
+                }}
                 contentRefreshToken={
                   selectedNode ? nodeContentRefreshTokens[selectedNode.node_id] ?? 0 : 0
                 }
@@ -1288,10 +1335,11 @@ const SpaceDetailPage: React.FC = () => {
         <GenerateAllRootPickerModal
           roots={roots}
           initialSelectedNodeIds={selectedBatchNodeIds}
+          initialExternalResearchByNodeId={externalResearchByNodeId}
           busyNodeIds={busyNodeIds}
           onClose={closeBatchWizard}
-          onContinue={(nodeIds) => {
-            void handleContinueRootPicker(nodeIds);
+          onContinue={(selection) => {
+            void handleContinueRootPicker(selection);
           }}
         />
       )}

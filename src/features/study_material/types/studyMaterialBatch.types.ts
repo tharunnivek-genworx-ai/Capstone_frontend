@@ -20,6 +20,8 @@ export type ExistingMaterialPolicy = "skip" | "regenerate";
 export interface BatchPolicyIn {
   mode: BatchPolicyMode;
   reference_material_id?: string | null;
+  /** Topics that should run with external research enabled during this batch. */
+  external_research_node_ids?: string[];
 }
 
 export interface BatchPreviewRequest {
@@ -66,6 +68,8 @@ export interface BatchCreateRequest {
   root_node_ids: string[];
   node_ids?: string[];
   policy: BatchPolicyIn;
+  /** Convenience mirror of policy.external_research_node_ids for create payloads. */
+  external_research_node_ids?: string[];
 }
 
 export interface BatchJobOut {

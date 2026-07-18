@@ -59,6 +59,10 @@ export type RefModalMode = "manage" | "view";
 export const SOURCE_PDF_DELETED_BLOCK_REASON =
   "The reference PDF for this draft was removed. Upload a new PDF, or discard drafts and generate fresh from page 1 without a reference document.";
 
+/** Design §14 — mild mentor copy when External Research fail-softs (not QC tone). */
+export const EXTERNAL_RESEARCH_FAIL_SOFT_MESSAGE =
+  "We couldn't find enough reliable information online for this topic, so this version was generated without external references. You can attach a reference PDF instead, or edit the generated content directly.";
+
 function isSourcePdfDeleted(
   activeVersion: StudyMaterialVersionOut | null,
   referenceMaterial: ReferenceMaterialOut | null,
@@ -84,6 +88,9 @@ interface UseStudyMaterialParams {
   onStudyStateChange?: (nodeId: string, patch: NodeStudyStatePatch) => void;
   onMentorProgressRefresh?: () => void;
   contentRefreshToken?: number;
+  /** Optional space-scoped external research preference (Generate All sync). */
+  externalResearchEnabled?: boolean;
+  onExternalResearchChange?: (enabled: boolean) => void;
 }
 
 export interface UseStudyMaterialReturn {
@@ -105,6 +112,11 @@ export interface UseStudyMaterialReturn {
   nodeMedia: NodeMediaOut[];
   isLoadingGenerationSource: boolean;
   isLoadingTopicResources: boolean;
+  externalResearchEnabled: boolean;
+  setExternalResearchEnabled: (enabled: boolean) => void;
+  showExternalResearchFailSoftBanner: boolean;
+  dismissExternalResearchFailSoftBanner: () => void;
+  externalResearchFailSoftMessage: string;
   setCurrentPage: (p: TopicContentPage) => void;
 
   // ── State ─────────────────────────────────────────────────────────────
@@ -218,7 +230,7 @@ export interface UseStudyMaterialReturn {
   setReferenceMaterial: (m: ReferenceMaterialOut | null) => void;
   setReferenceMaterialForNode: (nodeId: string, m: ReferenceMaterialOut | null) => void;
   refreshGenerationSource: () => Promise<void>;
-  refreshTopicResources: () => Promise<void>;
+  refreshTopicResources: () => Promise<NodeMediaOut[]>;
   handleAcceptFailedQc: () => Promise<void>;
 }
 
@@ -233,6 +245,8 @@ export function useStudyMaterial({
   onStudyStateChange,
   onMentorProgressRefresh,
   contentRefreshToken = 0,
+  externalResearchEnabled: externalResearchEnabledProp,
+  onExternalResearchChange,
 }: UseStudyMaterialParams): UseStudyMaterialReturn {
   // ── Local state ───────────────────────────────────────────────────────────
   const [feedbackModalMode, setFeedbackModalMode] = useState<StudyMaterialFeedbackMode | null>(null);
@@ -284,6 +298,11 @@ export function useStudyMaterial({
   const [nodeMedia, setNodeMedia] = useState<NodeMediaOut[]>([]);
   const [isLoadingGenerationSource, setIsLoadingGenerationSource] = useState(false);
   const [isLoadingTopicResources, setIsLoadingTopicResources] = useState(false);
+  /** Mentor toggle: External Research Mode (mutually exclusive with a source PDF). */
+  const [externalResearchByNode, setExternalResearchByNode] = useState<Record<string, boolean>>({});
+  const [externalResearchFailSoftDismissedByNode, setExternalResearchFailSoftDismissedByNode] =
+    useState<Record<string, string>>({});
+  const usesControlledExternalResearch = typeof onExternalResearchChange === "function";
 
   const onStudyStateChangeRef = useRef(onStudyStateChange);
   onStudyStateChangeRef.current = onStudyStateChange;
@@ -322,6 +341,28 @@ export function useStudyMaterial({
   const isAbandoningGeneration = studyState?.isAbandoningGeneration ?? false;
   const referenceMaterial = studyState?.referenceMaterial ?? null;
   const currentEffectiveInstruction = node?.effective_instruction ?? "";
+  const externalResearchPreference = usesControlledExternalResearch
+    ? Boolean(externalResearchEnabledProp)
+    : Boolean(node?.node_id && externalResearchByNode[node.node_id]);
+  const externalResearchEnabled = Boolean(
+    externalResearchPreference && !referenceMaterial,
+  );
+
+  const setExternalResearchEnabled = useCallback(
+    (enabled: boolean) => {
+      if (!node) return;
+      if (enabled && referenceMaterial) return;
+      if (usesControlledExternalResearch) {
+        onExternalResearchChange?.(enabled);
+        return;
+      }
+      setExternalResearchByNode((prev) => ({
+        ...prev,
+        [node.node_id]: enabled,
+      }));
+    },
+    [node, referenceMaterial, usesControlledExternalResearch, onExternalResearchChange],
+  );
 
   useEffect(() => {
     saveInstructionBannerDismissals(instructionBannerDismissedByNode);
@@ -334,8 +375,18 @@ export function useStudyMaterial({
   const setReferenceMaterialForNode = useCallback(
     (nodeId: string, m: ReferenceMaterialOut | null) => {
       patchNodeStudyState(nodeId, { referenceMaterial: m });
+      // PDF and External Research are mutually exclusive — attaching a PDF clears the toggle.
+      if (m) {
+        if (usesControlledExternalResearch && nodeId === node?.node_id) {
+          onExternalResearchChange?.(false);
+        } else {
+          setExternalResearchByNode((prev) =>
+            prev[nodeId] ? { ...prev, [nodeId]: false } : prev,
+          );
+        }
+      }
     },
-    [patchNodeStudyState]
+    [patchNodeStudyState, usesControlledExternalResearch, onExternalResearchChange, node?.node_id]
   );
   const setReferenceMaterial = (m: ReferenceMaterialOut | null) => {
     if (!node) return;
@@ -350,27 +401,56 @@ export function useStudyMaterial({
       const latest = await referenceMaterialService.getLatestByNode(node.node_id);
       if (requestId !== generationSourceRequestRef.current) return;
       patchNodeStudyState(node.node_id, { referenceMaterial: latest });
-    } catch {
+      if (latest) {
+        if (usesControlledExternalResearch) {
+          onExternalResearchChange?.(false);
+        } else {
+          setExternalResearchByNode((prev) =>
+            prev[node.node_id] ? { ...prev, [node.node_id]: false } : prev,
+          );
+        }
+      }    } catch {
       /* non-critical */
     } finally {
       if (requestId === generationSourceRequestRef.current) {
         setIsLoadingGenerationSource(false);
       }
     }
-  }, [node, isMentor, patchNodeStudyState]);
+  }, [
+    node,
+    isMentor,
+    patchNodeStudyState,
+    usesControlledExternalResearch,
+    onExternalResearchChange,
+  ]);
 
-  const refreshTopicResources = useCallback(async () => {
-    if (!node || !isMentor) return;
+  const refreshTopicResources = useCallback(async (): Promise<NodeMediaOut[]> => {
+    if (!node || !isMentor) return [];
     setIsLoadingTopicResources(true);
     try {
       const mediaRes = await referenceMaterialService.listNodeMedia(node.node_id);
       setNodeMedia(mediaRes.items);
+      return mediaRes.items;
     } catch {
       /* non-critical */
+      return [];
     } finally {
       setIsLoadingTopicResources(false);
     }
   }, [node, isMentor]);
+
+  /** After external generate/regenerate: refresh resources and toast when article links exist. */
+  const refreshExternalSourcesAfterGenerate = useCallback(
+    async (usedExternalResearch: boolean) => {
+      if (!usedExternalResearch) return;
+      const items = await refreshTopicResources();
+      const hasArticleLinks = items.some((item) => item.media_type === "article_link");
+      if (hasArticleLinks) {
+        toast.success("External sources have been added for student reference.");
+      }
+    },
+    [refreshTopicResources],
+  );
 
   const applyVersion = (nodeId: string, version: StudyMaterialVersionOut, clearViewing = true) => {
     if (clearViewing) setViewingVersionId(null);
@@ -1207,6 +1287,11 @@ export function useStudyMaterial({
   const handleGenerateStudyMaterial = async () => {
     if (!node || isGenerating) return;
     const nodeId = node.node_id;
+    const usedExternalResearch = Boolean(
+      (usesControlledExternalResearch
+        ? externalResearchEnabledProp
+        : externalResearchByNode[nodeId]) && !referenceMaterial,
+    );
     generatingNodeIds.add(nodeId);
     let latestRunId: string | null = null;
     patchNodeStudyState(nodeId, {
@@ -1223,9 +1308,11 @@ export function useStudyMaterial({
       // PAUSED while we waited. Never supersede it — route the mentor to resume/delete.
       if (await routeToUnresolvedRunIfAny(nodeId)) return;
       const { result, progress } = await generationJobService.runJob(
-        () => studyMaterialService.startGenerate(nodeId, {
-          reference_material_id: referenceMaterial?.material_id ?? null,
-        }),
+        () =>
+          studyMaterialService.startGenerate(nodeId, {
+            reference_material_id: referenceMaterial?.material_id ?? null,
+            external_research_enabled: usedExternalResearch,
+          }),
         (progressUpdate) => {
           latestRunId = progressUpdate.session_id;
           patchNodeStudyState(nodeId, patchGenerationProgressUpdate(progressUpdate));
@@ -1246,6 +1333,7 @@ export function useStudyMaterial({
       if (isViewingNode(nodeId)) {
         await refreshVersionHistory(nodeId);
         await refreshMentorUiStateRef.current(nodeId, null);
+        await refreshExternalSourcesAfterGenerate(usedExternalResearch);
       }
       patchNodeStudyState(nodeId, patchForGenerationJobSuccess());
       toast.success(`Study material saved as ${version.display_label}.`);
@@ -1276,6 +1364,11 @@ export function useStudyMaterial({
   const handleRegenerateStudyMaterialFresh = async () => {
     if (!node || isGenerating || isDeletingDrafts) return;
     const nodeId = node.node_id;
+    const usedExternalResearch = Boolean(
+      (usesControlledExternalResearch
+        ? externalResearchEnabledProp
+        : externalResearchByNode[nodeId]) && !referenceMaterial,
+    );
     generatingNodeIds.add(nodeId);
     let latestRunId: string | null = null;
     setIsDeletingDrafts(true);
@@ -1309,9 +1402,11 @@ export function useStudyMaterial({
       if (await routeToUnresolvedRunIfAny(nodeId)) return;
       await studyMaterialService.clearAllDrafts(nodeId);
       const { result, progress } = await generationJobService.runJob(
-        () => studyMaterialService.startGenerate(nodeId, {
-          reference_material_id: referenceMaterial?.material_id ?? null,
-        }),
+        () =>
+          studyMaterialService.startGenerate(nodeId, {
+            reference_material_id: referenceMaterial?.material_id ?? null,
+            external_research_enabled: usedExternalResearch,
+          }),
         (progressUpdate) => {
           latestRunId = progressUpdate.session_id;
           patchNodeStudyState(nodeId, patchGenerationProgressUpdate(progressUpdate));
@@ -1336,6 +1431,7 @@ export function useStudyMaterial({
         // the deleted versions bleeds through and shows a phantom "Unpublish"
         // button on the new version, which then 409s when clicked.
         await refreshMentorUiStateRef.current(nodeId, null);
+        await refreshExternalSourcesAfterGenerate(usedExternalResearch);
       }
       patchNodeStudyState(nodeId, patchForGenerationJobSuccess());
       toast.success(`Study material regenerated as ${version.display_label}.`);
@@ -1930,6 +2026,14 @@ export function useStudyMaterial({
     }));
   }, [node, referenceMaterial]);
 
+  const dismissExternalResearchFailSoftBanner = useCallback(() => {
+    if (!node || !activeVersion?.version_id) return;
+    setExternalResearchFailSoftDismissedByNode((dismissed) => ({
+      ...dismissed,
+      [node.node_id]: activeVersion.version_id,
+    }));
+  }, [node, activeVersion?.version_id]);
+
   const openFeedbackModal = useCallback(
     (mode: StudyMaterialFeedbackMode) => {
       if (isSourcePdfDeleted(activeVersion, referenceMaterial, isLoadingGenerationSource)) {
@@ -2021,6 +2125,18 @@ export function useStudyMaterial({
     !isViewingNonActiveVersion
   );
 
+  const externalResearchFailSoftDismissedFor = node
+    ? externalResearchFailSoftDismissedByNode[node.node_id]
+    : undefined;
+  const showExternalResearchFailSoftBanner = Boolean(
+    isDisplayedActiveWorkingDraft &&
+    activeVersion?.generation_outcome_detail?.external_research_fail_soft &&
+    activeVersion.version_id !== externalResearchFailSoftDismissedFor
+  );
+  const externalResearchFailSoftMessage =
+    activeVersion?.generation_outcome_detail?.message?.trim() ||
+    EXTERNAL_RESEARCH_FAIL_SOFT_MESSAGE;
+
   // ── Return ────────────────────────────────────────────────────────────────
 
   return {
@@ -2042,6 +2158,11 @@ export function useStudyMaterial({
     nodeMedia,
     isLoadingGenerationSource,
     isLoadingTopicResources,
+    externalResearchEnabled,
+    setExternalResearchEnabled,
+    showExternalResearchFailSoftBanner,
+    dismissExternalResearchFailSoftBanner,
+    externalResearchFailSoftMessage,
     setCurrentPage,
 
     // State

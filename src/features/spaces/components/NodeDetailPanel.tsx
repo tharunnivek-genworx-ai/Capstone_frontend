@@ -70,6 +70,9 @@ interface NodeDetailPanelProps {
   batchStepStatus?: BatchStepStatus | null;
   /** @deprecated Prefer batchStepStatus; kept for callers that only pass the waiting flag. */
   isWaitingForGenerateAll?: boolean;
+  /** Space-scoped external research preference for the active topic. */
+  externalResearchEnabled?: boolean;
+  onExternalResearchChange?: (enabled: boolean) => void;
 }
 
 const NodeDetailPanel: React.FC<NodeDetailPanelProps> = ({
@@ -87,6 +90,8 @@ const NodeDetailPanel: React.FC<NodeDetailPanelProps> = ({
   contentRefreshToken = 0,
   batchStepStatus = null,
   isWaitingForGenerateAll = false,
+  externalResearchEnabled,
+  onExternalResearchChange,
 }) => {
   const blockedByBatch =
     isWaitingForGenerateAll ||
@@ -113,6 +118,8 @@ const NodeDetailPanel: React.FC<NodeDetailPanelProps> = ({
     onStudyStateChange,
     onMentorProgressRefresh,
     contentRefreshToken,
+    externalResearchEnabled,
+    onExternalResearchChange,
   });
 
   const showGenerationProgress =
