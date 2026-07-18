@@ -4,13 +4,20 @@ import type { NodeTreeNode } from "../../../spaces/types/node.types";
 
 export type RootQueueBusyStatus = "running" | "queued";
 
+export interface GenerateAllRootPickerSelection {
+  nodeIds: string[];
+  externalResearchNodeIds: string[];
+}
+
 interface GenerateAllRootPickerModalProps {
   roots: NodeTreeNode[];
   initialSelectedNodeIds?: string[];
+  /** Preferred external-research flags keyed by node id (from topic pages or prior picks). */
+  initialExternalResearchByNodeId?: Record<string, boolean>;
   /** Node ids currently in an active generate-all run — not selectable. */
   busyNodeIds?: Set<string>;
   onClose: () => void;
-  onContinue: (nodeIds: string[]) => void;
+  onContinue: (selection: GenerateAllRootPickerSelection) => void;
 }
 
 function collectDescendantIds(node: NodeTreeNode): string[] {
@@ -41,9 +48,11 @@ interface TreeRowProps {
   depth: number;
   expanded: Set<string>;
   selected: Set<string>;
+  externalResearch: Set<string>;
   busyNodeIds: Set<string>;
   onToggleExpand: (nodeId: string) => void;
   onToggleSelect: (node: NodeTreeNode) => void;
+  onToggleExternalResearch: (nodeId: string) => void;
   onSelectAllDescendants: (node: NodeTreeNode) => void;
   onClearDescendants: (node: NodeTreeNode) => void;
 }
@@ -53,15 +62,18 @@ function TreeRow({
   depth,
   expanded,
   selected,
+  externalResearch,
   busyNodeIds,
   onToggleExpand,
   onToggleSelect,
+  onToggleExternalResearch,
   onSelectAllDescendants,
   onClearDescendants,
 }: TreeRowProps) {
   const hasChildren = node.children.length > 0;
   const isExpanded = expanded.has(node.node_id);
   const isChecked = selected.has(node.node_id);
+  const researchOn = externalResearch.has(node.node_id);
   const subtreeIds = collectDescendantIds(node);
   const selectableDescendantIds = getSelectableDescendantIds(node, busyNodeIds);
   const selectedDescendantCount = selectableDescendantIds.filter((id) =>
@@ -72,6 +84,7 @@ function TreeRow({
     selectedDescendantCount === selectableDescendantIds.length;
   const isBusy = subtreeIds.every((id) => busyNodeIds.has(id)) && subtreeIds.length > 0;
   const isPartiallyBusy = !isBusy && subtreeIds.some((id) => busyNodeIds.has(id));
+  const rowBusy = isBusy || busyNodeIds.has(node.node_id);
 
   return (
     <>
@@ -143,10 +156,31 @@ function TreeRow({
               )}
             </span>
           )}
+          <label
+            className={`batch-topic-row__research${isChecked ? " batch-topic-row__research--active" : ""}${
+              !isChecked || rowBusy ? " batch-topic-row__research--disabled" : ""
+            }`}
+            title={
+              rowBusy
+                ? "This topic is already generating"
+                : isChecked
+                  ? "Enable external research for this topic only"
+                  : "Select this topic first to enable external research"
+            }
+          >
+            <input
+              type="checkbox"
+              checked={isChecked && researchOn}
+              disabled={!isChecked || rowBusy}
+              onChange={() => onToggleExternalResearch(node.node_id)}
+              aria-label={`External research for ${node.title}`}
+            />
+            <span>Research</span>
+          </label>
           <input
             type="checkbox"
             checked={isChecked}
-            disabled={isBusy || busyNodeIds.has(node.node_id)}
+            disabled={rowBusy}
             onChange={() => onToggleSelect(node)}
             aria-label={`Select ${node.title}`}
             className="batch-topic-row__checkbox"
@@ -162,9 +196,11 @@ function TreeRow({
             depth={depth + 1}
             expanded={expanded}
             selected={selected}
+            externalResearch={externalResearch}
             busyNodeIds={busyNodeIds}
             onToggleExpand={onToggleExpand}
             onToggleSelect={onToggleSelect}
+            onToggleExternalResearch={onToggleExternalResearch}
             onSelectAllDescendants={onSelectAllDescendants}
             onClearDescendants={onClearDescendants}
           />
@@ -176,6 +212,7 @@ function TreeRow({
 export default function GenerateAllRootPickerModal({
   roots,
   initialSelectedNodeIds = [],
+  initialExternalResearchByNodeId = {},
   busyNodeIds = new Set(),
   onClose,
   onContinue,
@@ -186,6 +223,13 @@ export default function GenerateAllRootPickerModal({
     const next = new Set(initialSelectedNodeIds);
     for (const id of Array.from(next)) {
       if (busyNodeIds.has(id)) next.delete(id);
+    }
+    return next;
+  });
+  const [externalResearch, setExternalResearch] = useState<Set<string>>(() => {
+    const next = new Set<string>();
+    for (const [nodeId, enabled] of Object.entries(initialExternalResearchByNodeId)) {
+      if (enabled && !busyNodeIds.has(nodeId)) next.add(nodeId);
     }
     return next;
   });
@@ -206,6 +250,10 @@ export default function GenerateAllRootPickerModal({
   }, [roots, busyNodeIds]);
 
   const selectedCount = selected.size;
+  const researchSelectedCount = useMemo(
+    () => Array.from(selected).filter((id) => externalResearch.has(id)).length,
+    [selected, externalResearch],
+  );
 
   const handleToggleExpand = useCallback((nodeId: string) => {
     setExpanded((prev) => {
@@ -222,8 +270,17 @@ export default function GenerateAllRootPickerModal({
 
       setSelected((prev) => {
         const next = new Set(prev);
-        if (next.has(node.node_id)) next.delete(node.node_id);
-        else next.add(node.node_id);
+        if (next.has(node.node_id)) {
+          next.delete(node.node_id);
+          setExternalResearch((researchPrev) => {
+            if (!researchPrev.has(node.node_id)) return researchPrev;
+            const researchNext = new Set(researchPrev);
+            researchNext.delete(node.node_id);
+            return researchNext;
+          });
+        } else {
+          next.add(node.node_id);
+        }
         return next;
       });
 
@@ -233,6 +290,15 @@ export default function GenerateAllRootPickerModal({
     },
     [busyNodeIds],
   );
+
+  const handleToggleExternalResearch = useCallback((nodeId: string) => {
+    setExternalResearch((prev) => {
+      const next = new Set(prev);
+      if (next.has(nodeId)) next.delete(nodeId);
+      else next.add(nodeId);
+      return next;
+    });
+  }, []);
 
   const handleSelectAllDescendants = useCallback(
     (node: NodeTreeNode) => {
@@ -259,11 +325,19 @@ export default function GenerateAllRootPickerModal({
         for (const id of ids) next.delete(id);
         return next;
       });
+      setExternalResearch((prev) => {
+        const next = new Set(prev);
+        for (const id of ids) next.delete(id);
+        return next;
+      });
     },
     [busyNodeIds],
   );
 
-  const handleClearSelection = () => setSelected(new Set());
+  const handleClearSelection = () => {
+    setSelected(new Set());
+    setExternalResearch(new Set());
+  };
 
   return (
     <>
@@ -287,6 +361,11 @@ export default function GenerateAllRootPickerModal({
                 Select all subtopics
               </strong>{" "}
               on a section to bulk-select its children without selecting the section itself.
+              Turn on{" "}
+              <strong style={{ fontWeight: 600, color: "var(--color-text-primary)" }}>
+                Research
+              </strong>{" "}
+              per selected topic when you want external research for that topic only.
               Generation runs one topic at a time in the background.
             </p>
           </div>
@@ -320,9 +399,11 @@ export default function GenerateAllRootPickerModal({
                     depth={0}
                     expanded={expanded}
                     selected={selected}
+                    externalResearch={externalResearch}
                     busyNodeIds={busyNodeIds}
                     onToggleExpand={handleToggleExpand}
                     onToggleSelect={handleToggleSelect}
+                    onToggleExternalResearch={handleToggleExternalResearch}
                     onSelectAllDescendants={handleSelectAllDescendants}
                     onClearDescendants={handleClearDescendants}
                   />
@@ -333,7 +414,11 @@ export default function GenerateAllRootPickerModal({
             <p className="batch-topic-picker__summary" aria-live="polite">
               {selectedCount === 0
                 ? "No topics selected yet."
-                : `${selectedCount} topic${selectedCount === 1 ? "" : "s"} selected for generation.`}
+                : `${selectedCount} topic${selectedCount === 1 ? "" : "s"} selected${
+                    researchSelectedCount > 0
+                      ? ` · external research on ${researchSelectedCount}`
+                      : ""
+                  }.`}
             </p>
 
             {selectableCount === 0 && roots.length > 0 && (
@@ -351,7 +436,14 @@ export default function GenerateAllRootPickerModal({
               type="button"
               className="btn-primary"
               disabled={selectedCount === 0}
-              onClick={() => onContinue(Array.from(selected))}
+              onClick={() =>
+                onContinue({
+                  nodeIds: Array.from(selected),
+                  externalResearchNodeIds: Array.from(selected).filter((id) =>
+                    externalResearch.has(id),
+                  ),
+                })
+              }
             >
               Continue ({selectedCount})
             </button>

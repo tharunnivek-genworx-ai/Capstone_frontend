@@ -88,6 +88,9 @@ interface UseStudyMaterialParams {
   onStudyStateChange?: (nodeId: string, patch: NodeStudyStatePatch) => void;
   onMentorProgressRefresh?: () => void;
   contentRefreshToken?: number;
+  /** Optional space-scoped external research preference (Generate All sync). */
+  externalResearchEnabled?: boolean;
+  onExternalResearchChange?: (enabled: boolean) => void;
 }
 
 export interface UseStudyMaterialReturn {
@@ -242,6 +245,8 @@ export function useStudyMaterial({
   onStudyStateChange,
   onMentorProgressRefresh,
   contentRefreshToken = 0,
+  externalResearchEnabled: externalResearchEnabledProp,
+  onExternalResearchChange,
 }: UseStudyMaterialParams): UseStudyMaterialReturn {
   // ── Local state ───────────────────────────────────────────────────────────
   const [feedbackModalMode, setFeedbackModalMode] = useState<StudyMaterialFeedbackMode | null>(null);
@@ -297,6 +302,7 @@ export function useStudyMaterial({
   const [externalResearchByNode, setExternalResearchByNode] = useState<Record<string, boolean>>({});
   const [externalResearchFailSoftDismissedByNode, setExternalResearchFailSoftDismissedByNode] =
     useState<Record<string, string>>({});
+  const usesControlledExternalResearch = typeof onExternalResearchChange === "function";
 
   const onStudyStateChangeRef = useRef(onStudyStateChange);
   onStudyStateChangeRef.current = onStudyStateChange;
@@ -335,20 +341,27 @@ export function useStudyMaterial({
   const isAbandoningGeneration = studyState?.isAbandoningGeneration ?? false;
   const referenceMaterial = studyState?.referenceMaterial ?? null;
   const currentEffectiveInstruction = node?.effective_instruction ?? "";
+  const externalResearchPreference = usesControlledExternalResearch
+    ? Boolean(externalResearchEnabledProp)
+    : Boolean(node?.node_id && externalResearchByNode[node.node_id]);
   const externalResearchEnabled = Boolean(
-    node?.node_id && externalResearchByNode[node.node_id] && !referenceMaterial,
+    externalResearchPreference && !referenceMaterial,
   );
 
   const setExternalResearchEnabled = useCallback(
     (enabled: boolean) => {
       if (!node) return;
       if (enabled && referenceMaterial) return;
+      if (usesControlledExternalResearch) {
+        onExternalResearchChange?.(enabled);
+        return;
+      }
       setExternalResearchByNode((prev) => ({
         ...prev,
         [node.node_id]: enabled,
       }));
     },
-    [node, referenceMaterial],
+    [node, referenceMaterial, usesControlledExternalResearch, onExternalResearchChange],
   );
 
   useEffect(() => {
@@ -364,12 +377,16 @@ export function useStudyMaterial({
       patchNodeStudyState(nodeId, { referenceMaterial: m });
       // PDF and External Research are mutually exclusive — attaching a PDF clears the toggle.
       if (m) {
-        setExternalResearchByNode((prev) =>
-          prev[nodeId] ? { ...prev, [nodeId]: false } : prev,
-        );
+        if (usesControlledExternalResearch && nodeId === node?.node_id) {
+          onExternalResearchChange?.(false);
+        } else {
+          setExternalResearchByNode((prev) =>
+            prev[nodeId] ? { ...prev, [nodeId]: false } : prev,
+          );
+        }
       }
     },
-    [patchNodeStudyState]
+    [patchNodeStudyState, usesControlledExternalResearch, onExternalResearchChange, node?.node_id]
   );
   const setReferenceMaterial = (m: ReferenceMaterialOut | null) => {
     if (!node) return;
@@ -385,9 +402,13 @@ export function useStudyMaterial({
       if (requestId !== generationSourceRequestRef.current) return;
       patchNodeStudyState(node.node_id, { referenceMaterial: latest });
       if (latest) {
-        setExternalResearchByNode((prev) =>
-          prev[node.node_id] ? { ...prev, [node.node_id]: false } : prev,
-        );
+        if (usesControlledExternalResearch) {
+          onExternalResearchChange?.(false);
+        } else {
+          setExternalResearchByNode((prev) =>
+            prev[node.node_id] ? { ...prev, [node.node_id]: false } : prev,
+          );
+        }
       }    } catch {
       /* non-critical */
     } finally {
@@ -395,7 +416,13 @@ export function useStudyMaterial({
         setIsLoadingGenerationSource(false);
       }
     }
-  }, [node, isMentor, patchNodeStudyState]);
+  }, [
+    node,
+    isMentor,
+    patchNodeStudyState,
+    usesControlledExternalResearch,
+    onExternalResearchChange,
+  ]);
 
   const refreshTopicResources = useCallback(async (): Promise<NodeMediaOut[]> => {
     if (!node || !isMentor) return [];
@@ -1261,7 +1288,9 @@ export function useStudyMaterial({
     if (!node || isGenerating) return;
     const nodeId = node.node_id;
     const usedExternalResearch = Boolean(
-      externalResearchByNode[nodeId] && !referenceMaterial,
+      (usesControlledExternalResearch
+        ? externalResearchEnabledProp
+        : externalResearchByNode[nodeId]) && !referenceMaterial,
     );
     generatingNodeIds.add(nodeId);
     let latestRunId: string | null = null;
@@ -1336,7 +1365,9 @@ export function useStudyMaterial({
     if (!node || isGenerating || isDeletingDrafts) return;
     const nodeId = node.node_id;
     const usedExternalResearch = Boolean(
-      externalResearchByNode[nodeId] && !referenceMaterial,
+      (usesControlledExternalResearch
+        ? externalResearchEnabledProp
+        : externalResearchByNode[nodeId]) && !referenceMaterial,
     );
     generatingNodeIds.add(nodeId);
     let latestRunId: string | null = null;

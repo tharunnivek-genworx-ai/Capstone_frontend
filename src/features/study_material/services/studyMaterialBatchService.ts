@@ -34,12 +34,18 @@ export const studyMaterialBatchService = {
       root_node_ids: string[];
       node_ids: string[];
       policy: ExistingMaterialPolicy;
+      external_research_node_ids?: string[];
     },
   ): Promise<BatchCreateResponse> {
+    const externalResearchNodeIds = payload.external_research_node_ids ?? [];
     const body: BatchCreateRequest = {
       root_node_ids: payload.root_node_ids,
       node_ids: payload.node_ids,
-      policy: toBatchPolicy(payload.policy),
+      policy: {
+        ...toBatchPolicy(payload.policy),
+        external_research_node_ids: externalResearchNodeIds,
+      },
+      external_research_node_ids: externalResearchNodeIds,
     };
     const response = await studyAgentClient.post<BatchCreateResponse>(
       `/spaces/${spaceId}/batches`,
