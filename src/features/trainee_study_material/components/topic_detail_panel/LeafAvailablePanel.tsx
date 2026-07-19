@@ -18,6 +18,7 @@ interface LeafAvailablePanelProps {
   nodeId: string;
   onNavigate: (nodeId: string) => void;
   onRefreshPanel: () => void;
+  onNodesUnlocked?: (nodeIds: string[]) => void;
 }
 
 const LeafAvailablePanel: React.FC<LeafAvailablePanelProps> = ({
@@ -26,6 +27,7 @@ const LeafAvailablePanel: React.FC<LeafAvailablePanelProps> = ({
   nodeId,
   onNavigate,
   onRefreshPanel,
+  onNodesUnlocked,
 }) => {
   const [isReading, setIsReading] = useState(false);
   const [materialTab, setMaterialTab] = useState<MaterialTab>("current");
@@ -65,8 +67,13 @@ const LeafAvailablePanel: React.FC<LeafAvailablePanelProps> = ({
       <TopicDetailReadingView
         nodeId={nodeId}
         nodeTitle={panel.title}
+        spaceId={spaceId}
         onBack={() => {
           setIsReading(false);
+          onRefreshPanel();
+        }}
+        onNodesUnlocked={(nodeIds) => {
+          onNodesUnlocked?.(nodeIds);
           onRefreshPanel();
         }}
       />

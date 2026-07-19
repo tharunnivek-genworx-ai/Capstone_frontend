@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { ChevronDown, ChevronRight, Circle, Layers3, Lock } from "lucide-react";
 import type { NodeTreeNode } from "../../spaces/types/node.types";
+import { getTreeNodeLockState } from "../utils/accessStatus";
 
 interface TraineeTreeNodeProps {
   node: NodeTreeNode;
@@ -16,14 +17,23 @@ const TraineeTreeNode: React.FC<TraineeTreeNodeProps> = ({
   const [isExpanded, setIsExpanded] = useState(true);
   const hasChildren = node.children.length > 0;
   const isSelected = selectedNodeId === node.node_id;
-  const isLockedLeaf = !hasChildren && node.hasPublishedMaterial === false;
+  const lockState = getTreeNodeLockState(node);
+  const isLocked = lockState.isLocked;
+  const statusLabel = lockState.label ?? node.title;
+  const tooltip =
+    isLocked
+      ? node.unlock_message ??
+        (node.blocked_by_title
+          ? `Finish ${node.blocked_by_title} first`
+          : statusLabel)
+      : node.title;
 
   return (
     <div className="tree-node-branch">
       <div
         onClick={() => onSelect(node)}
-        className={`tree-node trainee-tree-node${isSelected ? " tree-node--selected" : ""}${isLockedLeaf ? " trainee-tree-node--locked" : ""}`}
-        title={isLockedLeaf ? "Coming soon — tap to see alternatives" : node.title}
+        className={`tree-node trainee-tree-node${isSelected ? " tree-node--selected" : ""}${isLocked ? " trainee-tree-node--locked" : ""}`}
+        title={tooltip}
         role="treeitem"
         aria-selected={isSelected}
         tabIndex={0}
@@ -48,7 +58,7 @@ const TraineeTreeNode: React.FC<TraineeTreeNodeProps> = ({
           {isExpanded ? <ChevronDown size={15} /> : <ChevronRight size={15} />}
         </button>
 
-        {isLockedLeaf ? (
+        {isLocked ? (
           <div className="tree-node__icon trainee-tree-node__lock">
             <Lock size={12} />
           </div>
@@ -61,7 +71,7 @@ const TraineeTreeNode: React.FC<TraineeTreeNodeProps> = ({
         <span className="tree-node__title">
           {node.title}
         </span>
-        {isLockedLeaf && <span className="trainee-tree-node__status">Coming soon</span>}
+        {isLocked && <span className="trainee-tree-node__status">{statusLabel}</span>}
       </div>
 
       {hasChildren && isExpanded && (

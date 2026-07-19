@@ -33,6 +33,7 @@ import {
   extractResumeErrorDetail,
   GenerationJobFailedError,
 } from "../../generation/utils/generationJobErrors";
+import { isValidPassThreshold } from "../utils/passThreshold";
 
 /** Nodes with an in-flight quiz generate/regenerate request (survives node switches). */
 const generatingQuizNodeIds = new Set<string>();
@@ -77,6 +78,7 @@ export interface UseQuizReturn {
   isPausingGeneration: boolean;
   isAbandoningGeneration: boolean;
   isPublishing: boolean;
+  isUpdatingPassThreshold: boolean;
   isUnpublishing: boolean;
   isDeletingDraft: boolean;
   isDeletingHintsDraft: boolean;
@@ -132,7 +134,8 @@ export interface UseQuizReturn {
   handleDeleteDraft: () => Promise<void>;
   handleDeleteHintsDraft: () => Promise<void>;
   handlePublishQuiz: () => void;
-  confirmPublishQuiz: () => Promise<void>;
+  confirmPublishQuiz: (passThresholdPercent: number) => Promise<void>;
+  updatePassThreshold: (passThresholdPercent: number) => Promise<boolean>;
   handleUnpublishQuiz: () => Promise<void>;
   confirmUnpublishQuiz: (retentionMode: RetentionMode) => Promise<void>;
   handleUpdateQuestion: (questionId: string, data: QuizQuestionUpdateRequest) => Promise<boolean>;
@@ -251,6 +254,7 @@ export function useQuiz({
   const [quiz, setQuiz] = useState<QuizOut | null>(null);
   const [isLoadingQuiz, setIsLoadingQuiz] = useState(false);
   const [isPublishing, setIsPublishing] = useState(false);
+  const [isUpdatingPassThreshold, setIsUpdatingPassThreshold] = useState(false);
   const [isUnpublishing, setIsUnpublishing] = useState(false);
   const [isDeletingDraft, setIsDeletingDraft] = useState(false);
   const [isDeletingHintsDraft, setIsDeletingHintsDraft] = useState(false);
@@ -382,6 +386,7 @@ export function useQuiz({
     setQuiz(null);
     setIsLoadingQuiz(false);
     setIsPublishing(false);
+    setIsUpdatingPassThreshold(false);
     setIsUnpublishing(false);
     setIsDeletingDraft(false);
     setIsDeletingHintsDraft(false);
@@ -875,12 +880,14 @@ export function useQuiz({
     }
   }, [node, quiz?.quiz_id, setResolvedQuizIdForNode, handleMutationError]);
 
-  const confirmPublishQuiz = useCallback(async () => {
+  const confirmPublishQuiz = useCallback(async (passThresholdPercent: number) => {
     if (!node || !quiz || isPublishing || !canPublishQuiz) return;
     const nodeId = node.node_id;
     setIsPublishing(true);
     try {
-      const published = await quizService.publish(nodeId, quiz.quiz_id);
+      const published = await quizService.publish(nodeId, quiz.quiz_id, {
+        pass_threshold_percent: passThresholdPercent,
+      });
       setQuiz(published);
       setShowPublishConfirmModal(false);
       await refreshQuiz(nodeId, published.quiz_id);
@@ -895,12 +902,31 @@ export function useQuiz({
 
   const handlePublishQuiz = useCallback(() => {
     if (!node || !quiz || isPublishing || !canPublishQuiz || quiz.is_published) return;
-    if (hasOtherLiveQuiz) {
-      setShowPublishConfirmModal(true);
-      return;
+    setShowPublishConfirmModal(true);
+  }, [node, quiz, isPublishing, canPublishQuiz]);
+
+  const updatePassThreshold = useCallback(async (passThresholdPercent: number) => {
+    if (!node || !quiz || isUpdatingPassThreshold) return false;
+    if (!isValidPassThreshold(passThresholdPercent)) {
+      return false;
     }
-    void confirmPublishQuiz();
-  }, [node, quiz, isPublishing, canPublishQuiz, hasOtherLiveQuiz, confirmPublishQuiz]);
+    setIsUpdatingPassThreshold(true);
+    try {
+      const updated = await quizService.updatePassThreshold(node.node_id, quiz.quiz_id, {
+        pass_threshold_percent: passThresholdPercent,
+      });
+      setQuiz(updated);
+      await refreshQuiz(node.node_id, updated.quiz_id);
+      onMentorProgressRefreshRef.current?.();
+      toast.success("Pass score updated.");
+      return true;
+    } catch (err) {
+      handleMutationError(err);
+      return false;
+    } finally {
+      setIsUpdatingPassThreshold(false);
+    }
+  }, [node, quiz, isUpdatingPassThreshold, refreshQuiz, handleMutationError]);
 
   const handleUnpublishQuiz = useCallback(async () => {
     if (!node || !quiz || isUnpublishing || !quiz.is_published) return;
@@ -1455,6 +1481,7 @@ export function useQuiz({
     isPausingGeneration,
     isAbandoningGeneration,
     isPublishing,
+    isUpdatingPassThreshold,
     isUnpublishing,
     isDeletingDraft,
     isDeletingHintsDraft,
@@ -1505,6 +1532,7 @@ export function useQuiz({
     handleDeleteHintsDraft,
     handlePublishQuiz,
     confirmPublishQuiz,
+    updatePassThreshold,
     handleUnpublishQuiz,
     confirmUnpublishQuiz,
     handleUpdateQuestion,

@@ -7,6 +7,8 @@ import type {
   QuizGenerateRequest,
   QuizMentorUiStateOut,
   QuizOut,
+  QuizPassThresholdUpdateRequest,
+  QuizPublishRequest,
   QuizQuestionCreateRequest,
   QuizQuestionDeletedOut,
   QuizQuestionOut,
@@ -87,9 +89,19 @@ export const quizService = {
       .then((r) => r.data);
   },
 
-  publish(nodeId: string, quizId: string): Promise<QuizOut> {
+  publish(nodeId: string, quizId: string, payload: QuizPublishRequest = {}): Promise<QuizOut> {
     return studyAgentClient
-      .patch<QuizOut>(`/nodes/${nodeId}/quizzes/${quizId}/publish`, {})
+      .patch<QuizOut>(`/nodes/${nodeId}/quizzes/${quizId}/publish`, payload)
+      .then((r) => r.data);
+  },
+
+  updatePassThreshold(
+    nodeId: string,
+    quizId: string,
+    payload: QuizPassThresholdUpdateRequest,
+  ): Promise<QuizOut> {
+    return studyAgentClient
+      .patch<QuizOut>(`/nodes/${nodeId}/quizzes/${quizId}/pass-threshold`, payload)
       .then((r) => r.data);
   },
 

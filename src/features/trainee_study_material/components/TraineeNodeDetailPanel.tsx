@@ -9,6 +9,7 @@ interface TraineeNodeDetailPanelProps {
   hasTopics?: boolean;
   spaceId: string;
   onNavigateToNode: (nodeId: string) => void;
+  onNodesUnlocked?: (nodeIds: string[]) => void;
 }
 
 const TraineeNodeDetailPanel: React.FC<TraineeNodeDetailPanelProps> = ({
@@ -16,6 +17,7 @@ const TraineeNodeDetailPanel: React.FC<TraineeNodeDetailPanelProps> = ({
   hasTopics = true,
   spaceId,
   onNavigateToNode,
+  onNodesUnlocked,
 }) => {
   if (!node) {
     return (
@@ -41,6 +43,7 @@ const TraineeNodeDetailPanel: React.FC<TraineeNodeDetailPanelProps> = ({
       node={node}
       spaceId={spaceId}
       onNavigate={onNavigateToNode}
+      onNodesUnlocked={onNodesUnlocked}
     />
   );
 };

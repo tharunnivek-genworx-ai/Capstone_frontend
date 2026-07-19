@@ -28,6 +28,7 @@ import QuizHistoryPanel from "./QuizHistoryPanel";
 import QuizQcWarningPanel from "./QuizQcWarningPanel";
 import QuizMentorVisibilityBanner from "./QuizMentorVisibilityBanner";
 import QuizReviewToolbar from "./QuizReviewToolbar";
+import QuizPassThresholdControl from "./QuizPassThresholdControl";
 import { isLlmRateLimited } from "../../study_material/utils/llmDiagnostics";
 import { shouldShowQcWarning } from "../../study_material/utils/qcDisplayUtils";
 import type { MentorStudentVisibilityOut } from "../../study_material/types/studyMaterial.types";
@@ -471,6 +472,11 @@ const QuizPage3: React.FC<QuizPage3Props> = ({
           >
             Hints: {quiz.hints_status}
           </span>
+          <QuizPassThresholdControl
+            value={quiz.pass_threshold_percent}
+            isSaving={qz.isUpdatingPassThreshold}
+            onSave={qz.updatePassThreshold}
+          />
         </div>
 
         {qz.showUpdateQuizNudge && (
@@ -615,9 +621,10 @@ const QuizPage3: React.FC<QuizPage3Props> = ({
         <QuizPublishConfirmModal
           quizTitle={quiz.title}
           otherLiveQuizTitle={qz.otherLiveQuizTitle}
+          initialPassThresholdPercent={quiz.pass_threshold_percent}
           isSubmitting={qz.isPublishing}
           onClose={() => !qz.isPublishing && qz.setShowPublishConfirmModal(false)}
-          onConfirm={() => void qz.confirmPublishQuiz()}
+          onConfirm={(threshold) => void qz.confirmPublishQuiz(threshold)}
         />
       )}
 

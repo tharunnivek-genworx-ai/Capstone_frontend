@@ -11,6 +11,7 @@ import QuizUnpublishConfirmModal from "./QuizUnpublishConfirmModal";
 import HintGenerationDiagnosticsPanel from "./HintGenerationDiagnosticsPanel";
 import QuizMentorVisibilityBanner from "./QuizMentorVisibilityBanner";
 import HintReviewToolbar from "./HintReviewToolbar";
+import QuizPassThresholdControl from "./QuizPassThresholdControl";
 import GenerationProgressPanel from "../../generation/components/GenerationProgressPanel";
 import { useGenerationProgress } from "../../generation/hooks/useGenerationProgress";
 import { useGenerationRunResume } from "../../generation/hooks/useGenerationRunResume";
@@ -204,6 +205,11 @@ const QuizPage4: React.FC<QuizPage4Props> = ({
           <span className="quiz-hints-version-bar__publish">
             Publishing: {quiz.is_published ? "Live" : publishReady ? "Ready" : "Waiting for complete hints"}
           </span>
+          <QuizPassThresholdControl
+            value={quiz.pass_threshold_percent}
+            isSaving={qz.isUpdatingPassThreshold}
+            onSave={qz.updatePassThreshold}
+          />
         </div>
 
         {hintGeneration && (
@@ -276,9 +282,10 @@ const QuizPage4: React.FC<QuizPage4Props> = ({
         <QuizPublishConfirmModal
           quizTitle={quiz.title}
           otherLiveQuizTitle={qz.otherLiveQuizTitle}
+          initialPassThresholdPercent={quiz.pass_threshold_percent}
           isSubmitting={qz.isPublishing}
           onClose={() => !qz.isPublishing && qz.setShowPublishConfirmModal(false)}
-          onConfirm={() => void qz.confirmPublishQuiz()}
+          onConfirm={(threshold) => void qz.confirmPublishQuiz(threshold)}
         />
       )}
 

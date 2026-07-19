@@ -154,6 +154,11 @@
   color: #5f5e5a;
 }
 
+.topic-detail-panel__badge--prerequisite {
+  background: #fef3c7;
+  color: #92400e;
+}
+
 .topic-detail-panel__badge--done {
   background: #eaf3de;
   color: #3b6d11;

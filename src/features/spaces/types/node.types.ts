@@ -115,6 +115,10 @@ export interface NodeTreeNode {
   is_active: boolean;
   auto_generated: boolean;
   hasPublishedMaterial?: boolean;
+  access_status?: "coming_soon" | "prerequisite_locked" | "available";
+  blocked_by_node_id?: string | null;
+  blocked_by_title?: string | null;
+  unlock_message?: string | null;
   children: NodeTreeNode[];
 }
 
