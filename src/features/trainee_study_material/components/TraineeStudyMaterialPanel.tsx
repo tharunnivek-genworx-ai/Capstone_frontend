@@ -7,8 +7,10 @@ import StudyMaterialViewer from "../../study_material/components/material/StudyM
 interface TraineeStudyMaterialPanelProps {
   nodeId: string;
   nodeTitle: string;
+  spaceId?: string | null;
   /** When true, fills the topic detail panel instead of a standalone page. */
   embedded?: boolean;
+  onNodesUnlocked?: (nodeIds: string[]) => void;
 }
 
 interface StudyMaterialToolbarProps {
@@ -85,9 +87,11 @@ const StudyMaterialToolbar: React.FC<StudyMaterialToolbarProps> = ({
 const TraineeStudyMaterialPanel: React.FC<TraineeStudyMaterialPanelProps> = ({
   nodeId,
   nodeTitle,
+  spaceId = null,
   embedded = false,
+  onNodesUnlocked,
 }) => {
-  const trainee = useTraineeStudyMaterial({ nodeId, nodeTitle });
+  const trainee = useTraineeStudyMaterial({ nodeId, nodeTitle, spaceId, onNodesUnlocked });
   const [isFullscreen, setIsFullscreen] = useState(false);
   const focusTargetRef = useRef<HTMLDivElement | null>(null);
 

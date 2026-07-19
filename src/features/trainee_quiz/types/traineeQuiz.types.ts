@@ -55,6 +55,9 @@ export interface TraineeQuizOut {
   started_at: string;
   resume_question_id: string | null;
   score_percent: number | null;
+  pass_threshold_percent: number;
+  best_score_percent: number | null;
+  has_met_pass_threshold: boolean;
   total_correct: number | null;
   total_skipped: number | null;
   questions: TraineeQuizQuestionOut[];
@@ -131,6 +134,7 @@ export interface QuizAttemptOut {
   total_skipped: number | null;
   started_at: string;
   submitted_at: string | null;
+  newly_unlocked_node_ids: string[];
 }
 
 export interface QuestionState {

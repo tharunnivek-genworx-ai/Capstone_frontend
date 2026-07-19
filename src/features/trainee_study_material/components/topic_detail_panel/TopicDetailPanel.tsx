@@ -11,11 +11,22 @@ interface TopicDetailPanelProps {
   node: NodeTreeNode;
   spaceId: string;
   onNavigate: (nodeId: string) => void;
+  onNodesUnlocked?: (nodeIds: string[]) => void;
 }
 
-const TopicDetailPanel: React.FC<TopicDetailPanelProps> = ({ node, spaceId, onNavigate }) => {
+const TopicDetailPanel: React.FC<TopicDetailPanelProps> = ({
+  node,
+  spaceId,
+  onNavigate,
+  onNodesUnlocked,
+}) => {
   const { panel, isLoading, loadError, refresh } = useTraineeNodePanel({ nodeId: node.node_id });
   const panelType = panel?.panel_type ?? getNodePanelType(node);
+
+  const handleNodesUnlocked = (nodeIds: string[]) => {
+    onNodesUnlocked?.(nodeIds);
+    void refresh();
+  };
 
   if (isLoading) {
     return (
@@ -30,6 +41,19 @@ const TopicDetailPanel: React.FC<TopicDetailPanelProps> = ({ node, spaceId, onNa
     return (
       <div className="topic-detail-panel topic-detail-panel--empty">
         <p>{loadError ?? "Could not load topic details."}</p>
+      </div>
+    );
+  }
+
+  if (panel.access_status === "prerequisite_locked") {
+    return (
+      <div className="topic-detail-panel">
+        <LeafLockedPanel
+          panel={panel}
+          spaceId={spaceId}
+          nodeId={node.node_id}
+          onNavigate={onNavigate}
+        />
       </div>
     );
   }
@@ -52,6 +76,7 @@ const TopicDetailPanel: React.FC<TopicDetailPanelProps> = ({ node, spaceId, onNa
             onRefreshPanel={() => {
               void refresh();
             }}
+            onNodesUnlocked={handleNodesUnlocked}
           />
         </div>
       );
@@ -66,6 +91,7 @@ const TopicDetailPanel: React.FC<TopicDetailPanelProps> = ({ node, spaceId, onNa
             onRefreshPanel={() => {
               void refresh();
             }}
+            onNodesUnlocked={handleNodesUnlocked}
           />
         </div>
       );

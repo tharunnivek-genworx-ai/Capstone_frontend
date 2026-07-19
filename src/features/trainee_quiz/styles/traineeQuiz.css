@@ -536,6 +536,30 @@
   color: #64748b;
 }
 
+.trainee-quiz-results__pass-status {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  margin: 0 auto 20px;
+  padding: 12px 16px;
+  border: 1px solid;
+  border-radius: 8px;
+  font-size: 13px;
+}
+
+.trainee-quiz-results__pass-status--passed {
+  border-color: #86efac;
+  background: #f0fdf4;
+  color: #166534;
+}
+
+.trainee-quiz-results__pass-status--not-passed {
+  border-color: #fcd34d;
+  background: #fffbeb;
+  color: #92400e;
+}
+
 .trainee-quiz-results__stats {
   display: flex;
   gap: 24px;

@@ -7,6 +7,7 @@ import {
   parseAttemptError,
   type AbandonedAttemptTarget,
 } from "../utils/attemptErrors";
+import { notifyNodesUnlocked } from "../../trainee_study_material/utils/unlockEvents";
 
 interface UseQuizAttemptOptions {
   attemptId: string;
@@ -25,7 +26,7 @@ function applyQuizData(data: TraineeQuizOut) {
   return { sorted, questionStates, resumeId: data.resume_question_id };
 }
 
-export function useQuizAttempt({ attemptId }: UseQuizAttemptOptions) {
+export function useQuizAttempt({ attemptId, spaceId }: UseQuizAttemptOptions) {
   const [quiz, setQuiz] = useState<TraineeQuizOut | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -257,7 +258,17 @@ export function useQuizAttempt({ attemptId }: UseQuizAttemptOptions) {
   const submitQuiz = useCallback(async () => {
     setIsSubmittingQuiz(true);
     try {
-      return await traineeQuizService.submitAttempt(attemptId);
+      const result = await traineeQuizService.submitAttempt(attemptId);
+      if (result.newly_unlocked_node_ids.length > 0) {
+        const count = result.newly_unlocked_node_ids.length;
+        toast.success(
+          count === 1 ? "A new subtopic is now available." : `${count} new subtopics are now available.`
+        );
+        if (spaceId) {
+          notifyNodesUnlocked(spaceId, result.newly_unlocked_node_ids);
+        }
+      }
+      return result;
     } catch (err) {
       const e = err as { response?: { data?: { detail?: string } }; message?: string };
       toast.error(e?.response?.data?.detail ?? e?.message ?? "Failed to submit quiz.");
@@ -265,7 +276,7 @@ export function useQuizAttempt({ attemptId }: UseQuizAttemptOptions) {
     } finally {
       setIsSubmittingQuiz(false);
     }
-  }, [attemptId]);
+  }, [attemptId, spaceId]);
 
   const currentIndex = useMemo(() => {
     const active = questions.filter((q) => q.is_active);

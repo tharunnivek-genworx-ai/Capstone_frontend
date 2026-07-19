@@ -4,7 +4,13 @@ export type NodePanelType =
   | "leaf-available"
   | "leaf-locked";
 
-export type SubtopicBadgeKind = "available" | "in_progress" | "completed" | "locked";
+export type AccessStatus = "coming_soon" | "prerequisite_locked" | "available";
+export type SubtopicBadgeKind =
+  | "available"
+  | "in_progress"
+  | "completed"
+  | "locked"
+  | "prerequisite_locked";
 export type QuizBadgeKind = "none" | "not_taken" | "in_progress" | "completed";
 export type QuizButtonVariant = "primary" | "secondary";
 export type MixedParentTab = "study" | "subtopics";
@@ -24,6 +30,10 @@ export interface SubtopicPanelItem {
   node_id: string;
   title: string;
   is_published: boolean;
+  access_status: AccessStatus;
+  blocked_by_node_id: string | null;
+  blocked_by_title: string | null;
+  unlock_message: string | null;
   lesson_count: number;
   child_count: number;
   meta_label: string;
@@ -93,6 +103,10 @@ export interface TraineeNodePanelOut {
   panel_type: NodePanelType;
   title: string;
   header_meta: string;
+  access_status: AccessStatus;
+  blocked_by_node_id: string | null;
+  blocked_by_title: string | null;
+  unlock_message: string | null;
   study_material: StudyMaterialSummary | null;
   subtopics: SubtopicPanelItem[];
   availability_summary: string | null;

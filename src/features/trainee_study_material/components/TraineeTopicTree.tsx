@@ -9,12 +9,26 @@ interface TraineeTopicTreeProps {
   onSelectNode: (node: NodeTreeNode) => void;
 }
 
-function hasUnpublishedNodes(nodes: NodeTreeNode[]): boolean {
+function collectLockKinds(nodes: NodeTreeNode[]): {
+  hasComingSoon: boolean;
+  hasPrerequisiteLocked: boolean;
+} {
+  let hasComingSoon = false;
+  let hasPrerequisiteLocked = false;
   for (const node of nodes) {
-    if (node.hasPublishedMaterial === false) return true;
-    if (hasUnpublishedNodes(node.children)) return true;
+    if (node.access_status === "prerequisite_locked") {
+      hasPrerequisiteLocked = true;
+    } else if (
+      node.access_status === "coming_soon" ||
+      (node.access_status == null && node.hasPublishedMaterial === false)
+    ) {
+      hasComingSoon = true;
+    }
+    const nested = collectLockKinds(node.children);
+    hasComingSoon = hasComingSoon || nested.hasComingSoon;
+    hasPrerequisiteLocked = hasPrerequisiteLocked || nested.hasPrerequisiteLocked;
   }
-  return false;
+  return { hasComingSoon, hasPrerequisiteLocked };
 }
 
 const TraineeTopicTree: React.FC<TraineeTopicTreeProps> = ({
@@ -22,7 +36,14 @@ const TraineeTopicTree: React.FC<TraineeTopicTreeProps> = ({
   selectedNodeId,
   onSelectNode,
 }) => {
-  const showLegend = hasUnpublishedNodes(roots);
+  const { hasComingSoon, hasPrerequisiteLocked } = collectLockKinds(roots);
+  const showLegend = hasComingSoon || hasPrerequisiteLocked;
+  const legendCopy =
+    hasPrerequisiteLocked && hasComingSoon
+      ? "Some topics need a prior topic finished; others are not published yet"
+      : hasPrerequisiteLocked
+        ? "Finish the prior topic to unlock locked lessons"
+        : "Some topics are not published yet";
 
   return (
     <div className="topic-tree topic-tree--trainee">
@@ -44,7 +65,7 @@ const TraineeTopicTree: React.FC<TraineeTopicTreeProps> = ({
       {showLegend && (
         <div className="topic-tree__lock-legend">
           <Lock size={13} />
-          <span>Some topics are not yet available</span>
+          <span>{legendCopy}</span>
         </div>
       )}
 

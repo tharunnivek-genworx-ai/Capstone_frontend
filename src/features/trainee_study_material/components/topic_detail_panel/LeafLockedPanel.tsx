@@ -76,10 +76,33 @@ const LeafLockedPanel: React.FC<LeafLockedPanelProps> = ({
         />
       ) : (
         <>
-          <ComingSoonBanner
-            siblingSuggestions={panel.sibling_suggestions}
-            onNavigate={onNavigate}
-          />
+          {panel.access_status === "prerequisite_locked" ? (
+            <div className="topic-detail-panel__empty-state" role="status">
+              <div className="topic-detail-panel__empty-state-icon">
+                <i className="ti ti-lock" aria-hidden="true" />
+              </div>
+              <p style={{ margin: 0, fontWeight: 600, color: "#111827" }}>
+                {panel.unlock_message ?? "Complete the prerequisite first"}
+              </p>
+              <p style={{ margin: "6px 0 0", fontSize: 13 }}>
+                Your progress and previous materials remain available while this topic is locked.
+              </p>
+              {panel.blocked_by_node_id && (
+                <button
+                  type="button"
+                  className="btn-primary"
+                  onClick={() => onNavigate(panel.blocked_by_node_id!)}
+                >
+                  Go to {panel.blocked_by_title ?? "prerequisite"}
+                </button>
+              )}
+            </div>
+          ) : (
+            <ComingSoonBanner
+              siblingSuggestions={panel.sibling_suggestions}
+              onNavigate={onNavigate}
+            />
+          )}
           <TraineeTopicResourcesPanel
             resources={panel.topic_resources}
             sectionTitle={panel.topic_resources_section_title}

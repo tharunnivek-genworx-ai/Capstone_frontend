@@ -88,6 +88,7 @@ export interface QuizOut {
   difficulty: QuizDifficulty;
   is_published: boolean;
   published_at: string | null;
+  pass_threshold_percent: number;
   created_by: string;
   created_at: string;
   updated_at: string;
@@ -147,6 +148,14 @@ export interface QuizGenerateRequest {
   quiz_id?: string;
   mentor_feedback?: string;
   resize_question_count?: boolean;
+}
+
+export interface QuizPublishRequest {
+  pass_threshold_percent?: number;
+}
+
+export interface QuizPassThresholdUpdateRequest {
+  pass_threshold_percent: number;
 }
 
 export interface QuizQuestionCreateRequest {

@@ -17,6 +17,7 @@ interface MixedParentPanelProps {
   nodeId: string;
   onNavigate: (nodeId: string) => void;
   onRefreshPanel: () => void;
+  onNodesUnlocked?: (nodeIds: string[]) => void;
 }
 
 const MixedParentPanel: React.FC<MixedParentPanelProps> = ({
@@ -25,6 +26,7 @@ const MixedParentPanel: React.FC<MixedParentPanelProps> = ({
   nodeId,
   onNavigate,
   onRefreshPanel,
+  onNodesUnlocked,
 }) => {
   const [activeTab, setActiveTab] = useState<MixedParentTab>(
     panel.default_tab ?? "study"
@@ -48,8 +50,13 @@ const MixedParentPanel: React.FC<MixedParentPanelProps> = ({
       <TopicDetailReadingView
         nodeId={nodeId}
         nodeTitle={panel.title}
+        spaceId={spaceId}
         onBack={() => {
           setIsReading(false);
+          onRefreshPanel();
+        }}
+        onNodesUnlocked={(nodeIds) => {
+          onNodesUnlocked?.(nodeIds);
           onRefreshPanel();
         }}
       />

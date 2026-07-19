@@ -20,6 +20,7 @@ export interface StudyMaterialProgressOut {
   study_material_read_percent: number;
   study_material_completed: boolean;
   completion_status: string;
+  newly_unlocked_node_ids: string[];
 }
 
 export interface TraineeArchivedSmItem {

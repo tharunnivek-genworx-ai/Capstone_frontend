@@ -17,6 +17,10 @@ import TopicTree from "./TopicTree";
 import NodeDetailPanel from "./NodeDetailPanel";
 import TraineeTopicTree from "../../trainee_study_material/components/TraineeTopicTree";
 import TraineeNodeDetailPanel from "../../trainee_study_material/components/TraineeNodeDetailPanel";
+import {
+  TRAINEE_NODES_UNLOCKED_EVENT,
+  type TraineeNodesUnlockedDetail,
+} from "../../trainee_study_material/utils/unlockEvents";
 import InviteCodeModal from "./InviteCodeModal";
 import ManageTraineesModal from "./ManageTraineesModal";
 import { useAuth } from "../../auth/hooks/useAuth";
@@ -303,6 +307,27 @@ const SpaceDetailPage: React.FC = () => {
       clearTreeError();
     }
   }, [treeError]);
+
+  useEffect(() => {
+    if (isMentor || !spaceId) return;
+    const handleUnlocked = (event: Event) => {
+      const custom = event as CustomEvent<TraineeNodesUnlockedDetail>;
+      if (custom.detail?.spaceId !== spaceId) return;
+      void fetchTree(spaceId);
+    };
+    window.addEventListener(TRAINEE_NODES_UNLOCKED_EVENT, handleUnlocked);
+    return () => {
+      window.removeEventListener(TRAINEE_NODES_UNLOCKED_EVENT, handleUnlocked);
+    };
+  }, [isMentor, spaceId, fetchTree]);
+
+  const handleTraineeNodesUnlocked = useCallback(
+    (_nodeIds: string[]) => {
+      if (!spaceId) return;
+      void fetchTree(spaceId);
+    },
+    [spaceId, fetchTree],
+  );
 
   useEffect(() => {
     if (traineeSpaceProgressError) {
@@ -1281,6 +1306,7 @@ const SpaceDetailPage: React.FC = () => {
                     hasTopics={roots.length > 0}
                     spaceId={spaceId ?? ""}
                     onNavigateToNode={handleNavigateToNode}
+                    onNodesUnlocked={handleTraineeNodesUnlocked}
                   />
                 )
               ) : (
@@ -1289,6 +1315,7 @@ const SpaceDetailPage: React.FC = () => {
                   hasTopics={roots.length > 0}
                   spaceId={spaceId ?? ""}
                   onNavigateToNode={handleNavigateToNode}
+                  onNodesUnlocked={handleTraineeNodesUnlocked}
                 />
               )}
             </>

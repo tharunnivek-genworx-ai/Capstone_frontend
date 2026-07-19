@@ -58,6 +58,7 @@ const QuizAttemptResultsPage: React.FC = () => {
   const scorePercent = quiz.score_percent ?? 0;
   const totalCorrect = quiz.total_correct ?? 0;
   const totalSkipped = quiz.total_skipped ?? 0;
+  const bestScorePercent = quiz.best_score_percent ?? scorePercent;
 
   return (
     <div className="trainee-quiz-results">
@@ -69,6 +70,21 @@ const QuizAttemptResultsPage: React.FC = () => {
           <span className="trainee-quiz-results__score-value">{scorePercent}%</span>
           <span className="trainee-quiz-results__score-label">
             {totalCorrect} of {quiz.total_questions} correct
+          </span>
+        </div>
+        <div
+          className={`trainee-quiz-results__pass-status ${
+            quiz.has_met_pass_threshold
+              ? "trainee-quiz-results__pass-status--passed"
+              : "trainee-quiz-results__pass-status--not-passed"
+          }`}
+          role="status"
+        >
+          <strong>
+            {quiz.has_met_pass_threshold ? "Pass requirement met" : "Keep trying"}
+          </strong>
+          <span>
+            Required: {quiz.pass_threshold_percent}% · Best score: {bestScorePercent}%
           </span>
         </div>
 

@@ -6,10 +6,13 @@ import {
   measureScrollDepth,
   resolveScrollContainer,
 } from "../utils/scrollDepth";
+import { notifyNodesUnlocked } from "../utils/unlockEvents";
 
 interface UseTraineeStudyMaterialParams {
   nodeId: string | null;
   nodeTitle: string;
+  spaceId?: string | null;
+  onNodesUnlocked?: (nodeIds: string[]) => void;
 }
 
 export interface UseTraineeStudyMaterialReturn {
@@ -31,6 +34,8 @@ function extractErrorDetail(err: unknown): string {
 export function useTraineeStudyMaterial({
   nodeId,
   nodeTitle,
+  spaceId = null,
+  onNodesUnlocked,
 }: UseTraineeStudyMaterialParams): UseTraineeStudyMaterialReturn {
   const [material, setMaterial] = useState<TraineeStudyMaterialOut | null>(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -54,11 +59,21 @@ export function useTraineeStudyMaterial({
         if (nodeGenerationRef.current !== requestGeneration) return;
         lastReportedPercent.current = updated.study_material_read_percent;
         setReadPercent(updated.study_material_read_percent);
+        if (updated.newly_unlocked_node_ids.length > 0) {
+          const count = updated.newly_unlocked_node_ids.length;
+          toast.success(
+            count === 1 ? "A new subtopic is now available." : `${count} new subtopics are now available.`
+          );
+          if (spaceId) {
+            notifyNodesUnlocked(spaceId, updated.newly_unlocked_node_ids);
+          }
+          onNodesUnlocked?.(updated.newly_unlocked_node_ids);
+        }
       } catch {
         /* non-critical — progress is best-effort */
       }
     },
-    [nodeId]
+    [nodeId, spaceId, onNodesUnlocked]
   );
 
   useEffect(() => {
