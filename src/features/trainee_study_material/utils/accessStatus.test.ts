@@ -40,7 +40,7 @@ function subtopic(access_status: SubtopicPanelItem["access_status"]): SubtopicPa
 }
 
 describe("trainee access status UI mapping", () => {
-  it("uses prerequisite copy instead of coming soon", () => {
+  it("uses a short lock label instead of the long unlock message", () => {
     const state = getTreeNodeLockState(
       treeNode({
         access_status: "prerequisite_locked",
@@ -48,7 +48,7 @@ describe("trainee access status UI mapping", () => {
         unlock_message: "Finish Basics first",
       }),
     );
-    expect(state).toEqual({ isLocked: true, label: "Finish Basics first" });
+    expect(state).toEqual({ isLocked: true, label: "Locked" });
   });
 
   it("labels publication-only locks as coming soon", () => {

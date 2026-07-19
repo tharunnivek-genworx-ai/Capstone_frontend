@@ -10,12 +10,9 @@ export function getTreeNodeLockState(node: NodeTreeNode): {
   label: string | null;
 } {
   if (node.access_status === "prerequisite_locked") {
-    return {
-      isLocked: true,
-      label:
-        node.unlock_message ??
-        `Finish ${node.blocked_by_title ?? "prerequisite"} first`,
-    };
+    // Keep the tree-row chip short so the topic title stays readable;
+    // full unlock copy belongs in the tooltip / detail panel.
+    return { isLocked: true, label: "Locked" };
   }
   const legacyComingSoon =
     node.access_status == null &&

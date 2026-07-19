@@ -20,13 +20,20 @@ const TraineeTreeNode: React.FC<TraineeTreeNodeProps> = ({
   const lockState = getTreeNodeLockState(node);
   const isLocked = lockState.isLocked;
   const statusLabel = lockState.label ?? node.title;
+  const tooltip =
+    isLocked
+      ? node.unlock_message ??
+        (node.blocked_by_title
+          ? `Finish ${node.blocked_by_title} first`
+          : statusLabel)
+      : node.title;
 
   return (
     <div className="tree-node-branch">
       <div
         onClick={() => onSelect(node)}
         className={`tree-node trainee-tree-node${isSelected ? " tree-node--selected" : ""}${isLocked ? " trainee-tree-node--locked" : ""}`}
-        title={isLocked ? statusLabel : node.title}
+        title={tooltip}
         role="treeitem"
         aria-selected={isSelected}
         tabIndex={0}
