@@ -4446,6 +4446,174 @@ select.input-field option {
   gap: 0.5rem;
 }
 
+/* ─── YouTube player modal ───────────────────────────────────────── */
+.learning-experience .youtube-player-modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1400;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+  background: rgba(0, 0, 0, 0.55);
+}
+
+.learning-experience .youtube-player-modal {
+  width: min(100%, 960px);
+  max-height: min(92vh, 900px);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--color-bg-surface);
+  border-radius: var(--radius-xl);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.28);
+}
+
+.learning-experience .youtube-player-modal__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 1rem 1.25rem 0.875rem;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.learning-experience .youtube-player-modal__title {
+  margin: 0;
+  min-width: 0;
+  font-size: 0.9375rem;
+  font-weight: 700;
+  line-height: 1.35;
+  color: var(--color-text-primary);
+}
+
+.learning-experience .youtube-player-modal__close {
+  display: flex;
+  flex-shrink: 0;
+  padding: 0.25rem;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: none;
+  color: var(--color-text-muted);
+  cursor: pointer;
+}
+
+.learning-experience .youtube-player-modal__close:hover {
+  color: var(--color-text-primary);
+  background: var(--color-bg-muted, rgba(0, 0, 0, 0.05));
+}
+
+.learning-experience .youtube-player-modal__close:focus-visible,
+.learning-experience .youtube-player-modal__external-btn:focus-visible,
+.learning-experience .youtube-player-modal__external-link:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+}
+
+.learning-experience .youtube-player-modal:focus {
+  outline: none;
+}
+
+.learning-experience .youtube-player-modal__body {
+  padding: 1rem 1.25rem;
+  overflow-y: auto;
+}
+
+.learning-experience .youtube-player-modal__player {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  background: #000;
+  border-radius: var(--radius-md);
+  overflow: hidden;
+}
+
+.learning-experience .youtube-player-modal__iframe {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  border: 0;
+}
+
+.learning-experience .youtube-player-modal__loading {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  display: grid;
+  place-items: center;
+  color: #f8fafc;
+  font-size: 0.875rem;
+  background: rgba(0, 0, 0, 0.72);
+}
+
+.learning-experience .youtube-player-modal__error {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.75rem;
+  padding: 1.5rem 1rem;
+  text-align: left;
+}
+
+.learning-experience .youtube-player-modal__error-title {
+  margin: 0;
+  font-size: 0.9375rem;
+  font-weight: 700;
+  color: var(--color-text-primary);
+}
+
+.learning-experience .youtube-player-modal__error-copy {
+  margin: 0;
+  font-size: 0.8125rem;
+  line-height: 1.5;
+  color: var(--color-text-secondary);
+}
+
+.learning-experience .youtube-player-modal__external-btn,
+.learning-experience .youtube-player-modal__external-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+}
+
+.learning-experience .youtube-player-modal__footer {
+  display: flex;
+  justify-content: flex-end;
+  padding: 0.75rem 1.25rem 1rem;
+  border-top: 1px solid var(--color-border);
+}
+
+@media (max-width: 640px) {
+  .learning-experience .youtube-player-modal-overlay {
+    padding: 0.5rem;
+  }
+
+  .learning-experience .youtube-player-modal {
+    width: 100%;
+    max-height: 100vh;
+    border-radius: var(--radius-lg);
+  }
+
+  .learning-experience .youtube-player-modal__body {
+    padding: 0.75rem;
+  }
+
+  .learning-experience .youtube-player-modal__header {
+    padding: 0.75rem 0.875rem 0.625rem;
+  }
+
+  .learning-experience .youtube-player-modal__footer {
+    padding: 0.625rem 0.875rem 0.75rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .learning-experience .youtube-player-modal {
+    animation: none;
+  }
+}
+
 /* ─── Reference images panel (study material footer) ─────────────── */
 .learning-experience .reference-images-panel {
   flex-shrink: 0;
@@ -4853,6 +5021,22 @@ select.input-field option {
   font-weight: 600;
   color: var(--color-primary);
   text-decoration: none;
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+}
+
+.learning-experience .reference-material-modal__link-btn:hover,
+.learning-experience .reference-material-modal__preview-btn:hover {
+  text-decoration: underline;
+}
+
+.learning-experience .reference-material-modal__link-btn:focus-visible,
+.learning-experience .reference-material-modal__preview-btn:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+  border-radius: var(--radius-sm);
 }
 
 .learning-experience .reference-material-modal__danger-btn {
@@ -4864,6 +5048,19 @@ select.input-field option {
   font-size: 0.75rem;
   font-weight: 600;
   cursor: pointer;
+}
+
+.learning-experience .reference-material-modal__preview-btn {
+  background: none;
+  border: 1px solid var(--color-primary);
+  color: var(--color-primary);
+  border-radius: var(--radius-md);
+  padding: 0.25rem 0.625rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  cursor: pointer;
+  margin-top: 0.375rem;
+  align-self: flex-start;
 }
 
 .learning-experience .reference-material-modal__mode-row {

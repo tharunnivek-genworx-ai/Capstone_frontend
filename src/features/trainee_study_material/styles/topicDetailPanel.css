@@ -1003,6 +1003,11 @@
   color: var(--as-on-surface);
 }
 
+.learning-experience .trainee-topic-resources__action:focus-visible {
+  outline: 2px solid var(--as-primary);
+  outline-offset: 2px;
+}
+
 @media (max-width: 640px) {
   .learning-experience .topic-detail-panel__scroll {
     padding: var(--as-space-4);

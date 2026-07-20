@@ -253,7 +253,7 @@ export default function GenerateSetupPanel({
                   ? "Clear the source PDF to use External research"
                   : externalResearchEnabled
                     ? "External research is on — click to turn off"
-                    : "Search the web for ground-truth notes the AI can read"
+                    : "Search the web for ground-truth notes the AI can read, and attach YouTube videos for students"
               }
             >
               <span className="gsm-source-btn__icon" aria-hidden="true"><Globe size={18} /></span>
@@ -262,7 +262,7 @@ export default function GenerateSetupPanel({
                 <span>
                   {researchDisabled
                     ? "Unavailable while a source PDF is attached"
-                    : "Search the web for ground-truth notes the AI can read"}
+                    : "Search the web for ground-truth notes the AI can read, and attach YouTube videos for students"}
                 </span>
               </span>
               {externalResearchEnabled && <span className="gsm-badge-count">On</span>}
@@ -287,7 +287,7 @@ export default function GenerateSetupPanel({
             <BookOpen size={15} aria-hidden />
             <span>
               Student resources are not automatically used as AI generation context.
-              Research sources may appear under student resources as article links after a successful run.
+              Research sources may appear under student resources as article links and YouTube videos after a successful run.
             </span>
           </div>
         </section>

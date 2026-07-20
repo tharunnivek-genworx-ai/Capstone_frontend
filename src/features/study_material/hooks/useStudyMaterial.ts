@@ -439,13 +439,15 @@ export function useStudyMaterial({
     }
   }, [node, isMentor]);
 
-  /** After external generate/regenerate: refresh resources and toast when article links exist. */
+  /** After external generate/regenerate: refresh resources and toast when external links exist. */
   const refreshExternalSourcesAfterGenerate = useCallback(
     async (usedExternalResearch: boolean) => {
       if (!usedExternalResearch) return;
       const items = await refreshTopicResources();
-      const hasArticleLinks = items.some((item) => item.media_type === "article_link");
-      if (hasArticleLinks) {
+      const hasExternalResources = items.some(
+        (item) => item.media_type === "article_link" || item.media_type === "video_url",
+      );
+      if (hasExternalResources) {
         toast.success("External sources have been added for student reference.");
       }
     },
