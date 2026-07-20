@@ -5,6 +5,9 @@ import {
   downloadTraineeFile,
   openTraineeFileInNewTab,
 } from "../../services/traineeTopicResourceService";
+import YoutubePlayerModal from "../../../../components/YoutubePlayerModal";
+import { isYouTubeUrl, extractYouTubeVideoId } from "../../../../utils/youtubeUrl";
+import { trackVideoEvent } from "../../../../utils/videoAnalytics";
 
 interface TraineeTopicResourcesPanelProps {
   resources: TraineeTopicResource[];
@@ -28,6 +31,12 @@ const TraineeTopicResourcesPanel: React.FC<TraineeTopicResourcesPanelProps> = ({
 }) => {
   const [isOpen, setIsOpen] = useState(resources.length > 0);
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [activeVideo, setActiveVideo] = useState<{
+    videoId: string;
+    title: string;
+    watchUrl: string;
+    mediaId: string;
+  } | null>(null);
 
   const countLabel =
     resources.length === 0
@@ -37,7 +46,33 @@ const TraineeTopicResourcesPanel: React.FC<TraineeTopicResourcesPanelProps> = ({
         : `${resources.length} resources`;
 
   const handleView = async (item: TraineeTopicResource) => {
-    if (item.media_type === "video_url" || item.media_type === "article_link") {
+    if (item.media_type === "video_url") {
+      if (isYouTubeUrl(item.view_url)) {
+        const videoId = extractYouTubeVideoId(item.view_url);
+        if (videoId) {
+          if (activeVideo?.mediaId === item.media_id) return;
+          setActiveVideo({
+            videoId,
+            title: item.display_title,
+            watchUrl: item.view_url,
+            mediaId: item.media_id,
+          });
+          return;
+        }
+      }
+      const opened = window.open(item.view_url, "_blank", "noopener,noreferrer");
+      if (!opened) toast.error("Your browser blocked the new tab. Allow popups to view this resource.");
+      else {
+        trackVideoEvent("open_external_fallback", {
+          surface: "trainee",
+          mediaId: item.media_id,
+          url: item.view_url,
+          reason: isYouTubeUrl(item.view_url) ? "invalid_youtube_id" : "non_youtube",
+        });
+      }
+      return;
+    }
+    if (item.media_type === "article_link") {
       const opened = window.open(item.view_url, "_blank", "noopener,noreferrer");
       if (!opened) toast.error("Your browser blocked the new tab. Allow popups to view this resource.");
       return;
@@ -77,6 +112,16 @@ const TraineeTopicResourcesPanel: React.FC<TraineeTopicResourcesPanelProps> = ({
   };
 
   return (
+    <>
+    <YoutubePlayerModal
+      isOpen={activeVideo !== null}
+      onClose={() => setActiveVideo(null)}
+      videoId={activeVideo?.videoId ?? ""}
+      title={activeVideo?.title}
+      watchUrl={activeVideo?.watchUrl ?? ""}
+      surface="trainee"
+      mediaId={activeVideo?.mediaId}
+    />
     <section className="trainee-topic-resources">
       <button
         type="button"
@@ -135,6 +180,7 @@ const TraineeTopicResourcesPanel: React.FC<TraineeTopicResourcesPanelProps> = ({
         </div>
       )}
     </section>
+    </>
   );
 };
 

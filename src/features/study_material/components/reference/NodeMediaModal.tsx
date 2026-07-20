@@ -5,6 +5,9 @@ import {
   referenceMaterialService,
   type NodeMediaAttachType,
 } from "../../services/referenceMaterialService";
+import YoutubePlayerModal from "../../../../components/YoutubePlayerModal";
+import { isYouTubeUrl, extractYouTubeVideoId } from "../../../../utils/youtubeUrl";
+import { trackVideoEvent } from "../../../../utils/videoAnalytics";
 
 interface NodeMediaModalProps {
   nodeId: string;
@@ -15,6 +18,8 @@ interface NodeMediaModalProps {
 }
 
 type UploadMode = "image" | "pdf" | "video_url" | "article_link";
+
+type ActiveVideo = { videoId: string; title: string; watchUrl: string; mediaId?: string };
 
 const UPLOAD_MODE_LABELS: Record<UploadMode, string> = {
   image: "Image",
@@ -54,6 +59,28 @@ const NodeMediaModal: React.FC<NodeMediaModalProps> = ({
   const [linkUrl, setLinkUrl] = useState("");
   const [isUploading, setIsUploading] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+
+  const [activeVideo, setActiveVideo] = useState<ActiveVideo | null>(null);
+
+  const openYoutubePlayer = (url: string, mediaTitle: string, mediaId?: string) => {
+    const videoId = extractYouTubeVideoId(url);
+    if (!videoId) {
+      trackVideoEvent("open_external_fallback", {
+        surface: "mentor",
+        nodeId,
+        mediaId,
+        url,
+        reason: "invalid_youtube_id",
+      });
+      const opened = window.open(url, "_blank", "noopener,noreferrer");
+      if (!opened) {
+        toast.error("Your browser blocked the new tab. Allow popups to continue.");
+      }
+      return;
+    }
+    if (activeVideo?.videoId === videoId) return;
+    setActiveVideo({ videoId, title: mediaTitle, watchUrl: url, mediaId });
+  };
 
   const resetForm = () => {
     setSelectedFiles([]);
@@ -157,6 +184,19 @@ const NodeMediaModal: React.FC<NodeMediaModalProps> = ({
     ((needsFile && selectedFiles.length > 0) || (needsLink && linkUrl.trim()));
 
   return (
+    <>
+    {activeVideo && (
+      <YoutubePlayerModal
+        isOpen={true}
+        onClose={() => setActiveVideo(null)}
+        videoId={activeVideo.videoId}
+        title={activeVideo.title}
+        watchUrl={activeVideo.watchUrl}
+        surface="mentor"
+        mediaId={activeVideo.mediaId}
+        nodeId={nodeId}
+      />
+    )}
     <div
       className="reference-material-modal__overlay"
       onClick={(e) => e.target === e.currentTarget && onClose()}
@@ -210,16 +250,49 @@ const NodeMediaModal: React.FC<NodeMediaModalProps> = ({
                         )}
                       </div>
                       <div className="reference-material-modal__list-actions">
-                        {href && (
-                          <a href={href} target="_blank" rel="noopener noreferrer" className="reference-material-modal__link-btn">
+                        {media.media_type === "video_url" && href && isYouTubeUrl(href) ? (
+                          <button
+                            type="button"
+                            className="reference-material-modal__link-btn"
+                            onClick={() => openYoutubePlayer(href, media.title ?? "YouTube video", media.media_id)}
+                          >
+                            Watch
+                          </button>
+                        ) : media.media_type === "video_url" && href ? (
+                          <button
+                            type="button"
+                            className="reference-material-modal__link-btn"
+                            onClick={() => {
+                              trackVideoEvent("open_external_fallback", {
+                                surface: "mentor",
+                                nodeId,
+                                mediaId: media.media_id,
+                                url: href,
+                                reason: "non_youtube",
+                              });
+                              const opened = window.open(href, "_blank", "noopener,noreferrer");
+                              if (!opened) {
+                                toast.error("Your browser blocked the new tab. Allow popups to continue.");
+                              }
+                            }}
+                          >
                             Open
-                          </a>
+                          </button>
+                        ) : (
+                          href && (
+                            <a href={href} target="_blank" rel="noopener noreferrer" className="reference-material-modal__link-btn">
+                              Open
+                            </a>
+                          )
                         )}
                         <button
                           type="button"
                           className="reference-material-modal__danger-btn"
                           disabled={deletingId === media.media_id}
-                          onClick={() => void handleDelete(media.media_id)}
+                          onClick={() => {
+                            if (activeVideo?.mediaId === media.media_id) setActiveVideo(null);
+                            void handleDelete(media.media_id);
+                          }}
                         >
                           {deletingId === media.media_id ? "Removing…" : "Remove"}
                         </button>
@@ -332,6 +405,15 @@ const NodeMediaModal: React.FC<NodeMediaModalProps> = ({
                   value={linkUrl}
                   onChange={(e) => setLinkUrl(e.target.value)}
                 />
+                {uploadMode === "video_url" && linkUrl.trim() && isYouTubeUrl(linkUrl.trim()) && (
+                  <button
+                    type="button"
+                    className="reference-material-modal__preview-btn"
+                    onClick={() => openYoutubePlayer(linkUrl.trim(), title.trim() || "YouTube video preview")}
+                  >
+                    Preview
+                  </button>
+                )}
                 <label className="label" htmlFor="topic-resource-link-title">Title (optional)</label>
                 <input
                   id="topic-resource-link-title"
@@ -358,6 +440,7 @@ const NodeMediaModal: React.FC<NodeMediaModalProps> = ({
         </div>
       </div>
     </div>
+    </>
   );
 };
 
