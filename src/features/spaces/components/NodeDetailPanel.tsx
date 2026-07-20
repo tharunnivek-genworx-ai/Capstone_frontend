@@ -1,5 +1,5 @@
 // src/features/spaces/components/NodeDetailPanel.tsx
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import toast from "react-hot-toast";
 import type {
   NodeTreeNode,
@@ -11,7 +11,7 @@ import {
 } from "../../study_material/hooks/useStudyMaterial";
 import { useQuiz } from "../../quiz/hooks/useQuiz";
 import type { NodeStudyState } from "../../study_material/types/studyMaterial.types";
-import type { BatchStepStatus } from "../../study_material/types/studyMaterialBatch.types";
+import type { BatchDetailOut, BatchStepStatus } from "../../study_material/types/studyMaterialBatch.types";
 import StudentVisibilityBanner from "../../study_material/components/material/StudentVisibilityBanner";
 import StudyMaterialFeedbackModal from "../../study_material/components/material/StudyMaterialFeedbackModal";
 import StudyMaterialManualEditor from "../../study_material/components/material/StudyMaterialManualEditor";
@@ -25,6 +25,8 @@ import RegenerateStudyMaterialConfirmModal from "../../study_material/components
 import StudyMaterialPublishConfirmModal from "../../study_material/components/version/StudyMaterialPublishConfirmModal";
 import StudyMaterialUnpublishConfirmModal from "../../study_material/components/version/StudyMaterialUnpublishConfirmModal";
 import StudyMaterialMentorWorkspace from "../../study_material/components/material/StudyMaterialMentorWorkspace";
+import BatchParentHub from "../../study_material/components/queue/BatchParentHub";
+import { shouldShowBatchHub } from "../../study_material/utils/batchHubEligibility";
 import EspaceNotPublishedModal from "../../study_material/components/space/EspaceNotPublishedModal";
 import QuizPage3 from "../../quiz/components/QuizPage3";
 import QuizPage4 from "../../quiz/components/QuizPage4";
@@ -38,6 +40,8 @@ import {
   getSavedInstructionText,
 } from "../../study_material/components/generate/instructionModeUtils";
 import { FileText, Zap } from "lucide-react";
+
+type BatchHubDrill = { kind: "material"; nodeId: string } | null;
 
 // Re-export for consumers that import from here
 export type { NodeStudyStatePatch };
@@ -73,6 +77,12 @@ interface NodeDetailPanelProps {
   /** Space-scoped external research preference for the active topic. */
   externalResearchEnabled?: boolean;
   onExternalResearchChange?: (enabled: boolean) => void;
+  /** Active or session-restored Generate All cohort (Batch Parent Hub). */
+  batchDetail?: BatchDetailOut | null;
+  /** When false, never show the batch parent hub (dismissed / no cohort). */
+  batchHubEnabled?: boolean;
+  /** Clears session cohort (“Done with batch navigation”). */
+  onDismissBatchHub?: () => void;
 }
 
 const NodeDetailPanel: React.FC<NodeDetailPanelProps> = ({
@@ -92,11 +102,20 @@ const NodeDetailPanel: React.FC<NodeDetailPanelProps> = ({
   isWaitingForGenerateAll = false,
   externalResearchEnabled,
   onExternalResearchChange,
+  batchDetail = null,
+  batchHubEnabled = false,
+  onDismissBatchHub,
 }) => {
   const blockedByBatch =
     isWaitingForGenerateAll ||
     batchStepStatus === "pending" ||
     batchStepStatus === "running";
+  // ── Batch parent hub (generate-all cohort only; never from normal generate) ─
+  const [batchHubDrill, setBatchHubDrill] = useState<BatchHubDrill>(null);
+  const [hubStack, setHubStack] = useState<string[]>([]);
+  /** When set, next node change came from hub navigation — keep hubStack. */
+  const hubNavExpectedNodeIdRef = useRef<string | null>(null);
+
   // ── Instruction editing state (stays local — not study material) ─────────
   const [isRenaming, setIsRenaming] = useState(false);
   const [renameValue, setRenameValue] = useState("");
@@ -153,6 +172,105 @@ const NodeDetailPanel: React.FC<NodeDetailPanelProps> = ({
     sm.activeGenerationRunId
     ?? (showGenerationProgress ? sm.generationProgressSessionId : null);
   const studyRunResume = useGenerationRunResume(studyRunMetaRunId);
+
+  // Cohort detail only when hub navigation is enabled (dismiss / no session → no hub).
+  const cohortBatchDetail = batchHubEnabled ? batchDetail ?? null : null;
+  const isDrilledIntoMaterial =
+    batchHubDrill?.kind === "material" &&
+    batchHubDrill.nodeId === node?.node_id;
+
+  const showBatchHub = shouldShowBatchHub({
+    isMentor,
+    currentPage: sm.currentPage,
+    batchDetail: cohortBatchDetail,
+    node,
+    isGeneratingOrProgressing: showGenerationProgress,
+    isDrilledIntoMaterial,
+  });
+
+  const showMaterialBackToHub =
+    Boolean(cohortBatchDetail) &&
+    isMentor &&
+    sm.currentPage === 2 &&
+    !showBatchHub &&
+    !showGenerationProgress &&
+    (isDrilledIntoMaterial || hubStack.length > 0);
+
+  // Tree click / external select: reset drill + stack. Hub-driven nav keeps stack.
+  useEffect(() => {
+    if (!node) {
+      setBatchHubDrill(null);
+      setHubStack([]);
+      hubNavExpectedNodeIdRef.current = null;
+      return;
+    }
+    if (hubNavExpectedNodeIdRef.current === node.node_id) {
+      hubNavExpectedNodeIdRef.current = null;
+      setBatchHubDrill(null);
+      return;
+    }
+    setBatchHubDrill(null);
+    setHubStack([]);
+  }, [node?.node_id]);
+
+  // Dismissed cohort: drop local hub navigation state.
+  useEffect(() => {
+    if (!batchHubEnabled) {
+      setBatchHubDrill(null);
+      setHubStack([]);
+      hubNavExpectedNodeIdRef.current = null;
+    }
+  }, [batchHubEnabled]);
+
+  const navigateFromHub = useCallback(
+    (targetNodeId: string) => {
+      hubNavExpectedNodeIdRef.current = targetNodeId;
+      onNavigateToNode(targetNodeId);
+    },
+    [onNavigateToNode],
+  );
+
+  const handleOpenParentMaterialFromHub = useCallback(() => {
+    if (!node) return;
+    setBatchHubDrill({ kind: "material", nodeId: node.node_id });
+  }, [node]);
+
+  const handleOpenHubChild = useCallback(
+    (child: NodeTreeNode, _opensNestedHub: boolean) => {
+      if (!node) return;
+      setHubStack((prev) => [...prev, node.node_id]);
+      setBatchHubDrill(null);
+      navigateFromHub(child.node_id);
+    },
+    [node, navigateFromHub],
+  );
+
+  const handleBackToParentHub = useCallback(() => {
+    const parentId = hubStack[hubStack.length - 1];
+    if (!parentId) return;
+    setHubStack((prev) => prev.slice(0, -1));
+    setBatchHubDrill(null);
+    navigateFromHub(parentId);
+  }, [hubStack, navigateFromHub]);
+
+  const handleBackFromMaterialToHub = useCallback(() => {
+    if (isDrilledIntoMaterial) {
+      setBatchHubDrill(null);
+      return;
+    }
+    const parentId = hubStack[hubStack.length - 1];
+    if (!parentId) return;
+    setHubStack((prev) => prev.slice(0, -1));
+    setBatchHubDrill(null);
+    navigateFromHub(parentId);
+  }, [isDrilledIntoMaterial, hubStack, navigateFromHub]);
+
+  const handleDismissBatchHub = useCallback(() => {
+    setBatchHubDrill(null);
+    setHubStack([]);
+    hubNavExpectedNodeIdRef.current = null;
+    onDismissBatchHub?.();
+  }, [onDismissBatchHub]);
 
   // ── Quiz hook ─────────────────────────────────────────────────────────────
   const qz = useQuiz({
@@ -463,9 +581,16 @@ const NodeDetailPanel: React.FC<NodeDetailPanelProps> = ({
           </div>
         )}
 
-        {/* PAGE 2 — Study material */}
+        {/* PAGE 2 — Study material (or Batch Parent Hub for generate-all cohort) */}
         {sm.currentPage === 2 && (
-          <div className="study-material-page">
+          <div
+            className="study-material-page"
+            style={
+              showBatchHub
+                ? { flex: 1, minHeight: 0, overflowY: "auto" }
+                : undefined
+            }
+          >
             {instructionChangeBanner}
             {showGenerationProgress ? (
               <GenerationProgressPanel
@@ -486,8 +611,29 @@ const NodeDetailPanel: React.FC<NodeDetailPanelProps> = ({
                 onResume={sm.handleResumeFailedGeneration}
                 onAbandon={sm.handleAbandonGeneration}
               />
+            ) : showBatchHub && cohortBatchDetail ? (
+              <BatchParentHub
+                node={node}
+                batchDetail={cohortBatchDetail}
+                canNavigateToParentHub={hubStack.length > 0}
+                onBackToParentHub={handleBackToParentHub}
+                onOpenParentMaterial={handleOpenParentMaterialFromHub}
+                onOpenChild={handleOpenHubChild}
+                onDismissBatchHub={handleDismissBatchHub}
+              />
             ) : sm.isHistoryHubView || sm.studyMaterialContent?.trim() ? (
               <>
+                {showMaterialBackToHub && (
+                  <div className="batch-parent-hub__material-back-row">
+                    <button
+                      type="button"
+                      className="sm-mentor-btn sm-mentor-btn--outline batch-parent-hub__back"
+                      onClick={handleBackFromMaterialToHub}
+                    >
+                      ← Back to subtopics
+                    </button>
+                  </div>
+                )}
                 {isMentor &&
                   !sm.isManualEditMode &&
                   !sm.isHistoryHubView &&
@@ -604,20 +750,46 @@ const NodeDetailPanel: React.FC<NodeDetailPanelProps> = ({
                 )}
               </>
             ) : sm.isLoadingVersions || sm.versionHistory.length > 0 ? (
-              <div className="study-material-loading">
-                <span className="spinner study-material-loading__spinner" />
-                <p className="study-material-loading__title">Loading study material</p>
-                <p className="study-material-loading__subtitle">
-                  Fetching the latest version for this topic…
-                </p>
-              </div>
+              <>
+                {showMaterialBackToHub && (
+                  <div className="batch-parent-hub__material-back-row">
+                    <button
+                      type="button"
+                      className="sm-mentor-btn sm-mentor-btn--outline batch-parent-hub__back"
+                      onClick={handleBackFromMaterialToHub}
+                    >
+                      ← Back to subtopics
+                    </button>
+                  </div>
+                )}
+                <div className="study-material-loading">
+                  <span className="spinner study-material-loading__spinner" />
+                  <p className="study-material-loading__title">Loading study material</p>
+                  <p className="study-material-loading__subtitle">
+                    Fetching the latest version for this topic…
+                  </p>
+                </div>
+              </>
             ) : (
-              <div className="study-material-loading">
-                <p className="study-material-loading__title">No study material yet</p>
-                <p className="study-material-loading__subtitle">
-                  Go to Generate and click Generate draft to create content for this topic.
-                </p>
-              </div>
+              <>
+                {showMaterialBackToHub && (
+                  <div className="batch-parent-hub__material-back-row">
+                    <button
+                      type="button"
+                      className="sm-mentor-btn sm-mentor-btn--outline batch-parent-hub__back"
+                      onClick={handleBackFromMaterialToHub}
+                    >
+                      ← Back to subtopics
+                    </button>
+                  </div>
+                )}
+                <div className="study-material-loading">
+                  <p className="study-material-loading__title">No study material yet</p>
+                  <p className="study-material-loading__subtitle">
+                    Go to Generate and click Generate draft to create content for this topic.
+                  </p>
+                </div>
+              </>
             )}
           </div>
         )}

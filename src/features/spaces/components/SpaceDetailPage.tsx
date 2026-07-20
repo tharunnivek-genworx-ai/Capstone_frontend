@@ -41,6 +41,15 @@ import type {
   ExistingMaterialPolicy,
   StudyMaterialBatchPreviewResponse,
 } from "../../study_material/types/studyMaterialBatch.types";
+import {
+  clearBatchHubSession,
+  readBatchHubSession,
+  writeBatchHubSession,
+} from "../../study_material/utils/batchHubSession";
+import {
+  findBatchStepForNode,
+  isBatchHubEligibleNode,
+} from "../../study_material/utils/batchHubEligibility";
 
 function findNodeInTree(nodes: NodeTreeNode[], id: string): NodeTreeNode | null {
   for (const n of nodes) {
@@ -93,9 +102,13 @@ const SpaceDetailPage: React.FC = () => {
   const [isSubmittingBatchFlow, setIsSubmittingBatchFlow] = useState(false);
   const [activeBatchId, setActiveBatchId] = useState<string | null>(null);
   const [showBatchProgressPanel, setShowBatchProgressPanel] = useState(false);
+  /** Cohort context for Batch Parent Hub (session-restored or live generate-all). */
+  const [batchHubEnabled, setBatchHubEnabled] = useState(false);
   const completedBatchStepIdsRef = useRef<Set<string>>(new Set());
   const settledBatchStepIdsRef = useRef<Set<string>>(new Set());
   const batchAutoOpenedMaterialNodeIdsRef = useRef<Set<string>>(new Set());
+  /** Mentor dismissed hub navigation for this space visit — do not re-enable from poll. */
+  const batchHubDismissedRef = useRef(false);
   const {
     batchDetail,
     steps: batchSteps,
@@ -124,7 +137,14 @@ const SpaceDetailPage: React.FC = () => {
     );
   }, [batchDetail]);
 
+  /** Hub/cohort context for this space only (ignore stale detail while switching spaces). */
+  const spaceBatchDetail = useMemo(() => {
+    if (!spaceId || !batchDetail || batchDetail.batch.space_id !== spaceId) return null;
+    return batchDetail;
+  }, [spaceId, batchDetail]);
+
   // Resume in-flight batch after reload / space switch.
+  // Terminal session restore keeps batchDetail for hub only — do not open the progress panel.
   useEffect(() => {
     if (!batchDetail) return;
     const { batch_id: batchId, status } = batchDetail.batch;
@@ -133,6 +153,60 @@ const SpaceDetailPage: React.FC = () => {
       setShowBatchProgressPanel(true);
     }
   }, [batchDetail]);
+
+  // Persist cohort while hub context is active (refreshes TTL; skipped after dismiss).
+  useEffect(() => {
+    if (!spaceId || !isMentor || !spaceBatchDetail || !batchHubEnabled) return;
+    writeBatchHubSession(spaceId, spaceBatchDetail.batch.batch_id);
+  }, [spaceId, isMentor, spaceBatchDetail, batchHubEnabled]);
+
+  // Restore hub cohort: active batch first, else sessionStorage terminal batch via getBatch.
+  useEffect(() => {
+    if (!spaceId || !isMentor) return;
+    let cancelled = false;
+
+    const restoreBatchHubCohort = async () => {
+      try {
+        const active = await studyMaterialBatchService.getActiveBatch(spaceId);
+        if (cancelled) return;
+        if (active) {
+          if (!batchHubDismissedRef.current) {
+            writeBatchHubSession(spaceId, active.batch.batch_id);
+            setBatchHubEnabled(true);
+          }
+          return;
+        }
+
+        const sessionBatchId = readBatchHubSession(spaceId);
+        if (!sessionBatchId || cancelled || batchHubDismissedRef.current) return;
+        setActiveBatchId(sessionBatchId);
+        setBatchHubEnabled(true);
+      } catch {
+        if (cancelled || batchHubDismissedRef.current) return;
+        const sessionBatchId = readBatchHubSession(spaceId);
+        if (sessionBatchId) {
+          setActiveBatchId(sessionBatchId);
+          setBatchHubEnabled(true);
+        }
+      }
+    };
+
+    void restoreBatchHubCohort();
+    return () => {
+      cancelled = true;
+    };
+  }, [spaceId, isMentor]);
+
+  const handleDismissBatchHub = useCallback(() => {
+    if (!spaceId) return;
+    batchHubDismissedRef.current = true;
+    clearBatchHubSession(spaceId);
+    setBatchHubEnabled(false);
+    const status = spaceBatchDetail?.batch.status;
+    if (status !== "pending" && status !== "running") {
+      setActiveBatchId(null);
+    }
+  }, [spaceId, spaceBatchDetail?.batch.status]);
 
   const {
     progress: traineeSpaceProgress,
@@ -276,6 +350,8 @@ const SpaceDetailPage: React.FC = () => {
     setIsSubmittingBatchFlow(false);
     setActiveBatchId(null);
     setShowBatchProgressPanel(false);
+    setBatchHubEnabled(false);
+    batchHubDismissedRef.current = false;
     completedBatchStepIdsRef.current = new Set();
     settledBatchStepIdsRef.current = new Set();
     batchAutoOpenedMaterialNodeIdsRef.current = new Set();
@@ -494,7 +570,42 @@ const SpaceDetailPage: React.FC = () => {
       setSelectedNode(node);
       setCameFromSpaceProgress(false);
       if (node) setShowSpaceProgress(false);
-      if (isMentor && node && batchStepStatusByNodeId[node.node_id] === "completed") {
+
+      // Batch parent hub: cohort parent with children → Material page 2 in hub mode (not leaf drill).
+      if (
+        isMentor &&
+        node &&
+        batchHubEnabled &&
+        spaceBatchDetail &&
+        isBatchHubEligibleNode(node, spaceBatchDetail.steps)
+      ) {
+        updateNodeStudyState(node.node_id, {
+          currentPage: 2,
+          isGenerating: false,
+        });
+        const parentStep = findBatchStepForNode(spaceBatchDetail.steps, node.node_id);
+        if (
+          parentStep &&
+          (parentStep.status === "completed" || parentStep.status === "skipped")
+        ) {
+          void studyMaterialService
+            .getActiveVersion(node.node_id)
+            .then((version) => {
+              if (!version) return;
+              updateNodeStudyState(node.node_id, {
+                currentPage: 2,
+                isGenerating: false,
+                hasTriggeredGeneration: true,
+                studyMaterialContent: version.content,
+                activeVersion: version,
+              });
+            })
+            .catch(() => {
+              // Hub still opens; material loads on banner drill if needed.
+            });
+        }
+      } else if (isMentor && node && batchStepStatusByNodeId[node.node_id] === "completed") {
+        // Leaf / non-hub completed step: open Material workspace as today.
         updateNodeStudyState(node.node_id, {
           currentPage: 2,
           isGenerating: false,
@@ -526,6 +637,8 @@ const SpaceDetailPage: React.FC = () => {
       spaceId,
       setSearchParams,
       batchStepStatusByNodeId,
+      batchHubEnabled,
+      spaceBatchDetail,
       updateNodeStudyState,
     ],
   );
@@ -593,18 +706,34 @@ const SpaceDetailPage: React.FC = () => {
 
         if (shouldAutoOpenMaterial) {
           batchAutoOpenedMaterialNodeIdsRef.current.add(step.node_id);
-          void studyMaterialService.getActiveVersion(step.node_id).then((version) => {
-            if (!version) {
-              updateNodeStudyState(step.node_id, { ...completedPatch, currentPage: 2 });
-              return;
-            }
+          const treeNode =
+            findNodeInTree(roots, step.node_id) ??
+            (selectedNode?.node_id === step.node_id ? selectedNode : null);
+          // Hub-eligible parents: page 2 hub mode — do not force material drill.
+          if (
+            batchHubEnabled &&
+            spaceBatchDetail &&
+            treeNode &&
+            isBatchHubEligibleNode(treeNode, spaceBatchDetail.steps)
+          ) {
             updateNodeStudyState(step.node_id, {
               ...completedPatch,
               currentPage: 2,
-              studyMaterialContent: version.content,
-              activeVersion: version,
             });
-          });
+          } else {
+            void studyMaterialService.getActiveVersion(step.node_id).then((version) => {
+              if (!version) {
+                updateNodeStudyState(step.node_id, { ...completedPatch, currentPage: 2 });
+                return;
+              }
+              updateNodeStudyState(step.node_id, {
+                ...completedPatch,
+                currentPage: 2,
+                studyMaterialContent: version.content,
+                activeVersion: version,
+              });
+            });
+          }
         }
 
         toast.success(`Draft ready: ${step.node_title}`);
@@ -641,7 +770,7 @@ const SpaceDetailPage: React.FC = () => {
         }
       }
     }
-  }, [batchDetail, roots, selectedNode?.node_id, updateNodeStudyState]);
+  }, [batchDetail, roots, selectedNode?.node_id, updateNodeStudyState, batchHubEnabled, spaceBatchDetail]);
 
   const handleNavigateFromSpaceProgress = useCallback(
     (nodeId: string) => {
@@ -738,6 +867,9 @@ const SpaceDetailPage: React.FC = () => {
         policy,
         external_research_node_ids: externalResearchNodeIds,
       });
+      batchHubDismissedRef.current = false;
+      writeBatchHubSession(spaceId, created.batch_id);
+      setBatchHubEnabled(true);
       setActiveBatchId(created.batch_id);
       setShowBatchProgressPanel(true);
       completedBatchStepIdsRef.current = new Set();
@@ -1251,6 +1383,9 @@ const SpaceDetailPage: React.FC = () => {
                   studyState={undefined}
                   onStudyStateChange={undefined}
                   onMentorProgressRefresh={handleMentorProgressRefresh}
+                  batchDetail={spaceBatchDetail}
+                  batchHubEnabled={batchHubEnabled}
+                  onDismissBatchHub={handleDismissBatchHub}
                 />
               )
             ) : (
@@ -1286,6 +1421,9 @@ const SpaceDetailPage: React.FC = () => {
                 batchStepStatus={
                   selectedNode ? batchStepStatusByNodeId[selectedNode.node_id] ?? null : null
                 }
+                batchDetail={spaceBatchDetail}
+                batchHubEnabled={batchHubEnabled}
+                onDismissBatchHub={handleDismissBatchHub}
               />
             )
           ) : (
