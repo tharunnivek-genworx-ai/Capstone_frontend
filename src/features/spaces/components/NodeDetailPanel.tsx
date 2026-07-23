@@ -535,7 +535,7 @@ const NodeDetailPanel: React.FC<NodeDetailPanelProps> = ({
               <div className="node-detail-panel__nav">
                 <TopicPageNav
                   currentPage={sm.currentPage}
-                  canAccessStudyMaterial={sm.canAccessStudyMaterial || sm.isGenerating}
+                  canAccessStudyMaterial={sm.canAccessStudyMaterial}
                   canAccessQuiz={sm.canAccessQuiz}
                   canAccessHints={sm.canAccessQuiz && qz.canAccessHints}
                   onPageChange={sm.setCurrentPage}
@@ -584,7 +584,9 @@ const NodeDetailPanel: React.FC<NodeDetailPanelProps> = ({
         {/* PAGE 2 — Study material (or Batch Parent Hub for generate-all cohort) */}
         {sm.currentPage === 2 && (
           <div
-            className="study-material-page"
+            className={`study-material-page${
+              isMentor && sm.isManualEditMode ? " study-material-page--manual-edit" : ""
+            }`}
             style={
               showBatchHub
                 ? { flex: 1, minHeight: 0, overflowY: "auto" }

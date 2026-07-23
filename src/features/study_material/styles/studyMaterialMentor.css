@@ -777,7 +777,9 @@
 .study-material-page > .study-material-manual-editor {
   width: min(calc(100% - 2rem), 960px);
   margin-inline: auto;
-  padding-bottom: 4rem;
+  flex: 1;
+  min-height: 0;
+  padding-bottom: 1rem;
 }
 
 .student-visibility-banner__label {

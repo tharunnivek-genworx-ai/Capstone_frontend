@@ -101,6 +101,15 @@ export default function GenerateSetupPanel({
   const researchDisabled = Boolean(referenceMaterial);
   const showMutualExclusivityHint = pdfDisabled || researchDisabled;
 
+  const pdfTitle =
+    referenceMaterial?.title ??
+    (pdfDisabled || !isLoadingGenerationSource ? "Upload a source PDF" : "Loading source…");
+
+  const studentResourcesTitle =
+    nodeMediaCount > 0 || !isLoadingTopicResources
+      ? "Student resources"
+      : "Loading resources…";
+
   const generationSourceTitle = referenceMaterial?.title
     ?? (externalResearchEnabled ? "External research" : null);
 
@@ -230,7 +239,7 @@ export default function GenerateSetupPanel({
             >
               <span className="gsm-source-btn__icon" aria-hidden="true"><Upload size={18} /></span>
               <span className="gsm-source-btn__text">
-                <b>{isLoadingGenerationSource ? "Loading source…" : referenceMaterial?.title ?? "Upload a source PDF"}</b>
+                <b>{pdfTitle}</b>
                 <span>
                   {pdfDisabled
                     ? "Unavailable while External research is on"
@@ -270,7 +279,7 @@ export default function GenerateSetupPanel({
             <button type="button" className="gsm-source-btn" onClick={onOpenMediaModal}>
               <span className="gsm-source-btn__icon" aria-hidden="true"><Image size={18} /></span>
               <span className="gsm-source-btn__text">
-                <b>{isLoadingTopicResources ? "Loading resources…" : "Student resources"}</b>
+                <b>{studentResourcesTitle}</b>
                 <span>Visible links, images, PDFs, and videos</span>
               </span>
               {nodeMediaCount > 0 && <span className="gsm-badge-count">{nodeMediaCount}</span>}

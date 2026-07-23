@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef, useMemo } from "react";
+import { useState, useEffect, useLayoutEffect, useCallback, useRef, useMemo } from "react";
 import toast from "react-hot-toast";
 import type { NodeTreeNode } from "../../spaces/types/node.types";
 import type { TopicContentPage } from "../../spaces/types/node.types";
@@ -277,7 +277,13 @@ export function useStudyMaterial({
     useState<StudyMaterialClearDraftsEligibilityOut | null>(null);
   const [mentorUiState, setMentorUiState] =
     useState<StudyMaterialMentorUiStateOut | null>(null);
+  /** Which node `mentorUiState` belongs to — prevents one-frame cross-topic bleed. */
+  const [mentorUiOwnedByNodeId, setMentorUiOwnedByNodeId] = useState<string | null>(null);
   const [isLoadingMentorUiState, setIsLoadingMentorUiState] = useState(false);
+  /** Last successful mentor-ui-state per node so topic switches don't flash "no material". */
+  const mentorUiStateByNodeRef = useRef<Map<string, StudyMaterialMentorUiStateOut>>(new Map());
+  /** Nodes whose mentor-ui-state has been fetched at least once this session. */
+  const mentorUiFetchedNodeIdsRef = useRef<Set<string>>(new Set());
   const [publishPreview, setPublishPreview] =
     useState<StudyMaterialPublishPreviewOut | null>(null);
   const [unpublishPreview, setUnpublishPreview] =
@@ -306,16 +312,27 @@ export function useStudyMaterial({
 
   const onStudyStateChangeRef = useRef(onStudyStateChange);
   onStudyStateChangeRef.current = onStudyStateChange;
+  const onExternalResearchChangeRef = useRef(onExternalResearchChange);
+  onExternalResearchChangeRef.current = onExternalResearchChange;
   const onMentorProgressRefreshRef = useRef(onMentorProgressRefresh);
   onMentorProgressRefreshRef.current = onMentorProgressRefresh;
   const currentNodeIdRef = useRef(node?.node_id);
   currentNodeIdRef.current = node?.node_id;
+  const referenceMaterialRef = useRef<ReferenceMaterialOut | null>(studyState?.referenceMaterial ?? null);
+  referenceMaterialRef.current = studyState?.referenceMaterial ?? null;
+  const externalResearchPreferenceRef = useRef(false);
 
   const patchNodeStudyState = useCallback((nodeId: string, patch: NodeStudyStatePatch) => {
     onStudyStateChangeRef.current?.(nodeId, patch);
   }, []);
 
   const isViewingNode = (nodeId: string) => currentNodeIdRef.current === nodeId;
+
+  const applyMentorUiState = useCallback((nodeId: string, state: StudyMaterialMentorUiStateOut | null) => {
+    setMentorUiOwnedByNodeId(nodeId);
+    setMentorUiState(state);
+  }, []);
+
   const [isResumingFailedGeneration, setIsResumingFailedGeneration] = useState(false);
   const refreshVersionHistoryRef = useRef<(nodeId: string) => Promise<VersionHistoryLists | null>>(
     async () => null,
@@ -325,6 +342,12 @@ export function useStudyMaterial({
   );
   const versionHistoryRequestRef = useRef(0);
   const generationSourceRequestRef = useRef(0);
+  const topicResourcesRequestRef = useRef(0);
+  const nodeMediaByNodeRef = useRef<Map<string, NodeMediaOut[]>>(new Map());
+  /** Nodes whose generation source has been fetched at least once this session. */
+  const generationSourceFetchedNodeIdsRef = useRef<Set<string>>(new Set());
+  /** Nodes whose topic resources have been fetched at least once this session. */
+  const topicResourcesFetchedNodeIdsRef = useRef<Set<string>>(new Set());
 
   // ── Convenient accessors into lifted state ────────────────────────────────
   const currentPage = studyState?.currentPage ?? 1;
@@ -341,9 +364,19 @@ export function useStudyMaterial({
   const isAbandoningGeneration = studyState?.isAbandoningGeneration ?? false;
   const referenceMaterial = studyState?.referenceMaterial ?? null;
   const currentEffectiveInstruction = node?.effective_instruction ?? "";
+  // Resolve mentor UI for the *current* node only. While React state still points at
+  // the previous topic, fall back to this node's session cache (never another node's).
+  const activeMentorUiState =
+    node && mentorUiOwnedByNodeId === node.node_id
+      ? mentorUiState
+      : node
+        ? (mentorUiStateByNodeRef.current.get(node.node_id) ?? null)
+        : null;
+  const mentorUiSyncedToNode = Boolean(node && mentorUiOwnedByNodeId === node.node_id);
   const externalResearchPreference = usesControlledExternalResearch
     ? Boolean(externalResearchEnabledProp)
     : Boolean(node?.node_id && externalResearchByNode[node.node_id]);
+  externalResearchPreferenceRef.current = externalResearchPreference;
   const externalResearchEnabled = Boolean(
     externalResearchPreference && !referenceMaterial,
   );
@@ -353,7 +386,7 @@ export function useStudyMaterial({
       if (!node) return;
       if (enabled && referenceMaterial) return;
       if (usesControlledExternalResearch) {
-        onExternalResearchChange?.(enabled);
+        onExternalResearchChangeRef.current?.(enabled);
         return;
       }
       setExternalResearchByNode((prev) => ({
@@ -361,7 +394,7 @@ export function useStudyMaterial({
         [node.node_id]: enabled,
       }));
     },
-    [node, referenceMaterial, usesControlledExternalResearch, onExternalResearchChange],
+    [node, referenceMaterial, usesControlledExternalResearch],
   );
 
   useEffect(() => {
@@ -378,7 +411,7 @@ export function useStudyMaterial({
       // PDF and External Research are mutually exclusive — attaching a PDF clears the toggle.
       if (m) {
         if (usesControlledExternalResearch && nodeId === node?.node_id) {
-          onExternalResearchChange?.(false);
+          onExternalResearchChangeRef.current?.(false);
         } else {
           setExternalResearchByNode((prev) =>
             prev[nodeId] ? { ...prev, [nodeId]: false } : prev,
@@ -386,7 +419,7 @@ export function useStudyMaterial({
         }
       }
     },
-    [patchNodeStudyState, usesControlledExternalResearch, onExternalResearchChange, node?.node_id]
+    [patchNodeStudyState, usesControlledExternalResearch, node?.node_id]
   );
   const setReferenceMaterial = (m: ReferenceMaterialOut | null) => {
     if (!node) return;
@@ -394,50 +427,68 @@ export function useStudyMaterial({
   };
 
   const refreshGenerationSource = useCallback(async () => {
-    if (!node || !isMentor) return;
+    const nodeId = node?.node_id;
+    if (!nodeId || !isMentor) return;
     const requestId = ++generationSourceRequestRef.current;
-    setIsLoadingGenerationSource(true);
+    const hasCachedSource = Boolean(referenceMaterialRef.current);
+    const alreadyFetched = generationSourceFetchedNodeIdsRef.current.has(nodeId);
+    const skipLoadingIndicator =
+      hasCachedSource || externalResearchPreferenceRef.current || alreadyFetched;
+    if (!skipLoadingIndicator) {
+      setIsLoadingGenerationSource(true);
+    }
     try {
-      const latest = await referenceMaterialService.getLatestByNode(node.node_id);
+      const latest = await referenceMaterialService.getLatestByNode(nodeId);
       if (requestId !== generationSourceRequestRef.current) return;
-      patchNodeStudyState(node.node_id, { referenceMaterial: latest });
+      patchNodeStudyState(nodeId, { referenceMaterial: latest });
       if (latest) {
         if (usesControlledExternalResearch) {
-          onExternalResearchChange?.(false);
+          onExternalResearchChangeRef.current?.(false);
         } else {
           setExternalResearchByNode((prev) =>
-            prev[node.node_id] ? { ...prev, [node.node_id]: false } : prev,
+            prev[nodeId] ? { ...prev, [nodeId]: false } : prev,
           );
         }
-      }    } catch {
+      }
+    } catch {
       /* non-critical */
     } finally {
       if (requestId === generationSourceRequestRef.current) {
+        generationSourceFetchedNodeIdsRef.current.add(nodeId);
         setIsLoadingGenerationSource(false);
       }
     }
-  }, [
-    node,
-    isMentor,
-    patchNodeStudyState,
-    usesControlledExternalResearch,
-    onExternalResearchChange,
-  ]);
+  }, [node?.node_id, isMentor, patchNodeStudyState, usesControlledExternalResearch]);
 
   const refreshTopicResources = useCallback(async (): Promise<NodeMediaOut[]> => {
-    if (!node || !isMentor) return [];
-    setIsLoadingTopicResources(true);
+    const nodeId = node?.node_id;
+    if (!nodeId || !isMentor) return [];
+    const requestId = ++topicResourcesRequestRef.current;
+    const hasCachedResources = (nodeMediaByNodeRef.current.get(nodeId)?.length ?? 0) > 0;
+    const alreadyFetched = topicResourcesFetchedNodeIdsRef.current.has(nodeId);
+    if (!hasCachedResources && !alreadyFetched) {
+      setIsLoadingTopicResources(true);
+    }
     try {
-      const mediaRes = await referenceMaterialService.listNodeMedia(node.node_id);
-      setNodeMedia(mediaRes.items);
+      const mediaRes = await referenceMaterialService.listNodeMedia(nodeId);
+      if (requestId !== topicResourcesRequestRef.current) {
+        return nodeMediaByNodeRef.current.get(nodeId) ?? [];
+      }
+      nodeMediaByNodeRef.current.set(nodeId, mediaRes.items);
+      if (isViewingNode(nodeId)) {
+        setNodeMedia(mediaRes.items);
+      }
       return mediaRes.items;
     } catch {
       /* non-critical */
-      return [];
+      return nodeMediaByNodeRef.current.get(nodeId) ?? [];
     } finally {
-      setIsLoadingTopicResources(false);
+      if (requestId === topicResourcesRequestRef.current) {
+        topicResourcesFetchedNodeIdsRef.current.add(nodeId);
+        setIsLoadingTopicResources(false);
+      }
     }
-  }, [node, isMentor]);
+  }, [node?.node_id, isMentor]);
 
   /** After external generate/regenerate: refresh resources and toast when external links exist. */
   const refreshExternalSourcesAfterGenerate = useCallback(
@@ -490,7 +541,11 @@ export function useStudyMaterial({
           nodeId,
           viewingId ?? viewingVersionId
         );
-        setMentorUiState(state);
+        mentorUiStateByNodeRef.current.set(nodeId, state);
+        mentorUiFetchedNodeIdsRef.current.add(nodeId);
+        if (isViewingNode(nodeId)) {
+          applyMentorUiState(nodeId, state);
+        }
         if (state.has_versions) {
           patchNodeStudyState(nodeId, { hasTriggeredGeneration: true });
         } else {
@@ -501,12 +556,17 @@ export function useStudyMaterial({
           });
         }
       } catch {
-        setMentorUiState(null);
+        if (isViewingNode(nodeId)) {
+          // Keep per-node cache so a transient failure does not grey out Material.
+          applyMentorUiState(nodeId, mentorUiStateByNodeRef.current.get(nodeId) ?? null);
+        }
       } finally {
-        setIsLoadingMentorUiState(false);
+        if (isViewingNode(nodeId)) {
+          setIsLoadingMentorUiState(false);
+        }
       }
     },
-    [viewingVersionId, patchNodeStudyState]
+    [viewingVersionId, patchNodeStudyState, applyMentorUiState]
   );
 
   refreshMentorUiStateRef.current = refreshMentorUiState;
@@ -603,9 +663,9 @@ export function useStudyMaterial({
 
   const shouldShowHistoryHub = useMemo(
     () =>
-      mentorUiState != null &&
-      computeShouldShowHistoryHub(versionHistory, archivedVersionHistory, mentorUiState),
-    [versionHistory, archivedVersionHistory, mentorUiState]
+      activeMentorUiState != null &&
+      computeShouldShowHistoryHub(versionHistory, archivedVersionHistory, activeMentorUiState),
+    [versionHistory, archivedVersionHistory, activeMentorUiState]
   );
 
   const isHistoryHubView = shouldShowHistoryHub && viewingVersionId === null;
@@ -617,11 +677,12 @@ export function useStudyMaterial({
   // before the async-load effects below. If the reset ran after the loads it
   // would increment versionHistoryRequestRef, making the just-started fetch
   // appear stale and silently drop the result (leaving the panel empty).
-  useEffect(() => {
+  // useLayoutEffect: sync mentor UI cache before paint to avoid Material/Generate flash.
+  useLayoutEffect(() => {
     versionHistoryRequestRef.current += 1;
     generationSourceRequestRef.current += 1;
+    topicResourcesRequestRef.current += 1;
     setIsLoadingVersions(false);
-    setIsLoadingGenerationSource(false);
     setFeedbackModalMode(null);
     setIsManualEditMode(false);
     setViewingVersionId(null);
@@ -633,21 +694,47 @@ export function useStudyMaterial({
     setClearDraftsEligibility(null);
     setShowDeleteDraftModal(false);
     setShowRegenerateConfirmModal(false);
-    // Clear stale mentor UI state so the old node's instruction-change banner
-    // never bleeds into the newly selected node before the fresh fetch arrives.
-    setMentorUiState(null);
-    setIsLoadingMentorUiState(false);
-    setNodeMedia([]);
+    // Sync mentor UI ownership before paint. Prefer this node's cache so Material
+    // does not flash disabled / first-time Generate while the refresh is in flight.
+    const nodeId = node?.node_id;
+    if (nodeId) {
+      const cached = mentorUiStateByNodeRef.current.get(nodeId);
+      applyMentorUiState(nodeId, cached ?? null);
+      const cachedMedia = nodeMediaByNodeRef.current.get(nodeId) ?? [];
+      const needsSourceLoad =
+        !generationSourceFetchedNodeIdsRef.current.has(nodeId) &&
+        !referenceMaterialRef.current &&
+        !externalResearchPreferenceRef.current;
+      const needsResourcesLoad =
+        !topicResourcesFetchedNodeIdsRef.current.has(nodeId) && cachedMedia.length === 0;
+      setIsLoadingGenerationSource(needsSourceLoad);
+      setIsLoadingTopicResources(needsResourcesLoad);
+      setNodeMedia(cachedMedia);
+    } else {
+      setMentorUiOwnedByNodeId(null);
+      setMentorUiState(null);
+      setIsLoadingGenerationSource(false);
+      setIsLoadingTopicResources(false);
+      setNodeMedia([]);
+    }
+    setIsLoadingMentorUiState(Boolean(nodeId && isMentor));
     setProcessingLabel(null);
     setIsResumingFailedGeneration(false);
-  }, [node?.node_id]);
+  }, [node?.node_id, isMentor, applyMentorUiState]);
 
-  // Load generation source and topic resources when switching nodes
+  const refreshGenerationSourceRef = useRef(refreshGenerationSource);
+  refreshGenerationSourceRef.current = refreshGenerationSource;
+  const refreshTopicResourcesRef = useRef(refreshTopicResources);
+  refreshTopicResourcesRef.current = refreshTopicResources;
+
+  // Load generation source and topic resources when switching nodes.
+  // Callbacks are read from refs so unstable parent props (e.g. inline
+  // onExternalResearchChange) cannot retrigger this effect and flicker titles.
   useEffect(() => {
     if (!node || !isMentor) return;
-    void refreshGenerationSource();
-    void refreshTopicResources();
-  }, [node?.node_id, isMentor, refreshGenerationSource, refreshTopicResources]);
+    void refreshGenerationSourceRef.current();
+    void refreshTopicResourcesRef.current();
+  }, [node?.node_id, isMentor]);
 
   // Enable study-material navigation when mentor-accessible versions exist
   useEffect(() => {
@@ -730,7 +817,7 @@ export function useStudyMaterial({
     ) {
       return;
     }
-    if (mentorUiState === null) return;
+    if (mentorUiState === null || !mentorUiSyncedToNode) return;
     const hasAnyMaterial =
       mentorUiState.has_versions ||
       versionHistory.length > 0 ||
@@ -749,6 +836,7 @@ export function useStudyMaterial({
     generationRunFailed,
     failedGenerationPipeline,
     mentorUiState,
+    mentorUiSyncedToNode,
     versionHistory.length,
     archivedVersionHistory.length,
   ]);
@@ -920,7 +1008,7 @@ export function useStudyMaterial({
   // When every draft is in the archive, load one for viewing so Material is not blank.
   useEffect(() => {
     if (!node || !isMentor || currentPage !== 2 || isGenerating) return;
-    if (!mentorUiState || shouldShowHistoryHub) return;
+    if (!activeMentorUiState || !mentorUiSyncedToNode || shouldShowHistoryHub) return;
     if (studyMaterialContent?.trim()) return;
     if (archivedVersionHistory.length === 0) return;
     const workspaceCount = versionHistory.filter((v) => !v.is_archived).length;
@@ -953,13 +1041,14 @@ export function useStudyMaterial({
     viewingVersionId,
     patchNodeStudyState,
     shouldShowHistoryHub,
-    mentorUiState,
+    activeMentorUiState,
+    mentorUiSyncedToNode,
   ]);
 
   // Load the best available version when Material opens with history but no body.
   useEffect(() => {
     if (!node || !isMentor || currentPage !== 2 || isGenerating || isLoadingVersions) return;
-    if (!mentorUiState || shouldShowHistoryHub) return;
+    if (!activeMentorUiState || !mentorUiSyncedToNode || shouldShowHistoryHub) return;
     if (studyMaterialContent?.trim()) return;
     if (versionHistory.length === 0 && archivedVersionHistory.length === 0) return;
 
@@ -1030,7 +1119,8 @@ export function useStudyMaterial({
     archivedVersionHistory.length,
     patchNodeStudyState,
     shouldShowHistoryHub,
-    mentorUiState,
+    activeMentorUiState,
+    mentorUiSyncedToNode,
   ]);
 
   // Refresh mentor UI when returning to study material (e.g. after publishing a quiz)
@@ -1042,13 +1132,13 @@ export function useStudyMaterial({
   // Load delete/regenerate eligibility whenever material exists for this node
   useEffect(() => {
     if (!node || !isMentor) return;
-    if (!hasTriggeredGeneration && !mentorUiState?.has_versions) return;
+    if (!hasTriggeredGeneration && !activeMentorUiState?.has_versions) return;
     void refreshClearDraftsEligibility(node.node_id);
   }, [
     node?.node_id,
     hasTriggeredGeneration,
     isMentor,
-    mentorUiState?.has_versions,
+    activeMentorUiState?.has_versions,
     refreshClearDraftsEligibility,
   ]);
 
@@ -1946,9 +2036,10 @@ export function useStudyMaterial({
       setArchivedVersionHistory([]);
       setShowArchivedPanel(false);
       setClearDraftsEligibility(null);
-      // Clear stale mentor UI state so publish/unpublish flags from the just-
-      // deleted versions don't bleed through while the user is on page 1.
-      setMentorUiState(null);
+      // Drop cached mentor UI state so discarded drafts cannot unlock Material.
+      mentorUiStateByNodeRef.current.delete(node.node_id);
+      mentorUiFetchedNodeIdsRef.current.add(node.node_id);
+      applyMentorUiState(node.node_id, null);
       patchNodeStudyState(node.node_id, {
         currentPage: 1,
         hasTriggeredGeneration: false,
@@ -1981,12 +2072,12 @@ export function useStudyMaterial({
   const dismissInstructionChangeBanner = useCallback(() => {
     if (!node) return;
     const instruction =
-      mentorUiState?.current_effective_instruction ?? currentEffectiveInstruction;
+      activeMentorUiState?.current_effective_instruction ?? currentEffectiveInstruction;
     setInstructionBannerDismissedByNode((dismissed) => ({
       ...dismissed,
       [node.node_id]: instruction,
     }));
-  }, [node, mentorUiState?.current_effective_instruction, currentEffectiveInstruction]);
+  }, [node, activeMentorUiState?.current_effective_instruction, currentEffectiveInstruction]);
 
   const handleKeepExistingDraftsAfterMove = () => {
     dismissInstructionChangeBanner();
@@ -2049,12 +2140,44 @@ export function useStudyMaterial({
 
   // ── Computed values ───────────────────────────────────────────────────────
 
-  const canAccessStudyMaterial = mentorUiState?.can_access_study_material ?? false;
-  const hasWorkspaceStudyMaterial = Boolean(mentorUiState?.has_workspace_versions);
-  const canAccessQuiz = mentorUiState?.can_access_quiz ?? false;
+  // While mentor-ui-state is in flight, avoid treating "unknown" as "no material".
+  // That race greys out Material and shows a first-time Generate CTA even when
+  // drafts already exist (especially under Cloud Run cold starts).
+  const hasLocalMaterialSignal = Boolean(
+    hasTriggeredGeneration ||
+      activeVersion ||
+      studyMaterialContent?.trim() ||
+      isGenerating ||
+      ((generationRunPaused || generationRunFailed) &&
+        failedGenerationPipeline === "study_material")
+  );
+  const mentorUiPendingForNode = Boolean(
+    node &&
+      isMentor &&
+      activeMentorUiState === null &&
+      (isLoadingMentorUiState || !mentorUiSyncedToNode) &&
+      !mentorUiFetchedNodeIdsRef.current.has(node.node_id)
+  );
+
+  const canAccessStudyMaterial =
+    activeMentorUiState != null
+      ? activeMentorUiState.can_access_study_material
+      : hasLocalMaterialSignal || mentorUiPendingForNode;
+
+  const hasWorkspaceStudyMaterial =
+    activeMentorUiState != null
+      ? Boolean(activeMentorUiState.has_workspace_versions)
+      : Boolean(
+          activeVersion ||
+            studyMaterialContent?.trim() ||
+            (isLoadingMentorUiState && hasTriggeredGeneration) ||
+            mentorUiPendingForNode
+        );
+
+  const canAccessQuiz = activeMentorUiState?.can_access_quiz ?? false;
   const displayedVersionId = viewingVersionId ?? activeVersion?.version_id ?? null;
   const displayedVersionSummary = findVersionSummary(displayedVersionId);
-  const candidateVersionActions = mentorUiState?.displayed_version_actions;
+  const candidateVersionActions = activeMentorUiState?.displayed_version_actions;
   const versionActions =
     candidateVersionActions?.version_id === displayedVersionId
       ? candidateVersionActions
@@ -2068,7 +2191,7 @@ export function useStudyMaterial({
   // to a material page before the async UI-state refresh completes.
   const canEditActiveDraftOptimistic =
     isLoadingMentorUiState &&
-    mentorUiState === null &&
+    activeMentorUiState === null &&
     viewingVersionId === null &&
     activeVersion !== null &&
     activeVersion.lifecycle_status === "draft";
@@ -2085,15 +2208,15 @@ export function useStudyMaterial({
   const unpublishButtonLabel = versionActions?.unpublish_button_label ?? "Remove from students";
   const unpublishTooltip = versionActions?.unpublish_tooltip ?? null;
   const unpublishDisabledTooltip = versionActions?.unpublish_disabled_tooltip ?? null;
-  const publishedVersionId = mentorUiState?.published_version_id ?? null;
+  const publishedVersionId = activeMentorUiState?.published_version_id ?? null;
   const canClearAllDrafts = Boolean(clearDraftsEligibility?.can_clear);
   const clearDraftsBlockReason = clearDraftsEligibility?.block_reason ?? undefined;
   const instructionBannerDismissedFor = node
     ? instructionBannerDismissedByNode[node.node_id]
     : undefined;
   const showInstructionChangeBanner = Boolean(
-    mentorUiState?.instruction_changed_since_generation &&
-    mentorUiState.current_effective_instruction !== instructionBannerDismissedFor
+    activeMentorUiState?.instruction_changed_since_generation &&
+    activeMentorUiState.current_effective_instruction !== instructionBannerDismissedFor
   );
 
   const sourceDocMismatch = Boolean(
@@ -2242,7 +2365,7 @@ export function useStudyMaterial({
     canClearAllDrafts,
     clearDraftsBlockReason,
     showInstructionChangeBanner,
-    mentorUiState,
+    mentorUiState: activeMentorUiState,
     publishPreview,
     unpublishPreview,
     showEspaceNotPublishedModal,
