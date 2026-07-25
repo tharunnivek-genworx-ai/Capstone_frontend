@@ -1,4 +1,6 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
+import { Maximize2, Minimize2 } from "lucide-react";
 import StudyMaterialDocument from "./StudyMaterialDocument";
 import StudyMaterialRichTextEditor from "./StudyMaterialRichTextEditor";
 
@@ -20,10 +22,37 @@ const StudyMaterialManualEditor: React.FC<StudyMaterialManualEditorProps> = ({
   onSave,
 }) => {
   const [content, setContent] = useState(initialContent);
-  const canSave = content.trim().length > 0 && !isSaving;
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const isDirty = content.trim() !== initialContent.trim();
+  const canSave = isDirty && content.trim().length > 0 && !isSaving;
 
-  return (
-    <div className="study-material-manual-editor">
+  useEffect(() => {
+    if (!isFullscreen) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setIsFullscreen(false);
+    };
+    document.body.style.overflow = "hidden";
+    window.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.body.style.overflow = "";
+      window.removeEventListener("keydown", onKeyDown);
+    };
+  }, [isFullscreen]);
+
+  const fullscreenButton = (
+    <button
+      type="button"
+      className="study-material-rich-editor__tool-btn study-material-manual-editor__fullscreen-btn"
+      onClick={() => setIsFullscreen((open) => !open)}
+      aria-label={isFullscreen ? "Exit full-screen edit view" : "Open full-screen edit view"}
+      title={isFullscreen ? "Exit full screen" : "Open full-screen edit view"}
+    >
+      {isFullscreen ? <Minimize2 size={15} aria-hidden /> : <Maximize2 size={15} aria-hidden />}
+    </button>
+  );
+
+  const editor = (
+    <>
       <div className="study-material-manual-editor__header">
         <div>
           {title && <h2 className="study-material-manual-editor__title">{title}</h2>}
@@ -31,6 +60,28 @@ const StudyMaterialManualEditor: React.FC<StudyMaterialManualEditorProps> = ({
             <span className="study-material-viewer__version-badge">
               Editing from {versionLabel}
             </span>
+          )}
+        </div>
+        <div className="study-material-manual-editor__header-actions">
+          <button type="button" className="btn-secondary" onClick={onCancel} disabled={isSaving}>
+            Cancel
+          </button>
+          {isDirty && (
+            <button
+              type="button"
+              className="btn-primary"
+              onClick={() => onSave(content)}
+              disabled={!canSave}
+              style={{ minWidth: "140px" }}
+            >
+              {isSaving ? (
+                <>
+                  <span className="spinner" /> Saving…
+                </>
+              ) : (
+                "Save as new version"
+              )}
+            </button>
           )}
         </div>
       </div>
@@ -46,32 +97,30 @@ const StudyMaterialManualEditor: React.FC<StudyMaterialManualEditorProps> = ({
             initialMarkdown={initialContent}
             disabled={isSaving}
             onChange={setContent}
+            toolbarEnd={fullscreenButton}
           />
         </StudyMaterialDocument>
       </div>
-
-      <div className="study-material-manual-editor__footer">
-        <button type="button" className="btn-secondary" onClick={onCancel} disabled={isSaving}>
-          Cancel
-        </button>
-        <button
-          type="button"
-          className="btn-primary"
-          onClick={() => onSave(content)}
-          disabled={!canSave}
-          style={{ minWidth: "140px" }}
-        >
-          {isSaving ? (
-            <>
-              <span className="spinner" /> Saving…
-            </>
-          ) : (
-            "Save as new version"
-          )}
-        </button>
-      </div>
-    </div>
+    </>
   );
+
+  if (isFullscreen) {
+    return createPortal(
+      <div className="learning-experience learning-portal">
+        <div
+          className="study-material-manual-editor study-material-manual-editor--fullscreen"
+          role="dialog"
+          aria-modal="true"
+          aria-label={title ? `Editing: ${title}` : "Manual edit"}
+        >
+          {editor}
+        </div>
+      </div>,
+      document.body,
+    );
+  }
+
+  return <div className="study-material-manual-editor">{editor}</div>;
 };
 
 export default StudyMaterialManualEditor;

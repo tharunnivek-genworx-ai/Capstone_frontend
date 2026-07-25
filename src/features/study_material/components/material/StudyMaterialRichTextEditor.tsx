@@ -14,6 +14,7 @@ interface StudyMaterialRichTextEditorProps {
   initialMarkdown: string;
   disabled?: boolean;
   onChange: (markdown: string) => void;
+  toolbarEnd?: React.ReactNode;
 }
 
 type FormatCommand =
@@ -27,6 +28,7 @@ const StudyMaterialRichTextEditor: React.FC<StudyMaterialRichTextEditorProps> = 
   initialMarkdown,
   disabled = false,
   onChange,
+  toolbarEnd,
 }) => {
   const editorRef = useRef<HTMLDivElement>(null);
   const [isReady, setIsReady] = useState(false);
@@ -142,6 +144,9 @@ const StudyMaterialRichTextEditor: React.FC<StudyMaterialRichTextEditorProps> = 
         >
           <Quote size={15} aria-hidden />
         </button>
+        {toolbarEnd && (
+          <div className="study-material-rich-editor__toolbar-end">{toolbarEnd}</div>
+        )}
       </div>
 
       <div

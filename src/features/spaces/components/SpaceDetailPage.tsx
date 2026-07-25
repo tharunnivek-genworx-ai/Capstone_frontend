@@ -25,6 +25,11 @@ import InviteCodeModal from "./InviteCodeModal";
 import ManageTraineesModal from "./ManageTraineesModal";
 import { useAuth } from "../../auth/hooks/useAuth";
 import { studyMaterialService } from "../../study_material/services/studyMaterialService";
+import { clearStudyMaterialModuleOwnership } from "../../study_material/hooks/useStudyMaterial";
+import {
+  preserveProgressFlagsInPatch,
+  shouldHydrateAsWorkspaceActiveVersion,
+} from "../../study_material/utils/studyMaterialProgressRecovery";
 import EspaceUnpublishConfirmModal from "./EspaceUnpublishConfirmModal";
 import EspaceRepublishChecklistModal from "./EspaceRepublishChecklistModal";
 import { useTraineeSpaceProgress } from "../../trainee_space_progress/hooks/useTraineeSpaceProgress";
@@ -107,35 +112,17 @@ const SpaceDetailPage: React.FC = () => {
   const completedBatchStepIdsRef = useRef<Set<string>>(new Set());
   const settledBatchStepIdsRef = useRef<Set<string>>(new Set());
   const batchAutoOpenedMaterialNodeIdsRef = useRef<Set<string>>(new Set());
+  /** Avoid re-toasting already-completed steps when a batch is first hydrated after space enter. */
+  const seededBatchToastIdRef = useRef<string | null>(null);
   /** Mentor dismissed hub navigation for this space visit — do not re-enable from poll. */
   const batchHubDismissedRef = useRef(false);
   const {
     batchDetail,
-    steps: batchSteps,
     currentRunningStep,
     isPolling: isBatchPolling,
     error: batchPollingError,
     cancel: cancelBatchJob,
   } = useBatchJobPoll(activeBatchId, spaceId ?? null);
-
-  const batchStepStatusByNodeId = useMemo(() => {
-    const map: Record<string, BatchStepStatus> = {};
-    for (const step of batchSteps) {
-      map[step.node_id] = step.status;
-    }
-    return map;
-  }, [batchSteps]);
-
-  const busyNodeIds = useMemo(() => {
-    if (!batchDetail || !["pending", "running"].includes(batchDetail.batch.status)) {
-      return new Set<string>();
-    }
-    return new Set(
-      batchDetail.steps
-        .filter((step) => step.status === "pending" || step.status === "running")
-        .map((step) => step.node_id),
-    );
-  }, [batchDetail]);
 
   /** Hub/cohort context for this space only (ignore stale detail while switching spaces). */
   const spaceBatchDetail = useMemo(() => {
@@ -143,16 +130,37 @@ const SpaceDetailPage: React.FC = () => {
     return batchDetail;
   }, [spaceId, batchDetail]);
 
+  const spaceBatchSteps = spaceBatchDetail?.steps ?? [];
+
+  const batchStepStatusByNodeId = useMemo(() => {
+    const map: Record<string, BatchStepStatus> = {};
+    for (const step of spaceBatchSteps) {
+      map[step.node_id] = step.status;
+    }
+    return map;
+  }, [spaceBatchSteps]);
+
+  const busyNodeIds = useMemo(() => {
+    if (!spaceBatchDetail || !["pending", "running"].includes(spaceBatchDetail.batch.status)) {
+      return new Set<string>();
+    }
+    return new Set(
+      spaceBatchDetail.steps
+        .filter((step) => step.status === "pending" || step.status === "running")
+        .map((step) => step.node_id),
+    );
+  }, [spaceBatchDetail]);
+
   // Resume in-flight batch after reload / space switch.
   // Terminal session restore keeps batchDetail for hub only — do not open the progress panel.
   useEffect(() => {
-    if (!batchDetail) return;
-    const { batch_id: batchId, status } = batchDetail.batch;
+    if (!spaceBatchDetail) return;
+    const { batch_id: batchId, status } = spaceBatchDetail.batch;
     if (status === "pending" || status === "running") {
       setActiveBatchId((prev) => (prev === batchId ? prev : batchId));
       setShowBatchProgressPanel(true);
     }
-  }, [batchDetail]);
+  }, [spaceBatchDetail]);
 
   // Persist cohort while hub context is active (refreshes TTL; skipped after dismiss).
   useEffect(() => {
@@ -339,6 +347,7 @@ const SpaceDetailPage: React.FC = () => {
     setTreePanelWidth(280);
     setIsTopicPanelVisible(true);
     setNodeStudyStates(new Map());
+    clearStudyMaterialModuleOwnership();
     setShowSpaceProgress(false);
     setCameFromSpaceProgress(false);
     setShowRootPickerModal(false);
@@ -355,6 +364,7 @@ const SpaceDetailPage: React.FC = () => {
     completedBatchStepIdsRef.current = new Set();
     settledBatchStepIdsRef.current = new Set();
     batchAutoOpenedMaterialNodeIdsRef.current = new Set();
+    seededBatchToastIdRef.current = null;
 
     const load = async () => {
       setIsLoadingSpace(true);
@@ -579,10 +589,15 @@ const SpaceDetailPage: React.FC = () => {
         spaceBatchDetail &&
         isBatchHubEligibleNode(node, spaceBatchDetail.steps)
       ) {
-        updateNodeStudyState(node.node_id, {
-          currentPage: 2,
-          isGenerating: false,
-        });
+        // Do not force isGenerating:false — an active/paused/failed SM run must keep Progress.
+        const existing = nodeStudyStates.get(node.node_id);
+        updateNodeStudyState(
+          node.node_id,
+          preserveProgressFlagsInPatch(existing, {
+            currentPage: 2,
+            isGenerating: false,
+          }),
+        );
         const parentStep = findBatchStepForNode(spaceBatchDetail.steps, node.node_id);
         if (
           parentStep &&
@@ -592,9 +607,11 @@ const SpaceDetailPage: React.FC = () => {
             .getActiveVersion(node.node_id)
             .then((version) => {
               if (!version) return;
+              if (!shouldHydrateAsWorkspaceActiveVersion(version, [], [], null)) {
+                return;
+              }
               updateNodeStudyState(node.node_id, {
                 currentPage: 2,
-                isGenerating: false,
                 hasTriggeredGeneration: true,
                 studyMaterialContent: version.content,
                 activeVersion: version,
@@ -606,16 +623,22 @@ const SpaceDetailPage: React.FC = () => {
         }
       } else if (isMentor && node && batchStepStatusByNodeId[node.node_id] === "completed") {
         // Leaf / non-hub completed step: open Material workspace as today.
-        updateNodeStudyState(node.node_id, {
-          currentPage: 2,
-          isGenerating: false,
-          hasTriggeredGeneration: true,
-        });
-        void studyMaterialService.getActiveVersion(node.node_id).then((version) => {
-          if (!version) return;
-          updateNodeStudyState(node.node_id, {
+        const existing = nodeStudyStates.get(node.node_id);
+        updateNodeStudyState(
+          node.node_id,
+          preserveProgressFlagsInPatch(existing, {
             currentPage: 2,
             isGenerating: false,
+            hasTriggeredGeneration: true,
+          }),
+        );
+        void studyMaterialService.getActiveVersion(node.node_id).then((version) => {
+          if (!version) return;
+          if (!shouldHydrateAsWorkspaceActiveVersion(version, [], [], null)) {
+            return;
+          }
+          updateNodeStudyState(node.node_id, {
+            currentPage: 2,
             hasTriggeredGeneration: true,
             studyMaterialContent: version.content,
             activeVersion: version,
@@ -640,6 +663,7 @@ const SpaceDetailPage: React.FC = () => {
       batchHubEnabled,
       spaceBatchDetail,
       updateNodeStudyState,
+      nodeStudyStates,
     ],
   );
 
@@ -670,9 +694,23 @@ const SpaceDetailPage: React.FC = () => {
   // Sync batch step progress into per-node study state. Do not change the
   // selected topic — users should browse freely while generate-all runs.
   useEffect(() => {
-    if (!batchDetail || roots.length === 0) return;
+    if (!spaceBatchDetail || roots.length === 0) return;
 
-    for (const step of batchDetail.steps) {
+    // First hydrate of this batch after space enter / new batch: mark already-settled
+    // steps so we only toast real live transitions (not cross-space or restore replays).
+    if (seededBatchToastIdRef.current !== spaceBatchDetail.batch.batch_id) {
+      seededBatchToastIdRef.current = spaceBatchDetail.batch.batch_id;
+      for (const step of spaceBatchDetail.steps) {
+        if (step.status === "completed") {
+          completedBatchStepIdsRef.current.add(step.step_id);
+          settledBatchStepIdsRef.current.add(step.step_id);
+        } else if (step.status === "failed" || step.status === "skipped") {
+          settledBatchStepIdsRef.current.add(step.step_id);
+        }
+      }
+    }
+
+    for (const step of spaceBatchDetail.steps) {
       if (step.status === "running") {
         const runningPatch: Partial<NodeStudyState> = {
           isGenerating: true,
@@ -770,7 +808,7 @@ const SpaceDetailPage: React.FC = () => {
         }
       }
     }
-  }, [batchDetail, roots, selectedNode?.node_id, updateNodeStudyState, batchHubEnabled, spaceBatchDetail]);
+  }, [spaceBatchDetail, roots, selectedNode?.node_id, updateNodeStudyState, batchHubEnabled]);
 
   const handleNavigateFromSpaceProgress = useCallback(
     (nodeId: string) => {
@@ -875,6 +913,7 @@ const SpaceDetailPage: React.FC = () => {
       completedBatchStepIdsRef.current = new Set();
       settledBatchStepIdsRef.current = new Set();
       batchAutoOpenedMaterialNodeIdsRef.current = new Set();
+      seededBatchToastIdRef.current = null;
       toast.success(
         "Generate-all started. Progress continues in the background — you can close this tab.",
       );
@@ -1550,9 +1589,9 @@ const SpaceDetailPage: React.FC = () => {
         />
       )}
 
-      {showBatchProgressPanel && batchDetail && (
+      {showBatchProgressPanel && spaceBatchDetail && (
         <BatchProgressPanel
-          batchDetail={batchDetail}
+          batchDetail={spaceBatchDetail}
           currentRunningStep={currentRunningStep}
           isPolling={isBatchPolling}
           error={batchPollingError}

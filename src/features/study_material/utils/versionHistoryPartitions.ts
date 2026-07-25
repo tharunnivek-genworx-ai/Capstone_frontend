@@ -1,3 +1,4 @@
+import type { GenerationPipeline } from "../../generation/types/generationProgress.types";
 import type {
   StudyMaterialMentorUiStateOut,
   StudyMaterialVersionSummary,
@@ -8,6 +9,51 @@ export interface HistoryVersionPartitions {
   removedFromStudents: StudyMaterialVersionSummary[];
   mentorArchive: StudyMaterialVersionSummary[];
   workspaceDrafts: StudyMaterialVersionSummary[];
+}
+
+/** Mentor workspace draft layer — badge "Your draft". */
+export function isWorkspaceDraftSummary(
+  version: Pick<StudyMaterialVersionSummary, "mentor_display_badge">,
+): boolean {
+  return version.mentor_display_badge === "Your draft";
+}
+
+/** Previous / Removed / archive history layers (not workspace or live). */
+export function isHistoricalMentorSummary(
+  version: Pick<StudyMaterialVersionSummary, "mentor_display_badge" | "is_archived">,
+): boolean {
+  const badge = version.mentor_display_badge;
+  return (
+    badge === "Previous for students" ||
+    badge === "In student archive" ||
+    badge === "Removed from students" ||
+    badge === "In your archive" ||
+    version.is_archived
+  );
+}
+
+/** Flags used to decide whether Material page 2 should show generation progress. */
+export interface StudyMaterialProgressFlags {
+  isGenerating?: boolean;
+  isPausingGeneration?: boolean;
+  generationRunPaused?: boolean;
+  generationRunFailed?: boolean;
+  failedGenerationPipeline?: GenerationPipeline | null;
+}
+
+/**
+ * True when a study-material run is running, pausing, paused, or failed —
+ * Progress should win over History hub / draft body.
+ */
+export function isStudyMaterialProgressing(
+  flags: StudyMaterialProgressFlags,
+): boolean {
+  return (
+    Boolean(flags.isGenerating) ||
+    Boolean(flags.isPausingGeneration) ||
+    ((Boolean(flags.generationRunPaused) || Boolean(flags.generationRunFailed)) &&
+      flags.failedGenerationPipeline === "study_material")
+  );
 }
 
 export function partitionHistoryVersions(
@@ -36,7 +82,7 @@ export function partitionHistoryVersions(
   }
 
   for (const version of archivedVersionHistory) {
-    if (version.mentor_display_badge === "Your draft") {
+    if (isWorkspaceDraftSummary(version)) {
       workspaceDrafts.push(version);
     }
   }
@@ -61,11 +107,21 @@ export function shouldSilentlyActivateOnSelect(
   return true;
 }
 
+export interface ComputeShouldShowHistoryHubOptions {
+  /** When true (running / paused / failed SM run), Progress wins — hub stays off. */
+  isGeneratingOrProgressing?: boolean;
+}
+
 export function computeShouldShowHistoryHub(
   versionHistory: StudyMaterialVersionSummary[],
   archivedVersionHistory: StudyMaterialVersionSummary[],
   mentorUiState: StudyMaterialMentorUiStateOut | null,
+  options?: ComputeShouldShowHistoryHubOptions,
 ): boolean {
+  if (options?.isGeneratingOrProgressing) {
+    return false;
+  }
+
   const partitions = partitionHistoryVersions(versionHistory, archivedVersionHistory);
 
   const hasLiveVersion = Boolean(mentorUiState?.published_version_id);

@@ -33,13 +33,36 @@ export function useBatchJobPoll(
   const [isPolling, setIsPolling] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const resolvedBatchIdRef = useRef<string | null>(batchId);
+  const spaceIdRef = useRef<string | null>(spaceId);
+  const fetchGenerationRef = useRef(0);
 
-  const fetchBatch = useCallback(async (id: string) => {
-    const detail = await studyMaterialBatchService.getBatch(id);
+  useEffect(() => {
+    spaceIdRef.current = spaceId;
+  }, [spaceId]);
+
+  const applyBatchDetail = useCallback((detail: BatchDetailOut, generation: number) => {
+    // Drop late responses from a previous space / batch resolve.
+    if (generation !== fetchGenerationRef.current) return;
+    const currentSpaceId = spaceIdRef.current;
+    if (currentSpaceId && detail.batch.space_id !== currentSpaceId) return;
+    if (
+      resolvedBatchIdRef.current &&
+      detail.batch.batch_id !== resolvedBatchIdRef.current
+    ) {
+      return;
+    }
     setBatchDetail(detail);
     setError(null);
-    return detail;
   }, []);
+
+  const fetchBatch = useCallback(
+    async (id: string, generation?: number) => {
+      const detail = await studyMaterialBatchService.getBatch(id);
+      applyBatchDetail(detail, generation ?? fetchGenerationRef.current);
+      return detail;
+    },
+    [applyBatchDetail],
+  );
 
   const refresh = useCallback(async () => {
     const id = resolvedBatchIdRef.current;
@@ -57,14 +80,15 @@ export function useBatchJobPoll(
   // Resolve batch id from prop or active batch on space load.
   useEffect(() => {
     let cancelled = false;
+    const generation = ++fetchGenerationRef.current;
 
     const resolve = async () => {
       if (batchId) {
         resolvedBatchIdRef.current = batchId;
         try {
-          await fetchBatch(batchId);
+          await fetchBatch(batchId, generation);
         } catch (err) {
-          if (!cancelled) {
+          if (!cancelled && generation === fetchGenerationRef.current) {
             const e = err as { response?: { data?: { detail?: string } }; message?: string };
             setError(e?.response?.data?.detail ?? e?.message ?? "Failed to load batch.");
           }
@@ -80,8 +104,13 @@ export function useBatchJobPoll(
 
       try {
         const active = await studyMaterialBatchService.getActiveBatch(spaceId);
-        if (cancelled) return;
+        if (cancelled || generation !== fetchGenerationRef.current) return;
         if (active) {
+          if (active.batch.space_id !== spaceId) {
+            resolvedBatchIdRef.current = null;
+            setBatchDetail(null);
+            return;
+          }
           resolvedBatchIdRef.current = active.batch.batch_id;
           setBatchDetail(active);
           setError(null);
@@ -90,7 +119,7 @@ export function useBatchJobPoll(
           setBatchDetail(null);
         }
       } catch (err) {
-        if (!cancelled) {
+        if (!cancelled && generation === fetchGenerationRef.current) {
           const e = err as { response?: { data?: { detail?: string } }; message?: string };
           setError(e?.response?.data?.detail ?? e?.message ?? "Failed to load active batch.");
         }
@@ -107,7 +136,12 @@ export function useBatchJobPoll(
   useEffect(() => {
     const id = resolvedBatchIdRef.current;
     const status = batchDetail?.batch.status;
-    if (!id || !status || !isActiveBatchStatus(status)) {
+    if (
+      !id ||
+      !status ||
+      !isActiveBatchStatus(status) ||
+      (spaceId && batchDetail?.batch.space_id !== spaceId)
+    ) {
       setIsPolling(false);
       return;
     }
@@ -137,7 +171,7 @@ export function useBatchJobPoll(
       cancelled = true;
       window.clearInterval(intervalId);
     };
-  }, [batchDetail?.batch.status, batchDetail?.batch.batch_id, fetchBatch]);
+  }, [batchDetail?.batch.status, batchDetail?.batch.batch_id, batchDetail?.batch.space_id, spaceId, fetchBatch]);
 
   const steps = batchDetail?.steps ?? [];
   const currentRunningStep = steps.find((step) => step.status === "running") ?? null;

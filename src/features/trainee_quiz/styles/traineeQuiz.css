@@ -590,6 +590,17 @@
   color: #1f2933;
 }
 
+.trainee-quiz-results__review-locked {
+  margin: 0 0 16px;
+  padding: 14px 16px;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  background: #f8fafc;
+  color: #475569;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
 .trainee-quiz-results__question {
   border: 1px solid #e2e8f0;
   border-radius: 8px;
@@ -651,11 +662,12 @@
 
 
 .trainee-quiz-history {
-  min-height: 100vh;
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 100%;
+  flex: 1;
   background: #f5f5f7;
   padding: 32px 24px;
-  max-width: 900px;
-  margin: 0 auto;
 }
 
 .trainee-quiz-history__header h1 {
@@ -679,6 +691,7 @@
 .trainee-quiz-history__grid {
   display: grid;
   gap: 12px;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
 }
 
 .trainee-quiz-history__card {
@@ -1025,13 +1038,19 @@
 }
 
 .learning-experience .trainee-quiz-history {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
   max-width: none;
+  min-height: 100%;
+  flex: 1;
+  padding: var(--as-space-8) var(--as-page-gutter);
 }
 
 .learning-experience .trainee-quiz-history > * {
-  width: min(100%, 900px);
-  margin-right: auto;
-  margin-left: auto;
+  width: 100%;
+  max-width: none;
+  margin: 0;
 }
 
 .learning-experience .trainee-quiz-history__card:hover {

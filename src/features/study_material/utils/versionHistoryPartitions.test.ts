@@ -6,6 +6,9 @@ import type {
 } from "../types/studyMaterial.types";
 import {
   computeShouldShowHistoryHub,
+  isHistoricalMentorSummary,
+  isStudyMaterialProgressing,
+  isWorkspaceDraftSummary,
   partitionHistoryVersions,
   shouldSilentlyActivateOnSelect,
 } from "./versionHistoryPartitions";
@@ -123,6 +126,68 @@ describe("partitionHistoryVersions", () => {
 
     expect(partitions.workspaceDrafts.map((v) => v.version_id)).toEqual(["archived-draft"]);
     expect(partitions.mentorArchive.map((v) => v.version_id)).toEqual(["archived-draft"]);
+  });
+});
+
+describe("layer helpers", () => {
+  it("classifies workspace draft vs historical mentor summaries", () => {
+    expect(
+      isWorkspaceDraftSummary(makeVersion({ version_id: "d1", mentor_display_badge: "Your draft" })),
+    ).toBe(true);
+    expect(
+      isWorkspaceDraftSummary(
+        makeVersion({ version_id: "live", mentor_display_badge: "Live for students" }),
+      ),
+    ).toBe(false);
+
+    expect(
+      isHistoricalMentorSummary(
+        makeVersion({ version_id: "p1", mentor_display_badge: "Previous for students" }),
+      ),
+    ).toBe(true);
+    expect(
+      isHistoricalMentorSummary(
+        makeVersion({ version_id: "r1", mentor_display_badge: "Removed from students" }),
+      ),
+    ).toBe(true);
+    expect(
+      isHistoricalMentorSummary(
+        makeVersion({
+          version_id: "a1",
+          mentor_display_badge: "In your archive",
+          is_archived: true,
+        }),
+      ),
+    ).toBe(true);
+    expect(
+      isHistoricalMentorSummary(
+        makeVersion({ version_id: "d1", mentor_display_badge: "Your draft" }),
+      ),
+    ).toBe(false);
+  });
+
+  it("detects study-material progressing flags", () => {
+    expect(isStudyMaterialProgressing({ isGenerating: true })).toBe(true);
+    expect(isStudyMaterialProgressing({ isPausingGeneration: true })).toBe(true);
+    expect(
+      isStudyMaterialProgressing({
+        generationRunPaused: true,
+        failedGenerationPipeline: "study_material",
+      }),
+    ).toBe(true);
+    expect(
+      isStudyMaterialProgressing({
+        generationRunFailed: true,
+        failedGenerationPipeline: "study_material",
+      }),
+    ).toBe(true);
+    expect(
+      isStudyMaterialProgressing({
+        generationRunFailed: true,
+        failedGenerationPipeline: "quiz",
+      }),
+    ).toBe(false);
+    expect(isStudyMaterialProgressing({})).toBe(false);
   });
 });
 
@@ -279,6 +344,21 @@ describe("computeShouldShowHistoryHub", () => {
 
     expect(
       computeShouldShowHistoryHub(versionHistory, [], makeMentorUiState()),
+    ).toBe(false);
+  });
+
+  it("hides hub when a study-material run is progressing", () => {
+    const versionHistory = [
+      makeVersion({
+        version_id: "prev-1",
+        mentor_display_badge: "Previous for students",
+      }),
+    ];
+
+    expect(
+      computeShouldShowHistoryHub(versionHistory, [], makeMentorUiState(), {
+        isGeneratingOrProgressing: true,
+      }),
     ).toBe(false);
   });
 });

@@ -218,6 +218,8 @@ export interface StudyMaterialVersionOut {
   is_published: boolean;
   is_archived: boolean;
   archived_at: string | null;
+  /** Set once the version was ever published; survives unpublish → Previous/Removed. */
+  published_at?: string | null;
   created_at: string;
   lifecycle_status?: string;
   display_label: string;

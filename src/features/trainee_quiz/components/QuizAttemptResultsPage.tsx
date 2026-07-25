@@ -97,6 +97,12 @@ const QuizAttemptResultsPage: React.FC = () => {
 
         <div className="trainee-quiz-results__review">
           <h2>Review answers</h2>
+          {!quiz.has_met_pass_threshold && (
+            <p className="trainee-quiz-results__review-locked">
+              Reach the required score of {quiz.pass_threshold_percent}% to unlock correct answers
+              and explanations. Your best score so far is {bestScorePercent}%.
+            </p>
+          )}
           {quiz.questions
             .filter((q) => q.is_active)
             .sort((a, b) => a.order_index - b.order_index)
@@ -119,7 +125,7 @@ const QuizAttemptResultsPage: React.FC = () => {
                   )}
                 </div>
                 <QuizRichText content={q.question_text} />
-                {q.correct_option && (
+                {quiz.has_met_pass_threshold && q.correct_option && (
                   <p className="trainee-quiz-results__answer">
                     Correct answer: <strong>{q.correct_option}</strong>
                     {q.selected_option && (
@@ -130,7 +136,7 @@ const QuizAttemptResultsPage: React.FC = () => {
                     )}
                   </p>
                 )}
-                {q.explanation && (
+                {quiz.has_met_pass_threshold && q.explanation && (
                   <div className="trainee-quiz-results__explanation">
                     <QuizRichText content={q.explanation} />
                   </div>
