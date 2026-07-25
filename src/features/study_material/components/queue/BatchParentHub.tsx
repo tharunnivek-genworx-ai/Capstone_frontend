@@ -66,10 +66,13 @@ function bannerDescription(
   inBatchChildCount: number
 ): string {
   if (step?.status === "failed") {
-    return "Generation failed for this topic — open to resume or review the run.";
+    return (
+      step.error_message?.trim() ||
+      "Generation failed for this topic — open to resume or review the run."
+    );
   }
   if (step?.status === "skipped") {
-    return "Existing draft kept (skip policy). Open to review it.";
+    return "Workspace draft or live material kept (skip policy). Open to review it.";
   }
   if (step?.status === "pending" || step?.status === "running") {
     return "This topic is still generating in the batch.";
@@ -93,7 +96,7 @@ function childSummary(card: BatchHubChildCard, steps: BatchDetailOut["steps"]): 
     return "Still queued in this batch.";
   }
   if (status === "skipped") {
-    return "Existing draft kept for this subtopic.";
+    return "Workspace draft or live material kept for this subtopic.";
   }
   if (opensNestedHub) {
     const nestedInBatch = batchChildrenForNode(child, steps).filter(

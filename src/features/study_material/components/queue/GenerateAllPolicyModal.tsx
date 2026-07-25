@@ -43,7 +43,7 @@ export default function GenerateAllPolicyModal({
         <div className="gsm-queue-modal" role="dialog" aria-modal="true" aria-labelledby="generate-all-policy-title">
           <div className="gsm-queue-modal__header">
             <span>Generate all · Step 2</span>
-            <h2 id="generate-all-policy-title">Choose how existing drafts are handled</h2>
+            <h2 id="generate-all-policy-title">Choose how existing material is handled</h2>
             <p>The queue processes one topic at a time and keeps going if an individual topic fails.</p>
           </div>
           <div className="gsm-queue-modal__body">
@@ -65,9 +65,12 @@ export default function GenerateAllPolicyModal({
             <label className={`gsm-policy-option${policy === "skip" ? " gsm-policy-option--selected" : ""}`}>
               <span className="gsm-policy-option__title">
                 <input type="radio" checked={policy === "skip"} onChange={() => setPolicy("skip")} disabled={isSubmitting} />
-                Skip topics that already have drafts
+                Skip topics with a workspace draft or live material
               </span>
-              <span className="gsm-policy-option__description">Creates only missing material and leaves every existing draft untouched.</span>
+              <span className="gsm-policy-option__description">
+                Creates a new draft for empty topics and for topics that only have previous or removed
+                student history. Leaves workspace drafts and live material untouched.
+              </span>
             </label>
             <label className={`gsm-policy-option${policy === "regenerate" ? " gsm-policy-option--selected" : ""}`}>
               <span className="gsm-policy-option__title">
@@ -75,7 +78,9 @@ export default function GenerateAllPolicyModal({
                 Regenerate all selected topics
               </span>
               <span className="gsm-policy-option__description">
-                Clears existing drafts first (same rules as single-topic Regenerate). Topics with live material or active quizzes are skipped with an error.
+                Clears workspace drafts first (same rules as single-topic Regenerate). Never deletes
+                Previous for students. Topics blocked by live material or an active quiz fail — they
+                are not skipped.
               </span>
             </label>
             <p className="gsm-queue-modal__copy">

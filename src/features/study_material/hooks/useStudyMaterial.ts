@@ -36,10 +36,16 @@ import {
 } from "../../generation/utils/generationJobErrors";
 import {
   computeShouldShowHistoryHub,
+  isStudyMaterialProgressing,
   partitionHistoryVersions,
   shouldSilentlyActivateOnSelect,
   type HistoryVersionPartitions,
 } from "../utils/versionHistoryPartitions";
+import {
+  decideActiveRunRecoveryProbe,
+  shouldApplyProgressFromActiveRun,
+  shouldHydrateAsWorkspaceActiveVersion,
+} from "../utils/studyMaterialProgressRecovery";
 import {
   loadInstructionBannerDismissals,
   saveInstructionBannerDismissals,
@@ -78,6 +84,15 @@ function isSourcePdfDeleted(
 /** Nodes with an in-flight generate/regenerate/improve request (survives node switches). */
 const generatingNodeIds = new Set<string>();
 const recoveringRunIds = new Set<string>();
+
+/**
+ * Clear module-level ownership Sets when space study-state is wiped (space switch).
+ * Without this, `generatingNodeIds` can block Progress recovery after remount.
+ */
+export function clearStudyMaterialModuleOwnership(): void {
+  generatingNodeIds.clear();
+  recoveringRunIds.clear();
+}
 
 interface UseStudyMaterialParams {
   node: NodeTreeNode | null;
@@ -661,11 +676,29 @@ export function useStudyMaterial({
     [versionHistory, archivedVersionHistory]
   );
 
+  const isGeneratingOrProgressing = isStudyMaterialProgressing({
+    isGenerating,
+    isPausingGeneration,
+    generationRunPaused,
+    generationRunFailed,
+    failedGenerationPipeline,
+  });
+
   const shouldShowHistoryHub = useMemo(
     () =>
       activeMentorUiState != null &&
-      computeShouldShowHistoryHub(versionHistory, archivedVersionHistory, activeMentorUiState),
-    [versionHistory, archivedVersionHistory, activeMentorUiState]
+      computeShouldShowHistoryHub(
+        versionHistory,
+        archivedVersionHistory,
+        activeMentorUiState,
+        { isGeneratingOrProgressing },
+      ),
+    [
+      versionHistory,
+      archivedVersionHistory,
+      activeMentorUiState,
+      isGeneratingOrProgressing,
+    ]
   );
 
   const isHistoryHubView = shouldShowHistoryHub && viewingVersionId === null;
@@ -765,6 +798,9 @@ export function useStudyMaterial({
   }, [node?.node_id, isMentor, viewingVersionId, currentEffectiveInstruction, spaceIsPublished]);
 
   // Reload active version after space publish/unpublish so is_published flags stay in sync.
+  // Never latch Previous/Removed as the workspace activeVersion (Progress / hub recovery).
+  // IMPORTANT: do not depend on versionHistory / mentorUiState here — this effect refreshes
+  // history, and those deps would create an infinite versions/active refetch loop.
   useEffect(() => {
     if (!node || !isMentor || currentPage !== 2) return;
     const nodeId = node.node_id;
@@ -772,6 +808,10 @@ export function useStudyMaterial({
       .getActiveVersion(nodeId)
       .then((version) => {
         if (!version) return;
+        // Classify from VersionOut layer fields only (no history deps).
+        if (!shouldHydrateAsWorkspaceActiveVersion(version, [], [], null)) {
+          return;
+        }
         patchNodeStudyState(nodeId, {
           studyMaterialContent: version.content,
           activeVersion: version,
@@ -792,6 +832,9 @@ export function useStudyMaterial({
       .getActiveVersion(nodeId)
       .then((version) => {
         if (!version) return;
+        if (!shouldHydrateAsWorkspaceActiveVersion(version, [], [], null)) {
+          return;
+        }
         patchNodeStudyState(nodeId, {
           studyMaterialContent: version.content,
           activeVersion: version,
@@ -849,35 +892,56 @@ export function useStudyMaterial({
     }
   }, [spaceIsPublished, currentPage, isMentor]);
 
-  // Load active study material version when opening page 2 without cached content
+  // Load active study material version when opening page 2 without cached content.
+  // Skip historical Previous/Removed so recovery is not latched and History hub can show.
+  // Classify via VersionOut fields only — do not depend on versionHistory (avoids refetch loops).
   useEffect(() => {
     if (!node || !isMentor || currentPage !== 2) return;
-    if (studyMaterialContent?.trim() || isGenerating) return;
+    if (studyMaterialContent?.trim() || isGenerating || isGeneratingOrProgressing) return;
     const nodeId = node.node_id;
     studyMaterialService
       .getActiveVersion(nodeId)
       .then((version) => {
-        if (version) {
-          patchNodeStudyState(nodeId, {
-            studyMaterialContent: version.content,
-            activeVersion: version,
-            hasTriggeredGeneration: true,
-          });
+        if (!version) return;
+        if (!shouldHydrateAsWorkspaceActiveVersion(version, [], [], null)) {
+          return;
         }
+        patchNodeStudyState(nodeId, {
+          studyMaterialContent: version.content,
+          activeVersion: version,
+          hasTriggeredGeneration: true,
+        });
       })
       .catch(() => {/* non-critical */ });
-  }, [node?.node_id, currentPage, studyMaterialContent, isGenerating, isMentor, patchNodeStudyState]);
+  }, [
+    node?.node_id,
+    currentPage,
+    studyMaterialContent,
+    isGenerating,
+    isGeneratingOrProgressing,
+    isMentor,
+    patchNodeStudyState,
+  ]);
 
-  // Detect an in-flight or resumable failed async generate for this node (manual click only).
+  // Detect an in-flight or resumable failed async generate for this node.
+  // Option A: running | paused | failed always rehydrates Progress — never skip solely
+  // because Previous/Removed (or any activeVersion) is present.
   useEffect(() => {
     if (!node || !isMentor) return;
-    if (generatingNodeIds.has(node.node_id)) return;
     if (recoveringRunIds.has(node.node_id)) return;
-    if (generationRunFailed && failedGenerationPipeline === "study_material") return;
-    if (generationRunPaused && failedGenerationPipeline === "study_material") return;
-    // After batch or manual generate the draft may already be in state — ignore stale
-    // RUNNING rows left by a race with manual /generate on the same node.
-    if (hasTriggeredGeneration && activeVersion) return;
+
+    const probeDecision = decideActiveRunRecoveryProbe({
+      moduleOwnsNode: generatingNodeIds.has(node.node_id),
+      localIsGenerating: isGenerating,
+      generationRunPaused,
+      generationRunFailed,
+      failedGenerationPipeline,
+    });
+    if (!probeDecision.shouldProbe) return;
+    if (probeDecision.clearModuleOwnership) {
+      generatingNodeIds.delete(node.node_id);
+    }
+
     const nodeId = node.node_id;
     let cancelled = false;
     recoveringRunIds.add(nodeId);
@@ -885,7 +949,7 @@ export function useStudyMaterial({
       .getActiveRun(nodeId, "study_material")
       .then(async (active) => {
         if (cancelled) return;
-        if (!active?.run_id) {
+        if (!active?.run_id || !shouldApplyProgressFromActiveRun(active.status)) {
           if (isGenerating) {
             patchNodeStudyState(nodeId, {
               isGenerating: false,
@@ -915,6 +979,8 @@ export function useStudyMaterial({
           });
           return;
         }
+        // running — Progress wins even when a workspace draft or Previous history exists.
+        generatingNodeIds.add(nodeId);
         patchNodeStudyState(nodeId, {
           currentPage: 2,
           isGenerating: true,
@@ -963,6 +1029,7 @@ export function useStudyMaterial({
             });
           }
         } finally {
+          generatingNodeIds.delete(nodeId);
           if (!cancelled && isViewingNode(nodeId)) {
             setProcessingLabel(null);
           }
@@ -982,8 +1049,7 @@ export function useStudyMaterial({
     generationRunFailed,
     failedGenerationPipeline,
     generationRunPaused,
-    hasTriggeredGeneration,
-    activeVersion,
+    isGenerating,
     patchNodeStudyState,
   ]);
 
@@ -994,16 +1060,20 @@ export function useStudyMaterial({
   }, [node?.node_id, currentPage, isMentor]);
 
   // When entering history-only mode, clear any auto-loaded document so the hub shows.
+  // No-op while Progress is showing (Option A). Do NOT rewrite prevRef while progressing —
+  // otherwise Progress forces hub=false, prev becomes false, and on complete a stale hub=true
+  // looks like a fresh enter and wipes the new draft body.
   const prevShouldShowHistoryHubRef = useRef(false);
   useEffect(() => {
     if (!node) return;
+    if (isGeneratingOrProgressing) return;
     const enteredHistoryHub = shouldShowHistoryHub && !prevShouldShowHistoryHubRef.current;
     prevShouldShowHistoryHubRef.current = shouldShowHistoryHub;
     if (!enteredHistoryHub) return;
     setViewingVersionId(null);
     setShowArchivedPanel(false);
     patchNodeStudyState(node.node_id, { studyMaterialContent: null });
-  }, [shouldShowHistoryHub, node, patchNodeStudyState]);
+  }, [shouldShowHistoryHub, isGeneratingOrProgressing, node, patchNodeStudyState]);
 
   // When every draft is in the archive, load one for viewing so Material is not blank.
   useEffect(() => {

@@ -96,7 +96,12 @@ export function resolveBatchHubCardStatus(
   return mapStepStatusToHubCardStatus(step.status);
 }
 
-/** Human-readable status for subtopic cards (Material View tokens; copy from plan/mockup). */
+/**
+ * Human-readable status for subtopic cards.
+ * "Skipped — kept existing" is only for true skip (workspace draft or live);
+ * Previous/Removed-only topics claim and complete as a new draft instead.
+ * Failed regenerate stays "Failed" (with step error_message in the hub).
+ */
 export function batchHubStatusLabel(status: BatchHubCardStatus): string {
   switch (status) {
     case "completed":
@@ -133,7 +138,8 @@ export function batchHubBannerCta(
     case "failed":
       return { label: "Review failure ›", disabled: false, muted: false };
     case "skipped":
-      return { label: "Open existing draft ›", disabled: false, muted: false };
+      // Skip only keeps workspace draft or live — not previous/removed history alone.
+      return { label: "Open existing material ›", disabled: false, muted: false };
     case "completed":
       return { label: "Open draft ›", disabled: false, muted: false };
     case "pending":

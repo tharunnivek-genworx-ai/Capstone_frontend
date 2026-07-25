@@ -27,6 +27,7 @@ import StudyMaterialUnpublishConfirmModal from "../../study_material/components/
 import StudyMaterialMentorWorkspace from "../../study_material/components/material/StudyMaterialMentorWorkspace";
 import BatchParentHub from "../../study_material/components/queue/BatchParentHub";
 import { shouldShowBatchHub } from "../../study_material/utils/batchHubEligibility";
+import { isStudyMaterialProgressing } from "../../study_material/utils/versionHistoryPartitions";
 import EspaceNotPublishedModal from "../../study_material/components/space/EspaceNotPublishedModal";
 import QuizPage3 from "../../quiz/components/QuizPage3";
 import QuizPage4 from "../../quiz/components/QuizPage4";
@@ -141,11 +142,13 @@ const NodeDetailPanel: React.FC<NodeDetailPanelProps> = ({
     onExternalResearchChange,
   });
 
-  const showGenerationProgress =
-    sm.isGenerating ||
-    sm.isPausingGeneration ||
-    (sm.generationRunPaused && sm.failedGenerationPipeline === "study_material") ||
-    (sm.generationRunFailed && sm.failedGenerationPipeline === "study_material");
+  const showGenerationProgress = isStudyMaterialProgressing({
+    isGenerating: sm.isGenerating,
+    isPausingGeneration: sm.isPausingGeneration,
+    generationRunPaused: sm.generationRunPaused,
+    generationRunFailed: sm.generationRunFailed,
+    failedGenerationPipeline: sm.failedGenerationPipeline,
+  });
   // A paused study-material run still holds the topic's generation slot. Block the
   // Generate page's actions (Generate / Open draft / Regenerate) until the mentor
   // resumes or deletes it, so an accidental re-generate can't spawn a conflicting run.

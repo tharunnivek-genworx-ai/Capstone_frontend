@@ -328,7 +328,7 @@ describe("edge matrix: hub vs material (plan locked behaviors)", () => {
       batchHubBannerCta(
         makeStep({ node_id: "parent", status: "skipped" })
       ).label
-    ).toBe("Open existing draft ›");
+    ).toBe("Open existing material ›");
     const cards = batchChildrenForNode(parent, [
       makeStep({ node_id: "parent", status: "failed" }),
       makeStep({ node_id: "child-ok", status: "completed" }),
@@ -427,7 +427,7 @@ describe("status helpers", () => {
     expect(
       batchHubBannerCta(makeStep({ node_id: "p", status: "skipped" }))
     ).toEqual({
-      label: "Open existing draft ›",
+      label: "Open existing material ›",
       disabled: false,
       muted: false,
     });
