@@ -17,14 +17,17 @@ export function useTraineeNodePanel({ nodeId }: UseTraineeNodePanelParams) {
   const [isLoading, setIsLoading] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
 
-  const refresh = useCallback(async () => {
+  const refresh = useCallback(async (opts?: { silent?: boolean }) => {
     if (!nodeId) {
       setPanel(null);
       setLoadError(null);
       return;
     }
 
-    setIsLoading(true);
+    const silent = opts?.silent === true;
+    if (!silent) {
+      setIsLoading(true);
+    }
     setLoadError(null);
     try {
       const data = await traineeNodePanelService.getPanel(nodeId);
@@ -33,7 +36,9 @@ export function useTraineeNodePanel({ nodeId }: UseTraineeNodePanelParams) {
       setPanel(null);
       setLoadError(extractErrorDetail(err));
     } finally {
-      setIsLoading(false);
+      if (!silent) {
+        setIsLoading(false);
+      }
     }
   }, [nodeId]);
 

@@ -11,7 +11,20 @@ interface ProtectedRouteProps {
 }
 
 const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children, requiredRole }) => {
-  const { isLoggedIn, role } = useAuth();
+  const { isLoggedIn, role, isBootstrapping } = useAuth();
+
+  // Wait for silent refresh on reload before deciding auth state
+  if (isBootstrapping) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-slate-50">
+        <div
+          className="h-8 w-8 animate-spin rounded-full border-2 border-slate-300 border-t-slate-600"
+          role="status"
+          aria-label="Loading"
+        />
+      </div>
+    );
+  }
 
   if (!isLoggedIn) {
     return <Navigate to="/auth" replace />;

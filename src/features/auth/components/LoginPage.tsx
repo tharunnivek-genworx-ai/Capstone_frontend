@@ -21,11 +21,10 @@ const LoginPage: React.FC = () => {
     e.preventDefault();
     clearError();
     try {
-      await login(email, password);
-      const storedRole = localStorage.getItem("user_role");
-      if (storedRole === "mentor") {
+      const role = await login(email, password);
+      if (role === "mentor") {
         navigate("/mentor/spaces", { replace: true });
-      } else if (storedRole === "trainee") {
+      } else if (role === "trainee") {
         navigate("/trainee/spaces", { replace: true });
       } else {
         navigate("/dashboard", { replace: true });

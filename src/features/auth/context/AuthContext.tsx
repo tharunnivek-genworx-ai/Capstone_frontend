@@ -2,11 +2,13 @@
 /**
  * Auth context provider for the Identity Service.
  *
- * Storage strategy (both in localStorage):
- *   access_token  — JWT (60 min), attached by axiosClient interceptor
- *   refresh_token — JWT (7 days), sent manually to /auth/refresh and /auth/logout
- *   user_role     — "itadmin" | "mentor" | "trainee"
- *   user_id       — UUID string (sub claim from JWT)
+ * Storage strategy (see src/lib/tokenStore.ts):
+ *   access_token  — in-memory only (never persisted); restored via silent refresh
+ *                   on mount and on 401 via authSession single-flight.
+ *   refresh_token — sessionStorage (7 days), sent manually to /auth/refresh and
+ *                   /auth/logout; cleared on tab close.
+ *   user_role     — sessionStorage ("itadmin" | "mentor" | "trainee"), UI hint only
+ *   user_id       — sessionStorage (sub claim from JWT), UI hint only
  */
 
 import React, {
@@ -23,6 +25,17 @@ import {
   normalizeMentorDepartment,
   storeMentorDepartment,
 } from "../../spaces/utils/mentorDepartment";
+import { refreshAccessTokenSingleFlight } from "../../../lib/authSession";
+import {
+  clearAuth,
+  getAccessToken,
+  getRefreshToken,
+  getUserRole,
+  setAccessToken as storeAccessToken,
+  setRefreshToken as storeRefreshToken,
+  setUserId as storeUserId,
+  setUserRole as storeUserRole,
+} from "../../../lib/tokenStore";
 import type { TokenPayload, UserRole } from "../types/auth.types";
 
 // ─── JWT helpers ──────────────────────────────────────────────────────────────
@@ -44,13 +57,46 @@ const isTokenExpired = (token: string): boolean => {
   return Date.now() / 1000 > payload.exp;
 };
 
+/**
+ * One bootstrap refresh per page load. StrictMode remounts both await this
+ * promise so the surviving mount still applies access token + role to state.
+ */
+let bootstrapPromise: Promise<string | null> | null = null;
+
+function ensureBootstrapRefresh(): Promise<string | null> {
+  if (bootstrapPromise) return bootstrapPromise;
+
+  bootstrapPromise = (async () => {
+    const storedRefresh = getRefreshToken();
+    if (!storedRefresh) return null;
+
+    if (isTokenExpired(storedRefresh)) {
+      clearAuth();
+      clearMentorDepartment();
+      return null;
+    }
+
+    const newAccess = await refreshAccessTokenSingleFlight();
+    if (!newAccess) {
+      clearAuth();
+      clearMentorDepartment();
+      return null;
+    }
+    return newAccess;
+  })();
+
+  return bootstrapPromise;
+}
+
 // ─── Context shape ────────────────────────────────────────────────────────────
 interface AuthContextValue {
   role: UserRole | null;
   isLoading: boolean;
+  /** True until the mount-time silent refresh attempt settles. */
+  isBootstrapping: boolean;
   error: string | null;
   isLoggedIn: boolean;
-  login: (email: string, password: string) => Promise<void>;
+  login: (email: string, password: string) => Promise<UserRole | null>;
   logout: () => Promise<void>;
   clearError: () => void;
 }
@@ -61,106 +107,104 @@ const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
   children,
 }) => {
-  const [accessToken, setAccessToken] = useState<string | null>(
-    () => localStorage.getItem("access_token")
+  // Access token lives in memory only — null on every reload until silent refresh.
+  const [accessToken, setAccessToken] = useState<string | null>(() =>
+    getAccessToken()
   );
   const [role, setRole] = useState<UserRole | null>(
-    () => localStorage.getItem("user_role") as UserRole | null
+    () => getUserRole() as UserRole | null
   );
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Gate initial renders until the mount refresh settles; only bootstrap if a
+  // refresh token exists in this tab's session.
+  const [isBootstrapping, setIsBootstrapping] = useState(
+    () => !!getRefreshToken()
+  );
 
-  // ── On mount: if access token is expired but refresh token is valid, refresh ──
+  // ── On mount: access is never persisted, so always try to refresh when a ──
+  // ── refresh token exists in this tab. Shared promise + single-flight     ──
+  // ── refresh survive StrictMode remount and coalesce with 401 interceptors. ──
   useEffect(() => {
+    let cancelled = false;
+
     const tryRefresh = async () => {
-      const storedAccess = localStorage.getItem("access_token");
-      const storedRefresh = localStorage.getItem("refresh_token");
-
-      if (!storedRefresh) return;
-      if (storedAccess && !isTokenExpired(storedAccess)) return; // still valid
-
-      if (isTokenExpired(storedRefresh)) {
-        // Refresh token also expired — force logout
-        localStorage.removeItem("access_token");
-        localStorage.removeItem("refresh_token");
-        localStorage.removeItem("user_role");
-        localStorage.removeItem("user_id");
-        clearMentorDepartment();
-        setAccessToken(null);
-        setRole(null);
+      if (!getRefreshToken()) {
+        setIsBootstrapping(false);
         return;
       }
 
-      try {
-        const result = await authService.refresh({
-          refresh_token: storedRefresh,
-        });
-        localStorage.setItem("access_token", result.access_token);
-        setAccessToken(result.access_token);
-        const payload = decodeJwt(result.access_token);
+      const newAccess = await ensureBootstrapRefresh();
+      if (cancelled) return;
+
+      if (newAccess) {
+        setAccessToken(newAccess);
+        const payload = decodeJwt(newAccess);
         if (payload) {
           setRole(payload.role);
-          localStorage.setItem("user_role", payload.role);
-          localStorage.setItem("user_id", payload.sub);
+          storeUserRole(payload.role);
+          storeUserId(payload.sub);
         }
-      } catch {
-        // Refresh failed — clear everything
-        localStorage.removeItem("access_token");
-        localStorage.removeItem("refresh_token");
-        localStorage.removeItem("user_role");
-        localStorage.removeItem("user_id");
-        clearMentorDepartment();
+      } else {
         setAccessToken(null);
         setRole(null);
       }
+      setIsBootstrapping(false);
     };
 
-    tryRefresh();
+    void tryRefresh();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   // ── Login ──────────────────────────────────────────────────────────────────
-  const login = useCallback(async (email: string, password: string) => {
-    setIsLoading(true);
-    setError(null);
-    try {
-      const response = await authService.login({ email, password });
+  const login = useCallback(
+    async (email: string, password: string): Promise<UserRole | null> => {
+      setIsLoading(true);
+      setError(null);
+      try {
+        const response = await authService.login({ email, password });
 
-      // Persist both tokens and decoded claims
-      localStorage.setItem("access_token", response.access_token);
-      localStorage.setItem("refresh_token", response.refresh_token);
+        // Access token → memory; refresh token → sessionStorage.
+        storeAccessToken(response.access_token);
+        storeRefreshToken(response.refresh_token);
 
-      const payload = decodeJwt(response.access_token);
-      const userRole = payload?.role ?? null;
-      const userSub = payload?.sub ?? null;
+        const payload = decodeJwt(response.access_token);
+        const userRole = payload?.role ?? null;
+        const userSub = payload?.sub ?? null;
 
-      if (userRole) localStorage.setItem("user_role", userRole);
-      if (userSub) localStorage.setItem("user_id", userSub);
+        if (userRole) storeUserRole(userRole);
+        if (userSub) storeUserId(userSub);
 
-      const mentorDept = normalizeMentorDepartment(response);
-      if (userRole === "mentor" && mentorDept) {
-        storeMentorDepartment(mentorDept);
-      } else {
-        clearMentorDepartment();
+        const mentorDept = normalizeMentorDepartment(response);
+        if (userRole === "mentor" && mentorDept) {
+          storeMentorDepartment(mentorDept);
+        } else {
+          clearMentorDepartment();
+        }
+
+        setAccessToken(response.access_token);
+        setRole(userRole);
+        return userRole;
+      } catch (err: unknown) {
+        const message =
+          (err as { response?: { data?: { detail?: string } }; message?: string })
+            ?.response?.data?.detail ||
+          (err as { message?: string })?.message ||
+          "Login failed. Please check your credentials.";
+        setError(message);
+        throw err;
+      } finally {
+        setIsLoading(false);
       }
-
-      setAccessToken(response.access_token);
-      setRole(userRole);
-    } catch (err: unknown) {
-      const message =
-        (err as { response?: { data?: { detail?: string } }; message?: string })
-          ?.response?.data?.detail ||
-        (err as { message?: string })?.message ||
-        "Login failed. Please check your credentials.";
-      setError(message);
-      throw err;
-    } finally {
-      setIsLoading(false);
-    }
-  }, []);
+    },
+    []
+  );
 
   // ── Logout ─────────────────────────────────────────────────────────────────
   const logout = useCallback(async () => {
-    const refreshToken = localStorage.getItem("refresh_token");
+    const refreshToken = getRefreshToken();
     if (refreshToken) {
       try {
         await authService.logout({ refresh_token: refreshToken });
@@ -168,10 +212,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
         // Best-effort — clear client state regardless
       }
     }
-    localStorage.removeItem("access_token");
-    localStorage.removeItem("refresh_token");
-    localStorage.removeItem("user_role");
-    localStorage.removeItem("user_id");
+    clearAuth();
     clearMentorDepartment();
     setAccessToken(null);
     setRole(null);
@@ -184,13 +225,23 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
     () => ({
       role,
       isLoading,
+      isBootstrapping,
       error,
       isLoggedIn: !!accessToken,
       login,
       logout,
       clearError,
     }),
-    [accessToken, role, isLoading, error, login, logout, clearError]
+    [
+      accessToken,
+      role,
+      isLoading,
+      isBootstrapping,
+      error,
+      login,
+      logout,
+      clearError,
+    ]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

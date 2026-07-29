@@ -1,4 +1,6 @@
-/** Mentor department helpers — stored at login and refreshed via GET /mentor/me */
+/** Mentor department helpers — stored at login and refreshed via GET /mentor/me.
+ *  Kept in sessionStorage so hints clear with the auth session (tab close).
+ */
 
 export interface MentorDepartment {
   departmentid: string;
@@ -18,6 +20,30 @@ const STORAGE_ID = "mentor_departmentid";
 const STORAGE_NAME = "mentor_department_name";
 const STORAGE_CODE = "mentor_department_code";
 
+function readSession(key: string): string | null {
+  try {
+    return sessionStorage.getItem(key);
+  } catch {
+    return null;
+  }
+}
+
+function writeSession(key: string, value: string): void {
+  try {
+    sessionStorage.setItem(key, value);
+  } catch {
+    // Private mode / quota — degrade silently
+  }
+}
+
+function removeSession(key: string): void {
+  try {
+    sessionStorage.removeItem(key);
+  } catch {
+    // ignore
+  }
+}
+
 export function normalizeMentorDepartment(
   source: MentorDepartmentSource | null | undefined
 ): MentorDepartment | null {
@@ -36,33 +62,33 @@ export function normalizeMentorDepartment(
 }
 
 export function readStoredMentorDepartment(): MentorDepartment | null {
-  const departmentid = localStorage.getItem(STORAGE_ID);
+  const departmentid = readSession(STORAGE_ID);
   if (!departmentid) return null;
   return {
     departmentid,
-    department_name: localStorage.getItem(STORAGE_NAME),
-    department_code: localStorage.getItem(STORAGE_CODE),
+    department_name: readSession(STORAGE_NAME),
+    department_code: readSession(STORAGE_CODE),
   };
 }
 
 export function storeMentorDepartment(dept: MentorDepartment): void {
-  localStorage.setItem(STORAGE_ID, dept.departmentid);
+  writeSession(STORAGE_ID, dept.departmentid);
   if (dept.department_name) {
-    localStorage.setItem(STORAGE_NAME, dept.department_name);
+    writeSession(STORAGE_NAME, dept.department_name);
   } else {
-    localStorage.removeItem(STORAGE_NAME);
+    removeSession(STORAGE_NAME);
   }
   if (dept.department_code) {
-    localStorage.setItem(STORAGE_CODE, dept.department_code);
+    writeSession(STORAGE_CODE, dept.department_code);
   } else {
-    localStorage.removeItem(STORAGE_CODE);
+    removeSession(STORAGE_CODE);
   }
 }
 
 export function clearMentorDepartment(): void {
-  localStorage.removeItem(STORAGE_ID);
-  localStorage.removeItem(STORAGE_NAME);
-  localStorage.removeItem(STORAGE_CODE);
+  removeSession(STORAGE_ID);
+  removeSession(STORAGE_NAME);
+  removeSession(STORAGE_CODE);
 }
 
 export function formatDepartmentLabel(dept: MentorDepartment | null): string {

@@ -1,12 +1,21 @@
 // src/lib/axiosClient.ts
 /**
  * Axios instance pre-configured for the Identity Service.
- * - Attaches Bearer access token from localStorage on every request.
- * - On 401, clears tokens and redirects to /auth.
+ * - Attaches Bearer access token from in-memory tokenStore on every request.
+ * - On 401 (non-auth endpoints), silently refreshes once then retries.
+ * - If refresh fails, clears auth and redirects to /auth.
  */
 
-import axios from "axios";
+import axios, { type AxiosError, type InternalAxiosRequestConfig } from "axios";
 import { AppConfig } from "../config/app.config";
+import {
+  forceLoginRedirect,
+  isAuthEndpointUrl,
+  refreshAccessTokenSingleFlight,
+} from "./authSession";
+import { getAccessToken } from "./tokenStore";
+
+type RetryConfig = InternalAxiosRequestConfig & { _retry?: boolean };
 
 const axiosClient = axios.create({
   baseURL: AppConfig.IDENTITY_SERVICE_URL,
@@ -19,7 +28,7 @@ const axiosClient = axios.create({
 // ─── Request interceptor — attach access token ─────────────────────────────
 axiosClient.interceptors.request.use(
   (config) => {
-    const token = localStorage.getItem("access_token");
+    const token = getAccessToken();
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }
@@ -28,19 +37,34 @@ axiosClient.interceptors.request.use(
   (error) => Promise.reject(error)
 );
 
-// ─── Response interceptor — handle 401 ────────────────────────────────────
+// ─── Response interceptor — silent refresh on 401, then retry once ─────────
 axiosClient.interceptors.response.use(
   (response) => response,
-  (error) => {
-    if (error.response?.status === 401) {
-      // Clear all auth data and redirect to login
-      localStorage.removeItem("access_token");
-      localStorage.removeItem("refresh_token");
-      localStorage.removeItem("user_role");
-      localStorage.removeItem("user_id");
-      window.location.href = "/auth";
+  async (error: AxiosError) => {
+    const original = error.config as RetryConfig | undefined;
+    if (error.response?.status !== 401 || !original) {
+      return Promise.reject(error);
     }
-    return Promise.reject(error);
+
+    // Login / refresh / logout failures must not clear the session or loop.
+    if (isAuthEndpointUrl(original.url)) {
+      return Promise.reject(error);
+    }
+
+    if (original._retry) {
+      forceLoginRedirect();
+      return Promise.reject(error);
+    }
+
+    original._retry = true;
+    const newToken = await refreshAccessTokenSingleFlight();
+    if (!newToken) {
+      forceLoginRedirect();
+      return Promise.reject(error);
+    }
+
+    original.headers.Authorization = `Bearer ${newToken}`;
+    return axiosClient(original);
   }
 );
 

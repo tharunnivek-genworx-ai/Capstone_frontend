@@ -73,8 +73,9 @@ const LeafAvailablePanel: React.FC<LeafAvailablePanelProps> = ({
           onRefreshPanel();
         }}
         onNodesUnlocked={(nodeIds) => {
+          // Parent TopicDetailPanel silent-refreshes + tree fetch; do not
+          // force a loading refresh that would unmount this reading view.
           onNodesUnlocked?.(nodeIds);
-          onRefreshPanel();
         }}
       />
     );
