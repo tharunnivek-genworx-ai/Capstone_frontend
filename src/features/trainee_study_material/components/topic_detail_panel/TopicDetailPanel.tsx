@@ -24,8 +24,10 @@ const TopicDetailPanel: React.FC<TopicDetailPanelProps> = ({
   const panelType = panel?.panel_type ?? getNodePanelType(node);
 
   const handleNodesUnlocked = (nodeIds: string[]) => {
+    // Refresh panel data so subtopic lock state updates, but stay silent so
+    // the reading view is not unmounted (loading spinner would eject the trainee).
     onNodesUnlocked?.(nodeIds);
-    void refresh();
+    void refresh({ silent: true });
   };
 
   if (isLoading) {

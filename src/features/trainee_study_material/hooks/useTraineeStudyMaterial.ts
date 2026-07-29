@@ -58,7 +58,9 @@ export function useTraineeStudyMaterial({
         });
         if (nodeGenerationRef.current !== requestGeneration) return;
         lastReportedPercent.current = updated.study_material_read_percent;
-        setReadPercent(updated.study_material_read_percent);
+        setReadPercent((prev) =>
+          Math.max(prev, updated.study_material_read_percent)
+        );
         if (updated.newly_unlocked_node_ids.length > 0) {
           const count = updated.newly_unlocked_node_ids.length;
           toast.success(
@@ -70,7 +72,7 @@ export function useTraineeStudyMaterial({
           onNodesUnlocked?.(updated.newly_unlocked_node_ids);
         }
       } catch {
-        /* non-critical — progress is best-effort */
+        /* non-critical — progress is best-effort; local UI already updated */
       }
     },
     [nodeId, spaceId, onNodesUnlocked]
@@ -125,11 +127,15 @@ export function useTraineeStudyMaterial({
     const handleScroll = () => {
       const measuredDepth = measureScrollDepth(anchor);
       latestMeasuredDepth.current = measuredDepth;
+      // Update the bar immediately from local scroll depth; persist is debounced.
+      setReadPercent((prev) =>
+        Math.max(prev, measuredDepth, lastReportedPercent.current)
+      );
       if (progressTimer.current !== null) {
         window.clearTimeout(progressTimer.current);
       }
       progressTimer.current = window.setTimeout(() => {
-        void reportProgress(measuredDepth);
+        void reportProgress(latestMeasuredDepth.current);
       }, 400);
     };
 
@@ -180,4 +186,4 @@ export function useTraineeStudyMaterial({
     handleDownloadPdf,
     scrollContainerRef,
   };
-};
+}

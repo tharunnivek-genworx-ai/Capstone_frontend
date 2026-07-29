@@ -1,7 +1,9 @@
+import { getUserId } from "../../../lib/tokenStore";
+
 const STORAGE_KEY_PREFIX = "sg_instruction_banner_dismissed";
 
 function storageKey(): string {
-  const userId = localStorage.getItem("user_id");
+  const userId = getUserId();
   return userId ? `${STORAGE_KEY_PREFIX}_${userId}` : STORAGE_KEY_PREFIX;
 }
 

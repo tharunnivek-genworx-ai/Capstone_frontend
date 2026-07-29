@@ -34,7 +34,11 @@ describe("instructionBannerDismissal", () => {
       value: createLocalStorageMock(),
       configurable: true,
     });
-    localStorage.setItem("user_id", "user-1");
+    Object.defineProperty(globalThis, "sessionStorage", {
+      value: createLocalStorageMock(),
+      configurable: true,
+    });
+    sessionStorage.setItem("user_id", "user-1");
   });
 
   it("loads an empty map when nothing is stored", () => {

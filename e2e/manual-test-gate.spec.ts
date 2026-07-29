@@ -11,10 +11,8 @@ import {
   expectNotStuckOnStarting,
   goToMaterialTab,
   login,
-  openReferenceModal,
-  openSpaceWithTopics,
+  openSpaceReadyForGeneration,
   removeReferenceIfPresent,
-  selectNodeForGeneration,
   waitForGenerationComplete,
   waitForGenerationRunning,
   waitForPausedPanel,
@@ -25,11 +23,10 @@ test.describe.configure({ mode: "serial" });
 test.describe("Manual test gate — study material lifecycle", () => {
   test.beforeEach(async ({ page }) => {
     await login(page);
-    await openSpaceWithTopics(page);
+    await openSpaceReadyForGeneration(page);
   });
 
   test("1 — Generate → Cancel on step 2 → pause modal, stay on Material tab", async ({ page }) => {
-    await selectNodeForGeneration(page);
     await clickGenerateDraft(page);
     await waitForGenerationRunning(page);
     await clickCancelGeneration(page);
@@ -42,7 +39,6 @@ test.describe("Manual test gate — study material lifecycle", () => {
   });
 
   test("2 — Continue after pause completes with draft visible", async ({ page }) => {
-    await selectNodeForGeneration(page);
     await clickGenerateDraft(page);
     await waitForGenerationRunning(page);
     await clickCancelGeneration(page);
@@ -58,7 +54,6 @@ test.describe("Manual test gate — study material lifecycle", () => {
   });
 
   test("3 — Cancel → Delete run → reload leaves no orphan draft panel", async ({ page }) => {
-    await selectNodeForGeneration(page);
     await clickGenerateDraft(page);
     await waitForGenerationRunning(page);
     await clickCancelGeneration(page);
@@ -74,7 +69,6 @@ test.describe("Manual test gate — study material lifecycle", () => {
   });
 
   test("4 — Cancel near completion shows material or success (not stuck paused)", async ({ page }) => {
-    await selectNodeForGeneration(page);
     await clickGenerateDraft(page);
     await waitForGenerationRunning(page);
 
@@ -109,7 +103,6 @@ test.describe("Manual test gate — study material lifecycle", () => {
   });
 
   test("5 — Cancel → change reference → Continue → 409 → Delete → new generate", async ({ page }) => {
-    await selectNodeForGeneration(page);
     await clickGenerateDraft(page);
     await waitForGenerationRunning(page);
     await clickCancelGeneration(page);
@@ -131,8 +124,8 @@ test.describe("Manual test gate — study material lifecycle", () => {
   });
 
   test("6 — Cancel → Delete → immediate regenerate does not stick on Starting…", async ({ page }) => {
-    await selectNodeForGeneration(page);
     await clickGenerateDraft(page);
+    await expectNotStuckOnStarting(page);
     await waitForGenerationRunning(page);
     await clickCancelGeneration(page);
     await waitForPausedPanel(page);

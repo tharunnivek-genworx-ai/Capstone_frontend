@@ -33,10 +33,17 @@ const MixedParentPanel: React.FC<MixedParentPanelProps> = ({
   );
   const [isReading, setIsReading] = useState(false);
 
+  // Reset reading only when navigating to a different node — not when an
+  // unlock refresh flips default_tab to "subtopics".
   useEffect(() => {
-    setActiveTab(panel.default_tab ?? "study");
     setIsReading(false);
-  }, [nodeId, panel.default_tab]);
+  }, [nodeId]);
+
+  useEffect(() => {
+    if (!isReading) {
+      setActiveTab(panel.default_tab ?? "study");
+    }
+  }, [nodeId, panel.default_tab, isReading]);
 
   const material = panel.study_material;
   const quizHandlers = useTopicQuizActions({
@@ -56,8 +63,9 @@ const MixedParentPanel: React.FC<MixedParentPanelProps> = ({
           onRefreshPanel();
         }}
         onNodesUnlocked={(nodeIds) => {
+          // Parent TopicDetailPanel silent-refreshes + tree fetch; do not
+          // force a loading refresh that would unmount this reading view.
           onNodesUnlocked?.(nodeIds);
-          onRefreshPanel();
         }}
       />
     );

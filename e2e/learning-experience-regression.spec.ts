@@ -65,6 +65,8 @@ test.describe("learning experience regression", () => {
     await expect(topicPanel.getByRole("button", { name: /Generate all study materials/ })).toBeVisible();
     await expect(topicPanel.getByRole("button", { name: "Create New Section" })).toBeVisible();
 
+    // Content mode tabs only mount after a topic is selected (empty canvas otherwise).
+    await page.getByRole("treeitem").first().click();
     await expect(page.getByRole("tab", { name: "Generate tab" })).toBeVisible();
     await expect(page.getByRole("tab", { name: "Material tab" })).toBeVisible();
     await expect(page.getByRole("tab", { name: "Quiz tab" })).toBeVisible();

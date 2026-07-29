@@ -822,12 +822,16 @@ export function useStudyMaterial({
     void refreshVersionHistoryRef.current(nodeId);
   }, [node?.node_id, isMentor, currentPage, spaceIsPublished, patchNodeStudyState]);
 
-  // Refresh after content is published from the espace republish checklist modal.
+  // Refresh after content is published from the espace republish checklist modal,
+  // or after a generate-all batch step finishes for this node.
   useEffect(() => {
     if (!node || !isMentor || contentRefreshToken === 0) return;
     const nodeId = node.node_id;
     void refreshMentorUiStateRef.current(nodeId, viewingVersionId);
     void refreshVersionHistoryRef.current(nodeId);
+    // External research attaches article/video links as node_media mid-run, so a
+    // topic left open through generate-all would keep showing stale resources.
+    void refreshTopicResourcesRef.current();
     studyMaterialService
       .getActiveVersion(nodeId)
       .then((version) => {

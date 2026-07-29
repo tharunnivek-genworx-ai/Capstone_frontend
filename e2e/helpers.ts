@@ -46,6 +46,26 @@ export async function openSpaceWithTopics(page: Page): Promise<void> {
   throw new Error("No mentor space with topic outline found for E2E tests.");
 }
 
+/** Prefer a space/topic where an enabled generate CTA is available. */
+export async function openSpaceReadyForGeneration(page: Page): Promise<void> {
+  await page.goto("/mentor/spaces");
+  const openButtons = page.getByRole("button", { name: /^Open$/i });
+  await expect(openButtons.first()).toBeVisible({ timeout: 60_000 });
+  const spaceCount = await openButtons.count();
+
+  for (let spaceIndex = 0; spaceIndex < spaceCount; spaceIndex += 1) {
+    if (!(await tryOpenSpaceAtIndex(page, spaceIndex))) continue;
+    try {
+      await selectNodeForGeneration(page);
+      return;
+    } catch {
+      // Try the next space that still has a topic tree.
+    }
+  }
+
+  throw new Error("No mentor space/topic with an enabled generate action found for E2E tests.");
+}
+
 /** @deprecated Use openSpaceWithTopics — first card may be an empty space. */
 export async function openSpaceByIndex(page: Page): Promise<void> {
   await openSpaceWithTopics(page);
@@ -60,16 +80,26 @@ export async function selectNodeForGeneration(page: Page): Promise<void> {
     await nodeLocator.nth(i).click({ force: true });
     await goToGenerateTab(page);
 
-    const generateDraft = page.getByRole("button", { name: /^Generate draft$/i });
-    const newDraft = page.getByRole("button", { name: /Generate a new draft/i });
-    const draftReady = await newDraft.isVisible().catch(() => false);
-    const freshDraft = await generateDraft.isVisible().catch(() => false);
-    const canUseNewDraft = draftReady && await newDraft.isEnabled().catch(() => false);
-    const canUseFreshDraft = freshDraft && await generateDraft.isEnabled().catch(() => false);
+    // Wait out source/resource skeleton so generate CTAs can enable.
+    const loadingSource = page.getByRole("button", { name: /Loading source/i });
+    if (await loadingSource.isVisible().catch(() => false)) {
+      await loadingSource.waitFor({ state: "hidden", timeout: 60_000 }).catch(() => undefined);
+    }
 
-    if (canUseFreshDraft || canUseNewDraft) {
-      await goToGenerateTab(page);
-      return;
+    const generateCandidates = [
+      page.getByRole("button", { name: /^Generate draft$/i }),
+      page.getByRole("button", { name: /Generate a new draft/i }),
+      page.getByRole("button", { name: /Generate new draft/i }),
+      page.getByRole("button", { name: /Create lesson draft with AI/i }),
+    ];
+
+    for (const candidate of generateCandidates) {
+      const visible = await candidate.isVisible().catch(() => false);
+      const enabled = visible && (await candidate.isEnabled().catch(() => false));
+      if (enabled) {
+        await goToGenerateTab(page);
+        return;
+      }
     }
   }
 
@@ -111,7 +141,9 @@ export async function goToMaterialTab(page: Page): Promise<void> {
 export async function clickGenerateDraft(page: Page): Promise<void> {
   await goToGenerateTab(page);
 
-  const newDraft = page.getByRole("button", { name: /Generate a new draft/i });
+  const newDraft = page.getByRole("button", {
+    name: /Generate a new draft|Generate new draft/i,
+  });
   if (await newDraft.isVisible({ timeout: 10_000 }).catch(() => false)) {
     await expect(newDraft).toBeEnabled({ timeout: 10_000 });
     await newDraft.scrollIntoViewIfNeeded();
@@ -119,6 +151,18 @@ export async function clickGenerateDraft(page: Page): Promise<void> {
     const confirm = page.getByRole("button", { name: /Yes, regenerate/i });
     if (await confirm.isVisible({ timeout: 5_000 }).catch(() => false)) {
       await confirm.click();
+    }
+    return;
+  }
+
+  const createLesson = page.getByRole("button", { name: /Create lesson draft with AI/i });
+  if (await createLesson.isVisible({ timeout: 5_000 }).catch(() => false)) {
+    await expect(createLesson).toBeEnabled({ timeout: 10_000 });
+    const warningContinue = page.getByRole("button", { name: /Continue anyway/i });
+    await createLesson.scrollIntoViewIfNeeded();
+    await createLesson.click({ force: true });
+    if (await warningContinue.isVisible({ timeout: 2_000 }).catch(() => false)) {
+      await warningContinue.click();
     }
     return;
   }
