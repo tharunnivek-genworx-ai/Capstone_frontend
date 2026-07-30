@@ -112,6 +112,10 @@ export interface ComputeShouldShowHistoryHubOptions {
   isGeneratingOrProgressing?: boolean;
 }
 
+/**
+ * Client-only History Hub eligibility retained for frontend/backend parity tests.
+ * Production UI trusts server `show_history_hub`.
+ */
 export function computeShouldShowHistoryHub(
   versionHistory: StudyMaterialVersionSummary[],
   archivedVersionHistory: StudyMaterialVersionSummary[],
@@ -144,4 +148,17 @@ export function computeShouldShowHistoryHub(
     partitions.workspaceDrafts.length === 0 &&
     hasHistoricalVersions
   );
+}
+
+/**
+ * History Hub visibility: Progress wins client-side; eligibility comes from
+ * server `show_history_hub`.
+ */
+export function resolveShouldShowHistoryHub(
+  mentorUiState: StudyMaterialMentorUiStateOut | null,
+  options?: ComputeShouldShowHistoryHubOptions,
+): boolean {
+  if (!mentorUiState) return false;
+  if (options?.isGeneratingOrProgressing) return false;
+  return mentorUiState.show_history_hub;
 }

@@ -44,6 +44,7 @@ function makeMentorUiState(
   return {
     node_id: "node-1",
     has_versions: true,
+    show_history_hub: false,
     active_version_id: null,
     published_version_id: null,
     can_access_study_material: true,
@@ -127,7 +128,7 @@ describe("shouldHydrateAsWorkspaceActiveVersion", () => {
         { version_id: "prev-1", published_at: "2026-01-01T00:00:00Z", is_published: false },
         previousOnly,
         [],
-        makeMentorUiState({ active_version_id: "prev-1" }),
+        makeMentorUiState({ active_version_id: "prev-1", show_history_hub: true }),
       ),
     ).toBe(false);
 
@@ -143,7 +144,7 @@ describe("shouldHydrateAsWorkspaceActiveVersion", () => {
         { version_id: "removed-1", published_at: "2026-01-01T00:00:00Z", is_published: false },
         removedOnly,
         [],
-        makeMentorUiState({ active_version_id: "removed-1" }),
+        makeMentorUiState({ active_version_id: "removed-1", show_history_hub: true }),
       ),
     ).toBe(false);
   });

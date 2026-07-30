@@ -41,7 +41,7 @@ interface GenerateSetupPanelProps {
   isDeletingDrafts: boolean;
   isLoadingGenerationSource: boolean;
   isLoadingTopicResources: boolean;
-  isWaitingForGenerateAll?: boolean;
+  isQueuedInGenerateAll?: boolean;
   /** A study-material run is paused (resumable) — block new generation until resumed/deleted. */
   runPaused?: boolean;
   /** A resumable failed run blocks fresh generation until continued or deleted. */
@@ -80,7 +80,7 @@ export default function GenerateSetupPanel({
   isDeletingDrafts,
   isLoadingGenerationSource,
   isLoadingTopicResources,
-  isWaitingForGenerateAll = false,
+  isQueuedInGenerateAll = false,
   runPaused = false,
   runFailed = false,
   onOpenRefModal,
@@ -93,7 +93,7 @@ export default function GenerateSetupPanel({
   const isWorking = isGenerating || isDeletingDrafts;
   const hasUnsavedSettings = branchDefaultDirty || approachDirty;
   const blockManualGenerate =
-    isWorking || isWaitingForGenerateAll || runPaused || runFailed || hasUnsavedSettings;
+    isWorking || isQueuedInGenerateAll || runPaused || runFailed || hasUnsavedSettings;
   const pausedTitle =
     "Generation is paused. Resume or delete it from the Material tab before creating a new draft.";
 
@@ -131,7 +131,7 @@ export default function GenerateSetupPanel({
         <span>Shape the teaching approach, choose what the AI can read, then create a reviewable draft.</span>
       </header>
 
-      {(runPaused || runFailed || isWaitingForGenerateAll || hasWorkspaceStudyMaterial) && (
+      {(runPaused || runFailed || isQueuedInGenerateAll || hasWorkspaceStudyMaterial) && (
         <div className={`gsm-run-banner${runPaused || runFailed ? " gsm-run-banner--paused" : ""}`} role="status">
           <div>
             <strong>
@@ -139,7 +139,7 @@ export default function GenerateSetupPanel({
                 ? "Generation paused"
                 : runFailed
                   ? "Generation needs attention"
-                : isWaitingForGenerateAll
+                : isQueuedInGenerateAll
                   ? "Queued in Generate All"
                   : "A draft is ready to review"}
             </strong>
@@ -148,7 +148,7 @@ export default function GenerateSetupPanel({
                 ? "Resume or delete the saved run from Material before starting again."
                 : runFailed
                   ? "Continue the saved run after its retry cooldown, or delete it before starting again."
-                : isWaitingForGenerateAll
+                : isQueuedInGenerateAll
                   ? "This topic starts automatically after the topics ahead of it finish."
                   : `${node.title} already has workspace material. You can review it or replace the unpublished drafts.`}
             </span>
@@ -339,7 +339,7 @@ export default function GenerateSetupPanel({
             title={
               hasUnsavedSettings
                 ? "Save instruction changes before generating"
-                : isWaitingForGenerateAll
+                : isQueuedInGenerateAll
                 ? "Blocked until Generate All reaches this topic"
                 : !canClearAllDrafts
                   ? (clearDraftsBlockReason ?? "Cannot regenerate at this time")
@@ -361,13 +361,13 @@ export default function GenerateSetupPanel({
                 ? "Save instruction changes before generating"
                 : runPaused
                   ? pausedTitle
-                  : isWaitingForGenerateAll
+                  : isQueuedInGenerateAll
                     ? "Waiting in Generate All"
                     : undefined
             }
           >
             <Sparkles size={17} aria-hidden />
-            {isGenerating ? "Generating…" : isWaitingForGenerateAll ? "Waiting…" : "Create lesson draft with AI"}
+            {isGenerating ? "Generating…" : isQueuedInGenerateAll ? "Waiting…" : "Create lesson draft with AI"}
           </button>
         )}
       </section>

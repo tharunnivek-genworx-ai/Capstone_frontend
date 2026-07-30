@@ -1251,13 +1251,6 @@ const SpaceDetailPage: React.FC = () => {
                 contentRefreshToken={
                   selectedNode ? nodeContentRefreshTokens[selectedNode.node_id] ?? 0 : 0
                 }
-                isWaitingForGenerateAll={
-                  Boolean(
-                    selectedNode &&
-                      (batchStepStatusByNodeId[selectedNode.node_id] === "pending" ||
-                        batchStepStatusByNodeId[selectedNode.node_id] === "running"),
-                  )
-                }
                 batchStepStatus={
                   selectedNode ? batchStepStatusByNodeId[selectedNode.node_id] ?? null : null
                 }

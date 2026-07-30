@@ -4,7 +4,6 @@ import type {
   StudyMaterialVersionSummary,
 } from "../types/studyMaterial.types";
 import {
-  computeShouldShowHistoryHub,
   isHistoricalMentorSummary,
   isStudyMaterialProgressing,
   isWorkspaceDraftSummary,
@@ -81,12 +80,7 @@ export function shouldHydrateAsWorkspaceActiveVersion(
 ): boolean {
   if (options?.isGeneratingOrProgressing) return false;
 
-  if (
-    mentorUiState &&
-    computeShouldShowHistoryHub(versionHistory, archivedVersionHistory, mentorUiState, {
-      isGeneratingOrProgressing: options?.isGeneratingOrProgressing,
-    })
-  ) {
+  if (mentorUiState?.show_history_hub) {
     return false;
   }
 

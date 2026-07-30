@@ -13,6 +13,7 @@ import {
   findBatchStepForNode,
   isBatchHubChildOpenDisabled,
   isBatchHubEligibleNode,
+  isGenerateAllStepWaiting,
   isNodeInBatchCohort,
   nodeOrDescendantInBatchCohort,
   resolveBatchHubCardStatus,
@@ -388,6 +389,15 @@ describe("edge matrix: hub vs material (plan locked behaviors)", () => {
 });
 
 describe("status helpers", () => {
+  it.each([
+    ["pending", true],
+    ["running", true],
+    ["completed", false],
+    [null, false],
+  ] as const)("treats batch step %s as Generate All waiting = %s", (status, expected) => {
+    expect(isGenerateAllStepWaiting(status)).toBe(expected);
+  });
+
   it("maps step statuses to labels", () => {
     expect(batchHubStatusLabel("completed")).toBe("Draft ready");
     expect(batchHubStatusLabel("skipped")).toBe("Skipped — kept existing");

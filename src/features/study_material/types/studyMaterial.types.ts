@@ -302,6 +302,8 @@ export interface StudyMaterialMentorUiStateOut {
   node_id: string;
   has_versions: boolean;
   has_workspace_versions?: boolean;
+  /** Server eligibility for History Hub; client still ANDs Progress override. */
+  show_history_hub: boolean;
   active_version_id: string | null;
   published_version_id?: string | null;
   can_access_study_material: boolean;

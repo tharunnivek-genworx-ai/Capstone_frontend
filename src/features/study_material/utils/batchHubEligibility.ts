@@ -50,6 +50,13 @@ export interface BatchHubBannerCta {
   muted: boolean;
 }
 
+/** Whether Generate All still owns this node's manual generation slot. */
+export function isGenerateAllStepWaiting(
+  status: BatchStepStatus | null | undefined
+): boolean {
+  return status === "pending" || status === "running";
+}
+
 /** Build a Set of node ids that appear as steps in the cohort. */
 export function batchStepNodeIdSet(
   steps: readonly BatchStepOut[] | null | undefined

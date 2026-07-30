@@ -26,7 +26,10 @@ import StudyMaterialPublishConfirmModal from "../../study_material/components/ve
 import StudyMaterialUnpublishConfirmModal from "../../study_material/components/version/StudyMaterialUnpublishConfirmModal";
 import StudyMaterialMentorWorkspace from "../../study_material/components/material/StudyMaterialMentorWorkspace";
 import BatchParentHub from "../../study_material/components/queue/BatchParentHub";
-import { shouldShowBatchHub } from "../../study_material/utils/batchHubEligibility";
+import {
+  isGenerateAllStepWaiting,
+  shouldShowBatchHub,
+} from "../../study_material/utils/batchHubEligibility";
 import { isStudyMaterialProgressing } from "../../study_material/utils/versionHistoryPartitions";
 import EspaceNotPublishedModal from "../../study_material/components/space/EspaceNotPublishedModal";
 import MentorQuizReviewPage from "../../quiz/components/MentorQuizReviewPage";
@@ -77,8 +80,6 @@ interface NodeDetailPanelProps {
   contentRefreshToken?: number;
   /** Batch step status for this node when part of an active generate-all job. */
   batchStepStatus?: BatchStepStatus | null;
-  /** @deprecated Prefer batchStepStatus; kept for callers that only pass the waiting flag. */
-  isWaitingForGenerateAll?: boolean;
   /** Space-scoped external research preference for the active topic. */
   externalResearchEnabled?: boolean;
   onExternalResearchChange?: (enabled: boolean) => void;
@@ -104,17 +105,13 @@ const NodeDetailPanel: React.FC<NodeDetailPanelProps> = ({
   onMentorProgressRefresh,
   contentRefreshToken = 0,
   batchStepStatus = null,
-  isWaitingForGenerateAll = false,
   externalResearchEnabled,
   onExternalResearchChange,
   batchDetail = null,
   batchHubEnabled = false,
   onDismissBatchHub,
 }) => {
-  const blockedByBatch =
-    isWaitingForGenerateAll ||
-    batchStepStatus === "pending" ||
-    batchStepStatus === "running";
+  const blockedByBatch = isGenerateAllStepWaiting(batchStepStatus);
   // ── Batch parent hub (generate-all cohort only; never from normal generate) ─
   const [batchHubDrill, setBatchHubDrill] = useState<BatchHubDrill>(null);
   const [hubStack, setHubStack] = useState<string[]>([]);
@@ -564,7 +561,7 @@ const NodeDetailPanel: React.FC<NodeDetailPanelProps> = ({
               sm={sm}
               onOpenRefModal={() => sm.openRefModalManage()}
               onOpenMediaModal={() => sm.setShowNodeMediaModal(true)}
-              isWaitingForGenerateAll={blockedByBatch}
+              isQueuedInGenerateAll={blockedByBatch}
               runPaused={studyRunPaused}
               runFailed={studyRunFailed}
             />

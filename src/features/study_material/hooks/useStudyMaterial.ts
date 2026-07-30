@@ -35,9 +35,9 @@ import {
   GenerationJobFailedError,
 } from "../../generation/utils/generationJobErrors";
 import {
-  computeShouldShowHistoryHub,
   isStudyMaterialProgressing,
   partitionHistoryVersions,
+  resolveShouldShowHistoryHub,
   shouldSilentlyActivateOnSelect,
   type HistoryVersionPartitions,
 } from "../utils/versionHistoryPartitions";
@@ -678,16 +678,8 @@ export function useStudyMaterial({
 
   const shouldShowHistoryHub = useMemo(
     () =>
-      activeMentorUiState != null &&
-      computeShouldShowHistoryHub(
-        versionHistory,
-        archivedVersionHistory,
-        activeMentorUiState,
-        { isGeneratingOrProgressing },
-      ),
+      resolveShouldShowHistoryHub(activeMentorUiState, { isGeneratingOrProgressing }),
     [
-      versionHistory,
-      archivedVersionHistory,
       activeMentorUiState,
       isGeneratingOrProgressing,
     ]
@@ -1305,13 +1297,10 @@ export function useStudyMaterial({
       });
       setUnpublishPreview(null);
       setPendingUnpublishVersionId(null);
-      const versionLists = await finalizeVersionMutation(version);
+      await finalizeVersionMutation(version);
       const nodeId = node.node_id;
-      const uiState = await studyMaterialService.getMentorUiState(nodeId, null);
-      const willShowHistoryHub = Boolean(
-        versionLists &&
-          computeShouldShowHistoryHub(versionLists.history, versionLists.archived, uiState)
-      );
+      const uiState = mentorUiStateByNodeRef.current.get(nodeId) ?? null;
+      const willShowHistoryHub = Boolean(uiState?.show_history_hub);
 
       if (willShowHistoryHub) {
         setViewingVersionId(null);
@@ -1915,12 +1904,9 @@ export function useStudyMaterial({
         return;
       }
 
-      const uiState = await studyMaterialService.getMentorUiState(nodeId, null);
-      const willShowHistoryHub = computeShouldShowHistoryHub(
-        versionLists.history,
-        versionLists.archived,
-        uiState,
-      );
+      await refreshMentorUiStateRef.current(nodeId, null);
+      const uiState = mentorUiStateByNodeRef.current.get(nodeId) ?? null;
+      const willShowHistoryHub = Boolean(uiState?.show_history_hub);
 
       if (willShowHistoryHub) {
         patchNodeStudyState(nodeId, {
@@ -1955,7 +1941,6 @@ export function useStudyMaterial({
         }
       }
 
-      await refreshMentorUiStateRef.current(nodeId, null);
       toast.success("Draft moved to archive.");
     } catch (err) {
       toast.error(extractErrorDetail(err));
