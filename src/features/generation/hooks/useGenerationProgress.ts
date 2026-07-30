@@ -124,41 +124,19 @@ export function useGenerationProgress(
         const next = await generationProgressService.get(sessionId);
         if (cancelled) return;
 
-        // Reconcile with the durable run row so a stale "paused" snapshot right
-        // after Continue cannot freeze the poller while the worker is running.
-        let effective = next;
-        try {
-          const run = await generationJobService.getRun(sessionId);
-          if (cancelled) return;
-          if (run.status === "running") {
-            effective =
-              next.status === "running" ? next : { ...next, status: "running" };
-          } else if (run.status === "completed") {
-            effective = { ...next, status: "completed" };
-          } else if (run.status === "paused") {
-            effective = { ...next, status: "paused" };
-          } else if (run.status === "failed" || run.status === "abandoned") {
-            effective = {
-              ...next,
-              status: "failed",
-              error: next.error ?? run.error_message ?? "Generation failed.",
-            };
-          }
-        } catch {
-          // Keep the progress payload when run metadata is temporarily unavailable.
-        }
-
         notFoundRetries = 0;
-        lastProgress = effective;
-        if (effective.status === "running") {
+        // The progress endpoint already resolves status from the durable run row.
+        // Avoid a second run-details request on every 1.2s poll tick.
+        lastProgress = next;
+        if (next.status === "running") {
           sawRunning = true;
         }
-        reportProgress(effective);
+        reportProgress(next);
 
-        if (effective.status === "running") {
+        if (next.status === "running") {
           shouldContinue = true;
         } else if (
-          (effective.status === "paused" || effective.status === "failed")
+          (next.status === "paused" || next.status === "failed")
           && Boolean(restartKey)
           && !sawRunning
         ) {

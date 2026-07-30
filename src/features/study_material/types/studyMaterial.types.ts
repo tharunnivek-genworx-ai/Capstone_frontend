@@ -195,6 +195,12 @@ export interface QualityCheckResultOut {
   humanized_corrective_instructions?: string | null;
   summary: string;
   warning_presentation?: QcWarningPresentationOut | null;
+  /** Server SoT: false for placement-only DET failures. */
+  shouldShowMentorQcWarning?: boolean | null;
+  should_show_mentor_qc_warning?: boolean | null;
+  /** Debug / diagnostics; mirrors backend FailureClass. */
+  failureClass?: "placement_only" | "substance" | "mixed" | "none" | null;
+  failure_class?: "placement_only" | "substance" | "mixed" | "none" | null;
   errorType?: LlmErrorType | null;
   suggestion?: string | null;
   providerMeta?: ProviderMetaOut | null;

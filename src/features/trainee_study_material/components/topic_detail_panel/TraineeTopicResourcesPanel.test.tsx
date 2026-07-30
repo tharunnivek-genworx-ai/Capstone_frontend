@@ -4,11 +4,6 @@ import userEvent from "@testing-library/user-event";
 
 import TraineeTopicResourcesPanel from "./TraineeTopicResourcesPanel";
 import type { TraineeTopicResource } from "../../types/traineeNodePanel.types";
-import { trackVideoEvent } from "../../../../utils/videoAnalytics";
-
-vi.mock("../../../../utils/videoAnalytics", () => ({
-  trackVideoEvent: vi.fn(),
-}));
 
 vi.mock("../../services/traineeTopicResourceService", () => ({
   downloadTraineeFile: vi.fn(),
@@ -62,14 +57,6 @@ describe("TraineeTopicResourcesPanel", () => {
 
     expect(screen.getByTestId("youtube-player-modal")).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Sample video" })).toBeInTheDocument();
-    expect(trackVideoEvent).toHaveBeenCalledWith(
-      "watch_in_app",
-      expect.objectContaining({
-        surface: "trainee",
-        mediaId: "media-1",
-        videoId: VIDEO_ID,
-      }),
-    );
   });
 
   it("opens non-YouTube video_url resources externally", async () => {
@@ -97,12 +84,6 @@ describe("TraineeTopicResourcesPanel", () => {
       "_blank",
       "noopener,noreferrer",
     );
-    expect(trackVideoEvent).toHaveBeenCalledWith("open_external_fallback", {
-      surface: "trainee",
-      mediaId: "media-1",
-      url: "https://vimeo.com/123456789",
-      reason: "non_youtube",
-    });
   });
 
   it("keeps article_link resources on the external open path", async () => {
@@ -132,6 +113,5 @@ describe("TraineeTopicResourcesPanel", () => {
       "_blank",
       "noopener,noreferrer",
     );
-    expect(trackVideoEvent).not.toHaveBeenCalled();
   });
 });

@@ -7,7 +7,6 @@ import type { NodeStudyStatePatch } from "../../study_material/types/studyMateri
 import type {
   QuizDifficulty,
   QuizHistoryItemOut,
-  QuizMentorUiStateOut,
   QuizOut,
   QuizQuestionCreateRequest,
   QuizQuestionUpdateRequest,
@@ -34,11 +33,19 @@ import {
   GenerationJobFailedError,
 } from "../../generation/utils/generationJobErrors";
 import { isValidPassThreshold } from "../utils/passThreshold";
-
-/** Nodes with an in-flight quiz generate/regenerate request (survives node switches). */
-const generatingQuizNodeIds = new Set<string>();
-/** Nodes with an in-flight hints generate/regenerate request (survives node switches). */
-const generatingHintsNodeIds = new Set<string>();
+import { applyQuizMentorUiState } from "../utils/quizMentorUiApply";
+import {
+  extractQuizErrorDetail,
+  retainQuestionsWithIncompleteHints,
+} from "../utils/quizHookHelpers";
+import {
+  addGeneratingHintsNode,
+  addGeneratingQuizNode,
+  deleteGeneratingHintsNode,
+  deleteGeneratingQuizNode,
+  hasGeneratingHintsNode,
+  hasGeneratingQuizNode,
+} from "../utils/quizRunOwnership";
 
 interface UseQuizParams {
   node: NodeTreeNode | null;
@@ -157,78 +164,6 @@ export interface UseQuizReturn {
   viewingHistoryItem: QuizHistoryItemOut | null;
 }
 
-function extractErrorDetail(err: unknown): string {
-  const e = err as {
-    response?: { data?: string | { detail?: string | { message?: string } } };
-    message?: string;
-  };
-  const data = e?.response?.data;
-  if (typeof data === "string") return data;
-  if (typeof data?.detail === "string") return data.detail;
-  if (typeof data?.detail === "object" && data.detail?.message) return data.detail.message;
-  return e?.message ?? "Request failed.";
-}
-
-function applyMentorUiState(
-  state: QuizMentorUiStateOut,
-  setters: {
-    setQuizDraftExists: (v: boolean) => void;
-    setCanGenerateQuiz: (v: boolean) => void;
-    setGenerateDisabledTooltip: (v: string | null) => void;
-    setCanAccessHints: (v: boolean) => void;
-    setHintsLocked: (v: boolean) => void;
-    setHintsLockedTooltip: (v: string | null) => void;
-    setCanGenerateHints: (v: boolean) => void;
-    setCanRegenerateHints: (v: boolean) => void;
-    setCanPublishQuiz: (v: boolean) => void;
-    setPublishDisabledTooltip: (v: string | null) => void;
-    setPublishQuizButtonLabel: (v: string) => void;
-    setUnpublishQuizButtonLabel: (v: string) => void;
-    setHasOtherLiveQuiz: (v: boolean) => void;
-    setOtherLiveQuizTitle: (v: string | null) => void;
-    setCanEditQuestions: (v: boolean) => void;
-    setCanRegenerateQuiz: (v: boolean) => void;
-    setQuiz: (v: QuizOut | null) => void;
-    setShowUpdateQuizNudge: (v: boolean) => void;
-    setQuizSmVersionLabel: (v: string | null) => void;
-    setQuizHistory: (v: QuizHistoryItemOut[]) => void;
-  },
-  options: { includeQuiz?: boolean } = {},
-) {
-  setters.setQuizDraftExists(state.quiz_draft_exists);
-  setters.setCanGenerateQuiz(state.can_generate_quiz);
-  setters.setGenerateDisabledTooltip(state.generate_disabled_tooltip ?? null);
-  setters.setCanAccessHints(state.can_access_hints);
-  setters.setHintsLocked(state.hints_locked);
-  setters.setHintsLockedTooltip(state.hints_locked_tooltip ?? null);
-  setters.setCanGenerateHints(state.can_generate_hints);
-  setters.setCanRegenerateHints(state.can_regenerate_hints);
-  setters.setCanPublishQuiz(state.can_publish_quiz);
-  setters.setPublishDisabledTooltip(state.publish_disabled_tooltip ?? null);
-  setters.setPublishQuizButtonLabel(state.publish_quiz_button_label ?? "Make quiz live for students");
-  setters.setUnpublishQuizButtonLabel(state.unpublish_quiz_button_label ?? "Remove quiz from students");
-  setters.setHasOtherLiveQuiz(state.has_other_live_quiz ?? false);
-  setters.setOtherLiveQuizTitle(state.other_live_quiz_title ?? null);
-  setters.setCanEditQuestions(state.can_edit_questions);
-  setters.setCanRegenerateQuiz(state.can_regenerate_quiz);
-  setters.setShowUpdateQuizNudge(state.show_update_quiz_nudge ?? false);
-  setters.setQuizSmVersionLabel(state.quiz_sm_version_label ?? null);
-  setters.setQuizHistory(state.quiz_history ?? []);
-  if (options.includeQuiz) {
-    setters.setQuiz(state.resolved_quiz_id ? state.quiz ?? null : null);
-  }
-}
-
-function retainQuestionsWithIncompleteHints(
-  questionIds: string[],
-  quiz: QuizOut,
-): string[] {
-  return questionIds.filter((questionId) => {
-    const question = quiz.questions.find((item) => item.question_id === questionId);
-    return !question?.hint_1 || !question.hint_2 || !question.hint_3;
-  });
-}
-
 export function useQuiz({
   node,
   isMentor,
@@ -288,7 +223,7 @@ export function useQuiz({
   const viewingHistoryRef = useRef<string | null>(null);
 
   const handleMutationError = useCallback((err: unknown) => {
-    toast.error(extractErrorDetail(err));
+    toast.error(extractQuizErrorDetail(err));
   }, []);
 
   // Page 3 form state
@@ -450,7 +385,7 @@ export function useQuiz({
         });
         if (cancelled || generation !== syncGenerationRef.current) return;
 
-        applyMentorUiState(state, mentorStateSetters, { includeQuiz });
+        applyQuizMentorUiState(state, mentorStateSetters, { includeQuiz });
 
         if (state.resolved_quiz_id !== currentQuizIdRef.current) {
           setResolvedQuizIdForNode(node.node_id, state.resolved_quiz_id);
@@ -497,7 +432,7 @@ export function useQuiz({
         includeQuiz: true,
       });
       if (generation !== syncGenerationRef.current || !isViewingNode(nodeId)) return;
-      applyMentorUiState(state, mentorStateSetters, { includeQuiz: true });
+      applyQuizMentorUiState(state, mentorStateSetters, { includeQuiz: true });
       if (state.resolved_quiz_id !== preferred) {
         setResolvedQuizIdForNode(nodeId, state.resolved_quiz_id);
       }
@@ -538,7 +473,7 @@ export function useQuiz({
   useEffect(() => {
     if (!node || !isMentor) return;
     if (currentPage !== 3 && currentPage !== 4) return;
-    if (generatingQuizNodeIds.has(node.node_id)) return;
+    if (hasGeneratingQuizNode(node.node_id)) return;
     if (generationProgressSessionId && isGeneratingQuiz) return;
     if (generationRunFailed && failedGenerationPipeline === "quiz") return;
     if (generationRunPaused && failedGenerationPipeline === "quiz") return;
@@ -639,7 +574,7 @@ export function useQuiz({
   useEffect(() => {
     if (!node || !isMentor) return;
     if (currentPage !== 4) return;
-    if (generatingHintsNodeIds.has(node.node_id)) return;
+    if (hasGeneratingHintsNode(node.node_id)) return;
     if (generationProgressSessionId && isGeneratingHints) return;
     if (generationRunFailed && failedGenerationPipeline === "hint") return;
     if (generationRunPaused && failedGenerationPipeline === "hint") return;
@@ -740,7 +675,7 @@ export function useQuiz({
       setQuestionCount(questionCountOverride);
     }
     const nodeId = node.node_id;
-    generatingQuizNodeIds.add(nodeId);
+    addGeneratingQuizNode(nodeId);
     let latestRunId: string | null = null;
     patchNodeStudyState(nodeId, {
       isGeneratingQuiz: true,
@@ -774,7 +709,7 @@ export function useQuiz({
       patchNodeStudyState(nodeId, patchForGenerationJobFailure(err, latestRunId, "quiz"));
       handleMutationError(err);
     } finally {
-      generatingQuizNodeIds.delete(nodeId);
+      deleteGeneratingQuizNode(nodeId);
     }
   }, [node, canGenerateQuiz, difficulty, questionCount, isGeneratingQuiz, generationRunPaused, refreshQuiz, patchNodeStudyState, settlePausedProgress, setResolvedQuizIdForNode, handleMutationError]);
 
@@ -787,7 +722,7 @@ export function useQuiz({
     const activeQuestionCount = quiz.questions.filter((question) => question.is_active).length;
     const nodeId = node.node_id;
     const quizId = quiz.quiz_id;
-    generatingQuizNodeIds.add(nodeId);
+    addGeneratingQuizNode(nodeId);
     let latestRunId: string | null = null;
     patchNodeStudyState(nodeId, {
       isGeneratingQuiz: true,
@@ -827,7 +762,7 @@ export function useQuiz({
       patchNodeStudyState(nodeId, patchForGenerationJobFailure(err, latestRunId, "quiz"));
       handleMutationError(err);
     } finally {
-      generatingQuizNodeIds.delete(nodeId);
+      deleteGeneratingQuizNode(nodeId);
     }
   }, [node, canGenerateQuiz, quiz, questionCount, difficulty, isGeneratingQuiz, generationRunPaused, refreshQuiz, patchNodeStudyState, settlePausedProgress, setResolvedQuizIdForNode, handleMutationError]);
 
@@ -1104,7 +1039,7 @@ export function useQuiz({
     if (!node || !quiz || isGeneratingHints || generationRunPaused || !canGenerateHints) return;
     const nodeId = node.node_id;
     const quizId = quiz.quiz_id;
-    generatingHintsNodeIds.add(nodeId);
+    addGeneratingHintsNode(nodeId);
     let latestRunId: string | null = null;
     patchNodeStudyState(nodeId, {
       isGeneratingHints: true,
@@ -1134,7 +1069,7 @@ export function useQuiz({
       patchNodeStudyState(nodeId, patchForGenerationJobFailure(err, latestRunId, "hint"));
       handleMutationError(err);
     } finally {
-      generatingHintsNodeIds.delete(nodeId);
+      deleteGeneratingHintsNode(nodeId);
     }
   }, [node, quiz, isGeneratingHints, generationRunPaused, canGenerateHints, refreshQuiz, patchNodeStudyState, settlePausedProgress, handleMutationError]);
 
@@ -1145,7 +1080,7 @@ export function useQuiz({
 
     const nodeId = node.node_id;
     const quizId = quiz.quiz_id;
-    generatingHintsNodeIds.add(nodeId);
+    addGeneratingHintsNode(nodeId);
     let latestRunId: string | null = null;
     patchNodeStudyState(nodeId, {
       isGeneratingHints: true,
@@ -1180,7 +1115,7 @@ export function useQuiz({
       handleMutationError(err);
       return false;
     } finally {
-      generatingHintsNodeIds.delete(nodeId);
+      deleteGeneratingHintsNode(nodeId);
     }
   }, [node, quiz, isGeneratingHints, generationRunPaused, canRegenerateHints, refreshQuiz, patchNodeStudyState, settlePausedProgress, handleMutationError]);
 
@@ -1188,7 +1123,7 @@ export function useQuiz({
     if (!node || !quiz || isGeneratingHints || generationRunPaused || hintsLocked) return false;
     const nodeId = node.node_id;
     const quizId = quiz.quiz_id;
-    generatingHintsNodeIds.add(nodeId);
+    addGeneratingHintsNode(nodeId);
     let latestRunId: string | null = null;
     patchNodeStudyState(nodeId, {
       isGeneratingHints: true,
@@ -1226,7 +1161,7 @@ export function useQuiz({
       handleMutationError(err);
       return false;
     } finally {
-      generatingHintsNodeIds.delete(nodeId);
+      deleteGeneratingHintsNode(nodeId);
     }
   }, [node, quiz, isGeneratingHints, generationRunPaused, hintsLocked, refreshQuiz, patchNodeStudyState, settlePausedProgress, handleMutationError]);
 
@@ -1276,8 +1211,8 @@ export function useQuiz({
       handleMutationError(err);
       patchNodeStudyState(nodeId, { isPausingGeneration: false });
     } finally {
-      generatingQuizNodeIds.delete(nodeId);
-      generatingHintsNodeIds.delete(nodeId);
+      deleteGeneratingQuizNode(nodeId);
+      deleteGeneratingHintsNode(nodeId);
     }
   }, [
     activeGenerationRunId,
@@ -1310,8 +1245,8 @@ export function useQuiz({
       await generationJobService.waitForResourceIdle(resourceId, pipeline);
       patchNodeStudyState(nodeId, patchForGenerationJobAbandoned());
       setIsRegeneratingQuestion(null);
-      generatingQuizNodeIds.delete(nodeId);
-      generatingHintsNodeIds.delete(nodeId);
+      deleteGeneratingQuizNode(nodeId);
+      deleteGeneratingHintsNode(nodeId);
       await refreshQuiz(nodeId, currentQuizId);
     } catch (err) {
       handleMutationError(err);
@@ -1340,8 +1275,8 @@ export function useQuiz({
     const nodeId = node.node_id;
     const quizId = quiz?.quiz_id ?? currentQuizId;
     setIsResumingFailedGeneration(true);
-    if (pipeline === "quiz") generatingQuizNodeIds.add(nodeId);
-    if (pipeline === "hint") generatingHintsNodeIds.add(nodeId);
+    if (pipeline === "quiz") addGeneratingQuizNode(nodeId);
+    if (pipeline === "hint") addGeneratingHintsNode(nodeId);
 
     // Clear paused seed so Continue cannot keep a stale checklist painted.
     patchNodeStudyState(nodeId, {
@@ -1384,8 +1319,8 @@ export function useQuiz({
       patchNodeStudyState(nodeId, patchForGenerationJobFailure(err, runId, pipeline));
       toast.error(extractResumeErrorDetail(err));
     } finally {
-      if (pipeline === "quiz") generatingQuizNodeIds.delete(nodeId);
-      if (pipeline === "hint") generatingHintsNodeIds.delete(nodeId);
+      if (pipeline === "quiz") deleteGeneratingQuizNode(nodeId);
+      if (pipeline === "hint") deleteGeneratingHintsNode(nodeId);
       setIsResumingFailedGeneration(false);
       setIsRegeneratingQuestion(null);
     }

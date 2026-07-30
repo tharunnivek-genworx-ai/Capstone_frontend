@@ -7,7 +7,6 @@ import {
 } from "../../services/referenceMaterialService";
 import YoutubePlayerModal from "../../../../components/YoutubePlayerModal";
 import { isYouTubeUrl, extractYouTubeVideoId } from "../../../../utils/youtubeUrl";
-import { trackVideoEvent } from "../../../../utils/videoAnalytics";
 
 interface NodeMediaModalProps {
   nodeId: string;
@@ -65,13 +64,6 @@ const NodeMediaModal: React.FC<NodeMediaModalProps> = ({
   const openYoutubePlayer = (url: string, mediaTitle: string, mediaId?: string) => {
     const videoId = extractYouTubeVideoId(url);
     if (!videoId) {
-      trackVideoEvent("open_external_fallback", {
-        surface: "mentor",
-        nodeId,
-        mediaId,
-        url,
-        reason: "invalid_youtube_id",
-      });
       const opened = window.open(url, "_blank", "noopener,noreferrer");
       if (!opened) {
         toast.error("Your browser blocked the new tab. Allow popups to continue.");
@@ -192,9 +184,6 @@ const NodeMediaModal: React.FC<NodeMediaModalProps> = ({
         videoId={activeVideo.videoId}
         title={activeVideo.title}
         watchUrl={activeVideo.watchUrl}
-        surface="mentor"
-        mediaId={activeVideo.mediaId}
-        nodeId={nodeId}
       />
     )}
     <div
@@ -263,13 +252,6 @@ const NodeMediaModal: React.FC<NodeMediaModalProps> = ({
                             type="button"
                             className="reference-material-modal__link-btn"
                             onClick={() => {
-                              trackVideoEvent("open_external_fallback", {
-                                surface: "mentor",
-                                nodeId,
-                                mediaId: media.media_id,
-                                url: href,
-                                reason: "non_youtube",
-                              });
                               const opened = window.open(href, "_blank", "noopener,noreferrer");
                               if (!opened) {
                                 toast.error("Your browser blocked the new tab. Allow popups to continue.");

@@ -6,8 +6,9 @@ export function applyDefaultFromMode(mode: InstructionMode): boolean {
   return mode !== "replace";
 }
 
-/** Read the saved instruction mode from node DB fields. */
+/** Read the saved instruction mode from node (prefer API field; fall back to columns). */
 export function detectInstructionModeFromNode(node: NodeTreeNode): InstructionMode {
+  if (node.instruction_mode != null) return node.instruction_mode;
   if (node.node_specific_instruction != null) return "replace";
   if ((node.node_additive_instruction ?? "").trim()) return "extend";
   return "inherit";

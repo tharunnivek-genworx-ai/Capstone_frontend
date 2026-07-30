@@ -1,4 +1,4 @@
-// src/features/quiz/components/QuizPage4.tsx
+// src/features/quiz/components/MentorHintsPage.tsx
 import React, { useState } from "react";
 import type { UseQuizReturn } from "../hooks/useQuiz";
 import type { TopicContentPage } from "../../spaces/types/node.types";
@@ -19,13 +19,13 @@ import type { MentorStudentVisibilityOut } from "../../study_material/types/stud
 import "../../study_material/styles/studyMaterialMentor.css";
 import "../styles/mentorQuiz.css";
 
-interface QuizPage4Props {
+interface MentorHintsPageProps {
   qz: UseQuizReturn;
   onPageChange: (page: TopicContentPage) => void;
   studentVisibility?: MentorStudentVisibilityOut | null;
 }
 
-const QuizPage4: React.FC<QuizPage4Props> = ({
+const MentorHintsPage: React.FC<MentorHintsPageProps> = ({
   qz,
   onPageChange,
   studentVisibility = null,
@@ -309,4 +309,4 @@ const QuizPage4: React.FC<QuizPage4Props> = ({
   );
 };
 
-export default QuizPage4;
+export default MentorHintsPage;

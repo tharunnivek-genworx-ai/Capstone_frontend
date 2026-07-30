@@ -7,7 +7,6 @@ import {
 } from "../../services/traineeTopicResourceService";
 import YoutubePlayerModal from "../../../../components/YoutubePlayerModal";
 import { isYouTubeUrl, extractYouTubeVideoId } from "../../../../utils/youtubeUrl";
-import { trackVideoEvent } from "../../../../utils/videoAnalytics";
 
 interface TraineeTopicResourcesPanelProps {
   resources: TraineeTopicResource[];
@@ -62,14 +61,6 @@ const TraineeTopicResourcesPanel: React.FC<TraineeTopicResourcesPanelProps> = ({
       }
       const opened = window.open(item.view_url, "_blank", "noopener,noreferrer");
       if (!opened) toast.error("Your browser blocked the new tab. Allow popups to view this resource.");
-      else {
-        trackVideoEvent("open_external_fallback", {
-          surface: "trainee",
-          mediaId: item.media_id,
-          url: item.view_url,
-          reason: isYouTubeUrl(item.view_url) ? "invalid_youtube_id" : "non_youtube",
-        });
-      }
       return;
     }
     if (item.media_type === "article_link") {
@@ -119,8 +110,6 @@ const TraineeTopicResourcesPanel: React.FC<TraineeTopicResourcesPanelProps> = ({
       videoId={activeVideo?.videoId ?? ""}
       title={activeVideo?.title}
       watchUrl={activeVideo?.watchUrl ?? ""}
-      surface="trainee"
-      mediaId={activeVideo?.mediaId}
     />
     <section className="trainee-topic-resources">
       <button

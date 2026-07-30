@@ -9,7 +9,7 @@ import { useParams, useNavigate, useSearchParams } from "react-router-dom";
 import toast from "react-hot-toast";
 import { spaceService } from "../services/spaceService";
 import { useTopicTree } from "../hooks/useTopicTree";
-import type { SpaceResponse, SpaceUnpublishPreviewOut, RepublishChecklistNode } from "../types/space.types";
+import type { SpaceResponse } from "../types/space.types";
 import type { NodeTreeNode, NodeUpdateInstructionRequest, NodeArchiveRequest } from "../types/node.types";
 import type { NodeStudyState, NodeStudyStatePatch } from "../../study_material/types/studyMaterial.types";
 import type { TopicContentPage } from "../types/node.types";
@@ -25,7 +25,8 @@ import InviteCodeModal from "./InviteCodeModal";
 import ManageTraineesModal from "./ManageTraineesModal";
 import { useAuth } from "../../auth/hooks/useAuth";
 import { studyMaterialService } from "../../study_material/services/studyMaterialService";
-import { clearStudyMaterialModuleOwnership } from "../../study_material/hooks/useStudyMaterial";
+import { clearStudyMaterialModuleOwnership } from "../../study_material/utils/studyMaterialRunOwnership";
+import { hasPatchChanges } from "../../study_material/utils/studyMaterialHookHelpers";
 import {
   preserveProgressFlagsInPatch,
   shouldHydrateAsWorkspaceActiveVersion,
@@ -39,22 +40,15 @@ import GenerateAllRootPickerModal from "../../study_material/components/queue/Ge
 import GenerateAllPolicyModal from "../../study_material/components/queue/GenerateAllPolicyModal";
 import GenerateAllInstructionWarningModal from "../../study_material/components/queue/GenerateAllInstructionWarningModal";
 import BatchProgressPanel from "../../study_material/components/queue/BatchProgressPanel";
-import { studyMaterialBatchService } from "../../study_material/services/studyMaterialBatchService";
 import { useBatchJobPoll } from "../../study_material/hooks/useBatchJobPoll";
-import type {
-  BatchStepStatus,
-  ExistingMaterialPolicy,
-  StudyMaterialBatchPreviewResponse,
-} from "../../study_material/types/studyMaterialBatch.types";
-import {
-  clearBatchHubSession,
-  readBatchHubSession,
-  writeBatchHubSession,
-} from "../../study_material/utils/batchHubSession";
+import type { BatchStepStatus } from "../../study_material/types/studyMaterialBatch.types";
 import {
   findBatchStepForNode,
   isBatchHubEligibleNode,
 } from "../../study_material/utils/batchHubEligibility";
+import { useSpacePublishFlow } from "../hooks/useSpacePublishFlow";
+import { useGenerateAllWizard } from "../hooks/useGenerateAllWizard";
+import { useBatchHubSession } from "../hooks/useBatchHubSession";
 
 function findNodeInTree(nodes: NodeTreeNode[], id: string): NodeTreeNode | null {
   for (const n of nodes) {
@@ -76,15 +70,11 @@ const SpaceDetailPage: React.FC = () => {
   const [isLoadingSpace, setIsLoadingSpace] = useState(true);
   const [selectedNode, setSelectedNode] = useState<NodeTreeNode | null>(null);
   const [showInviteModal, setShowInviteModal] = useState(false);
-  const [isPublishing, setIsPublishing] = useState(false);
   const [isEditingName, setIsEditingName] = useState(false);
   const [editName, setEditName] = useState("");
   const [editDesc, setEditDesc] = useState("");
   const [isSavingEdit, setIsSavingEdit] = useState(false);
   const [showManageTrainees, setShowManageTrainees] = useState(false);
-  const [unpublishPreview, setUnpublishPreview] = useState<SpaceUnpublishPreviewOut | null>(null);
-  const [isLoadingUnpublishPreview, setIsLoadingUnpublishPreview] = useState(false);
-  const [republishChecklist, setRepublishChecklist] = useState<RepublishChecklistNode[] | null>(null);
   const [nodeContentRefreshTokens, setNodeContentRefreshTokens] = useState<Record<string, number>>({});
   const [isMoveMode, setIsMoveMode] = useState(false);
   const [treePanelWidth, setTreePanelWidth] = useState(280);
@@ -92,30 +82,17 @@ const SpaceDetailPage: React.FC = () => {
   const [nodeStudyStates, setNodeStudyStates] = useState<Map<string, NodeStudyState>>(new Map());
   const [showSpaceProgress, setShowSpaceProgress] = useState(false);
   const [cameFromSpaceProgress, setCameFromSpaceProgress] = useState(false);
-  const [showRootPickerModal, setShowRootPickerModal] = useState(false);
-  const [showPolicyModal, setShowPolicyModal] = useState(false);
-  const [showWarningModal, setShowWarningModal] = useState(false);
-  const [selectedBatchNodeIds, setSelectedBatchNodeIds] = useState<string[]>([]);
-  const [selectedBatchExternalResearchNodeIds, setSelectedBatchExternalResearchNodeIds] =
-    useState<string[]>([]);
   /** Space-scoped mentor prefs: which topics should use external research. */
   const [externalResearchByNodeId, setExternalResearchByNodeId] = useState<
     Record<string, boolean>
   >({});
-  const [batchPreview, setBatchPreview] = useState<StudyMaterialBatchPreviewResponse | null>(null);
-  const [existingPolicy, setExistingPolicy] = useState<ExistingMaterialPolicy>("skip");
-  const [isSubmittingBatchFlow, setIsSubmittingBatchFlow] = useState(false);
   const [activeBatchId, setActiveBatchId] = useState<string | null>(null);
   const [showBatchProgressPanel, setShowBatchProgressPanel] = useState(false);
-  /** Cohort context for Batch Parent Hub (session-restored or live generate-all). */
-  const [batchHubEnabled, setBatchHubEnabled] = useState(false);
   const completedBatchStepIdsRef = useRef<Set<string>>(new Set());
   const settledBatchStepIdsRef = useRef<Set<string>>(new Set());
   const batchAutoOpenedMaterialNodeIdsRef = useRef<Set<string>>(new Set());
   /** Avoid re-toasting already-completed steps when a batch is first hydrated after space enter. */
   const seededBatchToastIdRef = useRef<string | null>(null);
-  /** Mentor dismissed hub navigation for this space visit — do not re-enable from poll. */
-  const batchHubDismissedRef = useRef(false);
   const {
     batchDetail,
     currentRunningStep,
@@ -151,70 +128,19 @@ const SpaceDetailPage: React.FC = () => {
     );
   }, [spaceBatchDetail]);
 
-  // Resume in-flight batch after reload / space switch.
-  // Terminal session restore keeps batchDetail for hub only — do not open the progress panel.
-  useEffect(() => {
-    if (!spaceBatchDetail) return;
-    const { batch_id: batchId, status } = spaceBatchDetail.batch;
-    if (status === "pending" || status === "running") {
-      setActiveBatchId((prev) => (prev === batchId ? prev : batchId));
-      setShowBatchProgressPanel(true);
-    }
-  }, [spaceBatchDetail]);
-
-  // Persist cohort while hub context is active (refreshes TTL; skipped after dismiss).
-  useEffect(() => {
-    if (!spaceId || !isMentor || !spaceBatchDetail || !batchHubEnabled) return;
-    writeBatchHubSession(spaceId, spaceBatchDetail.batch.batch_id);
-  }, [spaceId, isMentor, spaceBatchDetail, batchHubEnabled]);
-
-  // Restore hub cohort: active batch first, else sessionStorage terminal batch via getBatch.
-  useEffect(() => {
-    if (!spaceId || !isMentor) return;
-    let cancelled = false;
-
-    const restoreBatchHubCohort = async () => {
-      try {
-        const active = await studyMaterialBatchService.getActiveBatch(spaceId);
-        if (cancelled) return;
-        if (active) {
-          if (!batchHubDismissedRef.current) {
-            writeBatchHubSession(spaceId, active.batch.batch_id);
-            setBatchHubEnabled(true);
-          }
-          return;
-        }
-
-        const sessionBatchId = readBatchHubSession(spaceId);
-        if (!sessionBatchId || cancelled || batchHubDismissedRef.current) return;
-        setActiveBatchId(sessionBatchId);
-        setBatchHubEnabled(true);
-      } catch {
-        if (cancelled || batchHubDismissedRef.current) return;
-        const sessionBatchId = readBatchHubSession(spaceId);
-        if (sessionBatchId) {
-          setActiveBatchId(sessionBatchId);
-          setBatchHubEnabled(true);
-        }
-      }
-    };
-
-    void restoreBatchHubCohort();
-    return () => {
-      cancelled = true;
-    };
-  }, [spaceId, isMentor]);
-
-  const handleDismissBatchHub = useCallback(() => {
-    if (!spaceId) return;
-    batchHubDismissedRef.current = true;
-    clearBatchHubSession(spaceId);
-    setBatchHubEnabled(false);
-    const status = spaceBatchDetail?.batch.status;
-    if (status !== "pending" && status !== "running") {
-      setActiveBatchId(null);
-    }
-  }, [spaceId, spaceBatchDetail?.batch.status]);
+  const {
+    batchHubEnabled,
+    setBatchHubEnabled,
+    batchHubDismissedRef,
+    handleDismissBatchHub,
+    resetBatchHubOnSpaceChange,
+  } = useBatchHubSession({
+    spaceId,
+    isMentor,
+    spaceBatchDetail,
+    setActiveBatchId,
+    setShowBatchProgressPanel,
+  });
 
   const {
     progress: traineeSpaceProgress,
@@ -230,6 +156,53 @@ const SpaceDetailPage: React.FC = () => {
     refresh: refreshMentorSpaceProgress,
   } = useMentorSpaceProgress(isMentor && spaceId ? spaceId : null);
 
+  const {
+    isPublishing,
+    unpublishPreview,
+    setUnpublishPreview,
+    isLoadingUnpublishPreview,
+    republishChecklist,
+    setRepublishChecklist,
+    handleUnpublishSpace,
+    handlePublishClick,
+    resetPublishFlowOnSpaceChange,
+  } = useSpacePublishFlow({
+    space,
+    spaceId,
+    showSpaceProgress,
+    refreshMentorSpaceProgress,
+    setSpace,
+  });
+
+  const {
+    showRootPickerModal,
+    setShowRootPickerModal,
+    showPolicyModal,
+    setShowPolicyModal,
+    showWarningModal,
+    setShowWarningModal,
+    selectedBatchNodeIds,
+    batchPreview,
+    existingPolicy,
+    isSubmittingBatchFlow,
+    closeBatchWizard,
+    resetWizardOnSpaceChange,
+    startGenerateAllFromWizard,
+    handleContinueRootPicker,
+    handlePolicyContinue,
+  } = useGenerateAllWizard({
+    spaceId,
+    batchHubDismissedRef,
+    completedBatchStepIdsRef,
+    settledBatchStepIdsRef,
+    batchAutoOpenedMaterialNodeIdsRef,
+    seededBatchToastIdRef,
+    setBatchHubEnabled,
+    setActiveBatchId,
+    setShowBatchProgressPanel,
+    setExternalResearchByNodeId,
+  });
+
   // Return undefined for nodes never visited so useStudyMaterial can distinguish
   // "not yet loaded" (undefined) from "loaded, no material" (null) when deciding
   // whether to fetch reference material from the server.
@@ -240,7 +213,8 @@ const SpaceDetailPage: React.FC = () => {
   const updateNodeStudyState = useCallback(
     (nodeId: string, patch: Partial<NodeStudyState>) => {
       setNodeStudyStates((prev) => {
-        const existing = prev.get(nodeId) ?? {
+        const current = prev.get(nodeId);
+        const existing = current ?? {
           currentPage: 1 as TopicContentPage,
           hasTriggeredGeneration: false,
           studyMaterialContent: null,
@@ -259,6 +233,9 @@ const SpaceDetailPage: React.FC = () => {
           currentQuizId: null,
           generationProgress: null,
         };
+        // Only skip when the node already has state — a missing entry must still be
+        // seeded so consumers can tell "loaded" from "never seen".
+        if (current && !hasPatchChanges(current, patch)) return prev;
         const next = new Map(prev);
         next.set(nodeId, { ...existing, ...patch });
         return next;
@@ -333,15 +310,12 @@ const SpaceDetailPage: React.FC = () => {
     // Reset space-specific UI state when switching spaces
     setSelectedNode(null);
     setShowInviteModal(false);
-    setIsPublishing(false);
+    resetPublishFlowOnSpaceChange();
     setIsEditingName(false);
     setEditName("");
     setEditDesc("");
     setIsSavingEdit(false);
     setShowManageTrainees(false);
-    setUnpublishPreview(null);
-    setIsLoadingUnpublishPreview(false);
-    setRepublishChecklist(null);
     setNodeContentRefreshTokens({});
     setIsMoveMode(false);
     setTreePanelWidth(280);
@@ -350,17 +324,10 @@ const SpaceDetailPage: React.FC = () => {
     clearStudyMaterialModuleOwnership();
     setShowSpaceProgress(false);
     setCameFromSpaceProgress(false);
-    setShowRootPickerModal(false);
-    setShowPolicyModal(false);
-    setShowWarningModal(false);
-    setSelectedBatchNodeIds([]);
-    setBatchPreview(null);
-    setExistingPolicy("skip");
-    setIsSubmittingBatchFlow(false);
+    resetWizardOnSpaceChange();
     setActiveBatchId(null);
     setShowBatchProgressPanel(false);
-    setBatchHubEnabled(false);
-    batchHubDismissedRef.current = false;
+    resetBatchHubOnSpaceChange();
     completedBatchStepIdsRef.current = new Set();
     settledBatchStepIdsRef.current = new Set();
     batchAutoOpenedMaterialNodeIdsRef.current = new Set();
@@ -487,72 +454,6 @@ const SpaceDetailPage: React.FC = () => {
       : 380;
     const delta = e.key === "ArrowLeft" ? -20 : 20;
     setTreePanelWidth((width) => Math.min(maxWidth, Math.max(260, width + delta)));
-  };
-
-  const loadRepublishChecklist = async (id: string) => {
-    try {
-      const checklist = await studyMaterialService.getRepublishChecklist(id);
-      if (checklist.nodes_with_publishable_material.length > 0) {
-        setRepublishChecklist(checklist.nodes_with_publishable_material);
-      }
-    } catch {
-      // Non-blocking — space publish still succeeded.
-    }
-  };
-
-  const handlePublishSpace = async () => {
-    if (!space || !spaceId) return;
-    setIsPublishing(true);
-    try {
-      const updated = await spaceService.publishSpace(spaceId, { is_published: true });
-      setSpace(updated);
-      toast.success("Space published!");
-      await loadRepublishChecklist(spaceId);
-    } catch (err) {
-      const e = err as { response?: { data?: { detail?: string } }; message?: string };
-      toast.error(e?.response?.data?.detail ?? e?.message ?? "Failed to publish space.");
-      throw err;
-    } finally {
-      setIsPublishing(false);
-    }
-  };
-
-  const handleUnpublishSpace = async () => {
-    if (!space || !spaceId) return;
-    setIsPublishing(true);
-    try {
-      const updated = await spaceService.publishSpace(spaceId, { is_published: false });
-      setSpace(updated);
-      setUnpublishPreview(null);
-      await mentorProgressService.syncSpaceProgress(spaceId);
-      if (showSpaceProgress) {
-        void refreshMentorSpaceProgress();
-      }
-      toast.success("Space unpublished.");
-    } catch (err) {
-      const e = err as { response?: { data?: { detail?: string } }; message?: string };
-      toast.error(e?.response?.data?.detail ?? e?.message ?? "Failed to unpublish space.");
-      throw err;
-    } finally {
-      setIsPublishing(false);
-    }
-  };
-
-  const handlePublishClick = async () => {
-    if (!space || !spaceId) return;
-    if (space.is_published) {
-      setIsLoadingUnpublishPreview(true);
-      try {
-        const preview = await spaceService.previewUnpublish(spaceId);
-        setUnpublishPreview(preview);
-      } catch {
-        toast.error("Failed to load unpublish preview.");
-      } finally {
-        setIsLoadingUnpublishPreview(false);
-      }
-    } else {
-      void handlePublishSpace();
-    }
   };
 
   const handleSaveEdit = async (e: React.FormEvent) => {
@@ -865,112 +766,12 @@ const SpaceDetailPage: React.FC = () => {
     [updateNodeInstruction, selectedNode]
   );
 
-  const closeBatchWizard = useCallback(() => {
-    setShowRootPickerModal(false);
-    setShowPolicyModal(false);
-    setShowWarningModal(false);
-    setBatchPreview(null);
-    setSelectedBatchNodeIds([]);
-    setSelectedBatchExternalResearchNodeIds([]);
-  }, []);
-
   const setExternalResearchForNode = useCallback((nodeId: string, enabled: boolean) => {
     setExternalResearchByNodeId((prev) => {
       if (Boolean(prev[nodeId]) === enabled) return prev;
       return { ...prev, [nodeId]: enabled };
     });
   }, []);
-
-  const startGenerateAllFromWizard = useCallback(async (policy: ExistingMaterialPolicy) => {
-    if (!spaceId || selectedBatchNodeIds.length === 0) return;
-    const eligibleNodeIds = batchPreview
-      ? batchPreview.items.filter((item) => item.can_generate).map((item) => item.node_id)
-      : selectedBatchNodeIds;
-    if (eligibleNodeIds.length === 0) {
-      toast.error("None of the selected topics can be queued for generation.");
-      return;
-    }
-    const eligibleSet = new Set(eligibleNodeIds);
-    const externalResearchNodeIds = selectedBatchExternalResearchNodeIds.filter((id) =>
-      eligibleSet.has(id),
-    );
-
-    setIsSubmittingBatchFlow(true);
-    closeBatchWizard();
-
-    try {
-      const created = await studyMaterialBatchService.createBatch(spaceId, {
-        root_node_ids: [],
-        node_ids: eligibleNodeIds,
-        policy,
-        external_research_node_ids: externalResearchNodeIds,
-      });
-      batchHubDismissedRef.current = false;
-      writeBatchHubSession(spaceId, created.batch_id);
-      setBatchHubEnabled(true);
-      setActiveBatchId(created.batch_id);
-      setShowBatchProgressPanel(true);
-      completedBatchStepIdsRef.current = new Set();
-      settledBatchStepIdsRef.current = new Set();
-      batchAutoOpenedMaterialNodeIdsRef.current = new Set();
-      seededBatchToastIdRef.current = null;
-      toast.success(
-        "Generate-all started. Progress continues in the background — you can close this tab.",
-      );
-    } catch (err) {
-      const e = err as { response?: { data?: { detail?: string } }; message?: string };
-      toast.error(e?.response?.data?.detail ?? e?.message ?? "Failed to start generate-all batch.");
-    } finally {
-      setIsSubmittingBatchFlow(false);
-    }
-  }, [
-    spaceId,
-    selectedBatchNodeIds,
-    selectedBatchExternalResearchNodeIds,
-    batchPreview,
-    closeBatchWizard,
-  ]);
-
-  const handleContinueRootPicker = useCallback(async (selection: {
-    nodeIds: string[];
-    externalResearchNodeIds: string[];
-  }) => {
-    if (!spaceId || selection.nodeIds.length === 0) return;
-    setIsSubmittingBatchFlow(true);
-    try {
-      const preview = await studyMaterialBatchService.preview(spaceId, {
-        root_node_ids: [],
-        node_ids: selection.nodeIds,
-      });
-      setBatchPreview(preview);
-      setSelectedBatchNodeIds(selection.nodeIds);
-      setSelectedBatchExternalResearchNodeIds(selection.externalResearchNodeIds);
-      setExternalResearchByNodeId((prev) => {
-        const next = { ...prev };
-        for (const nodeId of selection.nodeIds) {
-          next[nodeId] = selection.externalResearchNodeIds.includes(nodeId);
-        }
-        return next;
-      });
-      setShowRootPickerModal(false);
-      setShowPolicyModal(true);
-    } catch (err) {
-      const e = err as { response?: { data?: { detail?: string } }; message?: string };
-      toast.error(e?.response?.data?.detail ?? e?.message ?? "Failed to preview generation plan.");
-    } finally {
-      setIsSubmittingBatchFlow(false);
-    }
-  }, [spaceId]);
-
-  const handlePolicyContinue = useCallback(async (policy: ExistingMaterialPolicy) => {
-    setExistingPolicy(policy);
-    if (batchPreview?.warnings.show_no_instruction_warning || batchPreview?.warnings.show_inheritance_warning) {
-      setShowPolicyModal(false);
-      setShowWarningModal(true);
-      return;
-    }
-    await startGenerateAllFromWizard(policy);
-  }, [batchPreview, startGenerateAllFromWizard]);
 
   if (isLoadingSpace) {
     return (

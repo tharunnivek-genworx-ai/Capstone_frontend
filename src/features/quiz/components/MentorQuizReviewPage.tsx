@@ -1,4 +1,4 @@
-// src/features/quiz/components/QuizPage3.tsx
+// src/features/quiz/components/MentorQuizReviewPage.tsx
 import React, { useEffect, useState } from "react";
 import {
   DndContext,
@@ -38,7 +38,7 @@ import { useGenerationRunResume } from "../../generation/hooks/useGenerationRunR
 import "../../study_material/styles/studyMaterialMentor.css";
 import "../styles/mentorQuiz.css";
 
-interface QuizPage3Props {
+interface MentorQuizReviewPageProps {
   nodeTitle: string;
   qz: UseQuizReturn;
   studentVisibility?: MentorStudentVisibilityOut | null;
@@ -51,7 +51,7 @@ const DIFFICULTY_OPTIONS: { value: QuizDifficulty; label: string }[] = [
   { value: "hard", label: "Hard" },
 ];
 
-const QuizPage3: React.FC<QuizPage3Props> = ({
+const MentorQuizReviewPage: React.FC<MentorQuizReviewPageProps> = ({
   nodeTitle,
   qz,
   studentVisibility = null,
@@ -658,4 +658,4 @@ const QuizPage3: React.FC<QuizPage3Props> = ({
   );
 };
 
-export default QuizPage3;
+export default MentorQuizReviewPage;

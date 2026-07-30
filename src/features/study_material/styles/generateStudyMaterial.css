@@ -297,40 +297,6 @@
 
 /* ─── Reassurance banner ───────────────────────────────────────────────────── */
 
-/* ─── Two-column layout ────────────────────────────────────────────────────── */
-
-.gsm-layout {
-  display: grid;
-  grid-template-columns: 1fr 320px;
-  gap: 24px;
-  align-items: start;
-}
-
-.gsm-main-col {
-  display: flex;
-  flex-direction: column;
-  gap: 20px;
-  min-width: 0;
-}
-
-.gsm-rail {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-  position: sticky;
-  top: 26px;
-}
-
-@media (max-width: 980px) {
-  .gsm-layout {
-    grid-template-columns: 1fr;
-  }
-  .gsm-rail {
-    order: -1;
-    position: static;
-  }
-}
-
 /* ─── Cards ─────────────────────────────────────────────────────────────────── */
 
 .gsm-card {
@@ -1121,83 +1087,6 @@
   display: flex;
   align-items: center;
   gap: 6px;
-}
-
-/* ─── Rail: student reference card ─────────────────────────────────────────── */
-
-.gsm-student-ref-card {
-  border: 1px solid var(--gsm-border);
-  background: var(--color-bg-surface);
-}
-
-.gsm-student-ref-card__sub {
-  margin-bottom: 14px;
-}
-
-.gsm-student-ref-card__btn {
-  margin-top: 0;
-}
-
-/* ─── Rail: ready CTA card ─────────────────────────────────────────────────── */
-
-.gsm-ready-card {
-  border: 1.5px solid var(--gsm-primary-tint-2);
-  background: linear-gradient(180deg, #fafbff, #fff);
-}
-
-.gsm-ready-status {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  margin-bottom: 12px;
-}
-
-.gsm-ready-status__dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: var(--gsm-success);
-}
-
-.gsm-ready-status__text {
-  font-size: 12px;
-  font-weight: 700;
-  color: var(--gsm-success);
-}
-
-.gsm-ready-status--paused .gsm-ready-status__dot {
-  background: #f59e0b;
-}
-
-.gsm-ready-status--paused .gsm-ready-status__text {
-  color: #f59e0b;
-}
-
-.gsm-ready-title {
-  font-size: 15.5px;
-  font-weight: 600;
-  margin: 0 0 6px;
-  color: var(--color-text-primary);
-}
-
-.gsm-ready-sub {
-  font-size: 12.5px;
-  color: var(--gsm-muted);
-  margin: 0 0 16px;
-  line-height: 1.5;
-}
-
-.gsm-ready-actions {
-  display: flex;
-  flex-direction: column;
-  gap: 9px;
-}
-
-.gsm-ready-waiting {
-  font-size: 12px;
-  color: var(--gsm-amber);
-  margin: 0 0 12px;
-  line-height: 1.5;
 }
 
 /* ─── Academic Serenity generation workspace ─────────────────────────────── */

@@ -7,15 +7,6 @@ export const QC_LLM_FAILED_TITLE = "Quality review recommended";
 export const QC_LLM_FAILED_BODY =
   "This study material did not pass our quality analysis. That does not mean the content is invalid or weak — it means it did not meet our company-set standards. Read the draft carefully and review the report below before discarding or proceeding with this draft.";
 
-const PLACEMENT_ONLY_CHECK_IDS = new Set([
-  "det_equation_in_content",
-  "det_math_in_code_block",
-  "det_pseudocode_in_code_block",
-  "det_code_in_formula_block",
-  "det_empty_block_explanation",
-  "det_conceptual_has_blocks",
-]);
-
 interface QcDisplayCheck {
   id?: string | null;
   check_id?: string | null;
@@ -38,6 +29,9 @@ interface QcDisplayResult extends LlmDiagnosticsFields {
   humanized_corrective_instructions?: string | null;
   summary?: string | null;
   flagged_questions?: Array<{ flags?: string[] | null }> | null;
+  /** Server SoT for placement-only suppression (camelCase or snake_case). */
+  shouldShowMentorQcWarning?: boolean | null;
+  should_show_mentor_qc_warning?: boolean | null;
   warning_presentation?: {
     det_summary?: string | null;
     reassurance?: string | null;
@@ -58,14 +52,17 @@ function failedChecks(qcResult: QcDisplayResult): QcDisplayCheck[] {
   return fromChecks.length > 0 ? fromChecks : (qcResult.failed_checks ?? []);
 }
 
-function isPlacementOnlyFailure(qcResult: QcDisplayResult): boolean {
-  const failures = failedChecks(qcResult);
-  return (
-    failures.length > 0 &&
-    failures.every((check) =>
-      PLACEMENT_ONLY_CHECK_IDS.has(check.check_id ?? check.id ?? ""),
-    )
-  );
+/** Prefer API placement policy; undefined means legacy payload without the flag. */
+function resolveShouldShowMentorQcWarning(
+  qcResult: QcDisplayResult,
+): boolean | undefined {
+  if (typeof qcResult.shouldShowMentorQcWarning === "boolean") {
+    return qcResult.shouldShowMentorQcWarning;
+  }
+  if (typeof qcResult.should_show_mentor_qc_warning === "boolean") {
+    return qcResult.should_show_mentor_qc_warning;
+  }
+  return undefined;
 }
 
 function hasUserFacingQcDetail(qcResult: QcDisplayResult): boolean {
@@ -130,6 +127,9 @@ export function shouldShowQcWarning(
   if (isLlmRateLimited(qcResult)) return true;
   if (!qcResult || isQcWarningDismissed(qcResult)) return false;
   if (qcResult.errorType) return true;
-  if (isPlacementOnlyFailure(qcResult)) return false;
+
+  const mentorQcPolicy = resolveShouldShowMentorQcWarning(qcResult);
+  if (mentorQcPolicy === false) return false;
+
   return hasUserFacingQcDetail(qcResult);
 }

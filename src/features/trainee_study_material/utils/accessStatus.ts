@@ -14,11 +14,7 @@ export function getTreeNodeLockState(node: NodeTreeNode): {
     // full unlock copy belongs in the tooltip / detail panel.
     return { isLocked: true, label: "Locked" };
   }
-  const legacyComingSoon =
-    node.access_status == null &&
-    node.children.length === 0 &&
-    node.hasPublishedMaterial === false;
-  if (node.access_status === "coming_soon" || legacyComingSoon) {
+  if (node.access_status === "coming_soon") {
     return { isLocked: true, label: "Coming soon" };
   }
   return { isLocked: false, label: null };

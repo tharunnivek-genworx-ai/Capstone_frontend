@@ -3,11 +3,6 @@ import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-libra
 import userEvent from "@testing-library/user-event";
 
 import YoutubePlayerModal from "./YoutubePlayerModal";
-import { trackVideoEvent } from "../utils/videoAnalytics";
-
-vi.mock("../utils/videoAnalytics", () => ({
-  trackVideoEvent: vi.fn(),
-}));
 
 const VIDEO_ID = "dQw4w9WgXcQ";
 const WATCH_URL = `https://www.youtube.com/watch?v=${VIDEO_ID}`;
@@ -21,8 +16,6 @@ function renderModal(overrides: Partial<React.ComponentProps<typeof YoutubePlaye
       videoId={VIDEO_ID}
       title="Test video"
       watchUrl={WATCH_URL}
-      surface="trainee"
-      mediaId="media-1"
       {...overrides}
     />,
   );
@@ -46,16 +39,9 @@ describe("YoutubePlayerModal", () => {
     expect(screen.getByRole("heading", { name: "Test video" })).toBeInTheDocument();
   });
 
-  it("tracks watch_in_app when opened with a valid embed", () => {
-    renderModal({ surface: "mentor", nodeId: "node-1" });
+  it("embeds a valid YouTube video when opened", () => {
+    renderModal();
 
-    expect(trackVideoEvent).toHaveBeenCalledWith("watch_in_app", {
-      surface: "mentor",
-      nodeId: "node-1",
-      mediaId: "media-1",
-      videoId: VIDEO_ID,
-      url: WATCH_URL,
-    });
     expect(screen.getByTestId("youtube-player-iframe")).toHaveAttribute(
       "src",
       `https://www.youtube.com/embed/${VIDEO_ID}`,
@@ -80,7 +66,7 @@ describe("YoutubePlayerModal", () => {
     });
   });
 
-  it("shows embed error UI and tracks embed_error after load timeout", () => {
+  it("shows embed error UI after load timeout", () => {
     vi.useFakeTimers();
     renderModal();
 
@@ -90,29 +76,17 @@ describe("YoutubePlayerModal", () => {
 
     expect(screen.getByTestId("youtube-player-error")).toBeInTheDocument();
     expect(screen.getByRole("alert")).toHaveTextContent("Unable to play this video here");
-    expect(trackVideoEvent).toHaveBeenCalledWith(
-      "embed_error",
-      expect.objectContaining({ reason: "load_timeout", videoId: VIDEO_ID }),
-    );
 
     const dialog = screen.getByTestId("youtube-player-modal");
     expect(dialog).toHaveAttribute("aria-describedby");
   });
 
-  it("tracks open_external_fallback when Open in YouTube is clicked", () => {
+  it("opens YouTube externally when Open in YouTube is clicked", () => {
     const openSpy = vi.spyOn(window, "open").mockReturnValue({} as Window);
     renderModal();
 
     fireEvent.click(screen.getByRole("button", { name: /open in youtube/i }));
 
-    expect(trackVideoEvent).toHaveBeenCalledWith(
-      "open_external_fallback",
-      expect.objectContaining({
-        surface: "trainee",
-        videoId: VIDEO_ID,
-        reason: "user_choice",
-      }),
-    );
     expect(openSpy).toHaveBeenCalledWith(WATCH_URL, "_blank", "noopener,noreferrer");
   });
 
@@ -123,7 +97,6 @@ describe("YoutubePlayerModal", () => {
         onClose={vi.fn()}
         videoId={VIDEO_ID}
         watchUrl={WATCH_URL}
-        surface="trainee"
       />,
     );
 

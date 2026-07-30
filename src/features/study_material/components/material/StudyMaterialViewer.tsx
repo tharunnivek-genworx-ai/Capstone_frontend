@@ -3,7 +3,6 @@ import { Maximize2 } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import type { VersionLineageItem } from "../../types/studyMaterial.types";
-import { normalizeStudyContent } from "../../utils/markdownConversion";
 import {
   studyMaterialRehypePlugins,
   studyMaterialRemarkPlugins,
@@ -85,7 +84,6 @@ const StudyMaterialViewer: React.FC<StudyMaterialViewerProps> = ({
   documentLayout = false,
   onOpenFocusView,
 }) => {
-  const markdown = normalizeStudyContent(content);
   const remarkPlugins = [...studyMaterialRemarkPlugins, remarkGfm];
   const showPublish = Boolean(onPublish) && (canPublish || publishDisabledTooltip);
   const showUnpublish = Boolean(onUnpublish) && (canUnpublish || unpublishDisabledTooltip);
@@ -250,7 +248,7 @@ const StudyMaterialViewer: React.FC<StudyMaterialViewerProps> = ({
                 remarkPlugins={remarkPlugins}
                 rehypePlugins={studyMaterialRehypePlugins}
               >
-                {markdown}
+                {content}
               </ReactMarkdown>
             </div>
           </StudyMaterialDocument>
@@ -260,7 +258,7 @@ const StudyMaterialViewer: React.FC<StudyMaterialViewerProps> = ({
               remarkPlugins={remarkPlugins}
               rehypePlugins={studyMaterialRehypePlugins}
             >
-              {markdown}
+              {content}
             </ReactMarkdown>
           </div>
         )}

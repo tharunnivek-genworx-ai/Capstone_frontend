@@ -27,6 +27,30 @@ describe("instruction mode controls", () => {
     expect(isApproachDirty(node, "inherit", "")).toBe(true);
   });
 
+  it("prefers API instruction_mode when present", () => {
+    const node = {
+      instruction_mode: "inherit",
+      node_specific_instruction: "",
+      node_additive_instruction: "would look like extend",
+    } as Parameters<typeof detectInstructionModeFromNode>[0];
+
+    expect(detectInstructionModeFromNode(node)).toBe("inherit");
+  });
+
+  it("falls back to column inference when instruction_mode is absent", () => {
+    const extendNode = {
+      node_specific_instruction: null,
+      node_additive_instruction: "Add an example",
+    } as Parameters<typeof detectInstructionModeFromNode>[0];
+    const inheritNode = {
+      node_specific_instruction: null,
+      node_additive_instruction: null,
+    } as Parameters<typeof detectInstructionModeFromNode>[0];
+
+    expect(detectInstructionModeFromNode(extendNode)).toBe("extend");
+    expect(detectInstructionModeFromNode(inheritNode)).toBe("inherit");
+  });
+
   it("extends or replaces according to the section-default toggle", () => {
     expect(deriveInstructionMode(true, "Use a practical example")).toBe("extend");
     expect(deriveInstructionMode(false, "Teach this as a case study")).toBe("replace");

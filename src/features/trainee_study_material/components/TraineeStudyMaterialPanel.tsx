@@ -170,7 +170,6 @@ const TraineeStudyMaterialPanel: React.FC<TraineeStudyMaterialPanelProps> = ({
       title={nodeTitle}
       referenceMaterialId={trainee.material.reference_material_id}
       referenceImagesRefreshKey={trainee.material.version_id}
-      scrollContainerRef={trainee.scrollContainerRef}
       hideReferenceImages={isFullscreen}
       documentLayout
       hideHeader
@@ -200,7 +199,12 @@ const TraineeStudyMaterialPanel: React.FC<TraineeStudyMaterialPanelProps> = ({
         >
           <div className="trainee-study-material-fullscreen__inner">
             {toolbar}
-            <div className="trainee-study-material-fullscreen__content">{studySurface}</div>
+            <div
+              className="trainee-study-material-fullscreen__content"
+              ref={trainee.scrollHostRef}
+            >
+              {studySurface}
+            </div>
           </div>
           </div>
         </div>,
@@ -217,7 +221,12 @@ const TraineeStudyMaterialPanel: React.FC<TraineeStudyMaterialPanelProps> = ({
           }`}
         >
           {toolbar}
-          <div className="trainee-study-material-page__content">{studySurface}</div>
+          <div
+            className="trainee-study-material-page__content"
+            ref={trainee.scrollHostRef}
+          >
+            {studySurface}
+          </div>
         </div>
       )}
       {fullscreenOverlay}

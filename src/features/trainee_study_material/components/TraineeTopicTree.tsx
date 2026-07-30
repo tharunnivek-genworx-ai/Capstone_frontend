@@ -18,10 +18,7 @@ function collectLockKinds(nodes: NodeTreeNode[]): {
   for (const node of nodes) {
     if (node.access_status === "prerequisite_locked") {
       hasPrerequisiteLocked = true;
-    } else if (
-      node.access_status === "coming_soon" ||
-      (node.access_status == null && node.hasPublishedMaterial === false)
-    ) {
+    } else if (node.access_status === "coming_soon") {
       hasComingSoon = true;
     }
     const nested = collectLockKinds(node.children);

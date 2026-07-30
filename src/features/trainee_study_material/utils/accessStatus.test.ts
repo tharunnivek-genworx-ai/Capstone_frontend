@@ -68,10 +68,10 @@ describe("trainee access status UI mapping", () => {
     expect(isSubtopicLocked(subtopic("coming_soon"))).toBe(true);
   });
 
-  it("supports legacy tree payloads during rolling deployment", () => {
+  it("does not invent coming_soon when access_status is missing", () => {
     const state = getTreeNodeLockState(
       treeNode({ hasPublishedMaterial: false, access_status: undefined }),
     );
-    expect(state).toEqual({ isLocked: true, label: "Coming soon" });
+    expect(state).toEqual({ isLocked: false, label: null });
   });
 });
