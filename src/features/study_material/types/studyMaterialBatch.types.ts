@@ -120,11 +120,3 @@ export interface BatchCancelResponse {
   batch_id: string;
   status: BatchJobStatus;
 }
-
-// Legacy aliases kept for wizard components during migration.
-export type StudyMaterialBatchPreviewRequest = BatchPreviewRequest;
-export type StudyMaterialBatchPreviewItem = BatchPreviewItem;
-export type StudyMaterialBatchPreviewWarningNode = BatchPreviewWarningNode;
-export type StudyMaterialBatchPreviewWarnings = BatchPreviewWarnings;
-export type StudyMaterialBatchPreviewRoot = BatchPreviewRoot;
-export type StudyMaterialBatchPreviewResponse = BatchPreviewResponse;

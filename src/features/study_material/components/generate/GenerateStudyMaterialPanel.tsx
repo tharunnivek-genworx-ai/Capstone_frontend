@@ -27,7 +27,7 @@ export interface GenerateStudyMaterialPanelProps {
   sm: UseStudyMaterialReturn;
   onOpenRefModal: () => void;
   onOpenMediaModal: () => void;
-  isWaitingForGenerateAll?: boolean;
+  isQueuedInGenerateAll?: boolean;
   /** A study-material run is paused (resumable). Blocks new generation until resumed/deleted. */
   runPaused?: boolean;
   /** A failed durable run can still be resumed or deleted from Material. */
@@ -59,7 +59,7 @@ export default function GenerateStudyMaterialPanel({
   sm,
   onOpenRefModal,
   onOpenMediaModal,
-  isWaitingForGenerateAll = false,
+  isQueuedInGenerateAll = false,
   runPaused = false,
   runFailed = false,
 }: GenerateStudyMaterialPanelProps) {
@@ -82,7 +82,7 @@ export default function GenerateStudyMaterialPanel({
 
   const handleGenerateClick = useCallback(() => {
     if (runPaused || runFailed) return;
-    if (isWaitingForGenerateAll && !sm.isGenerating) return;
+    if (isQueuedInGenerateAll && !sm.isGenerating) return;
     if (branchDefaultDirty || approachDirty) return;
 
     const ignoringSectionDefaults = mode === "replace" && !modeText.trim();
@@ -112,26 +112,26 @@ export default function GenerateStudyMaterialPanel({
     branchDefaultDirty,
     approachDirty,
     sm,
-    isWaitingForGenerateAll,
+    isQueuedInGenerateAll,
     runPaused,
     runFailed,
   ]);
 
   const handleContinueFromWarning = useCallback(() => {
     if (runPaused || runFailed) return;
-    if (isWaitingForGenerateAll && !sm.isGenerating) return;
+    if (isQueuedInGenerateAll && !sm.isGenerating) return;
     setShowNoInstructionWarning(false);
     void sm.handleGenerateStudyMaterial();
-  }, [sm, isWaitingForGenerateAll, runPaused, runFailed]);
+  }, [sm, isQueuedInGenerateAll, runPaused, runFailed]);
 
   const handleRegenerate = useCallback(() => {
     if (runPaused || runFailed) return;
-    if (isWaitingForGenerateAll && !sm.isGenerating) return;
+    if (isQueuedInGenerateAll && !sm.isGenerating) return;
     if (branchDefaultDirty || approachDirty) return;
     sm.setShowRegenerateConfirmModal(true);
   }, [
     sm,
-    isWaitingForGenerateAll,
+    isQueuedInGenerateAll,
     runPaused,
     runFailed,
     branchDefaultDirty,
@@ -205,7 +205,7 @@ export default function GenerateStudyMaterialPanel({
         isDeletingDrafts={sm.isDeletingDrafts}
         isLoadingGenerationSource={sm.isLoadingGenerationSource}
         isLoadingTopicResources={sm.isLoadingTopicResources}
-        isWaitingForGenerateAll={isWaitingForGenerateAll && !sm.isGenerating}
+        isQueuedInGenerateAll={isQueuedInGenerateAll && !sm.isGenerating}
         runPaused={runPaused}
         runFailed={runFailed}
         onOpenRefModal={onOpenRefModal}

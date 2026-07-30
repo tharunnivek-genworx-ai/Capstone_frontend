@@ -118,11 +118,16 @@ export const studyMaterialService = {
 
   async listVersions(
     nodeId: string,
-    options?: { archived?: boolean }
+    options?: { archived?: boolean; includeArchived?: boolean }
   ): Promise<StudyMaterialVersionHistoryOut> {
     const response = await studyAgentClient.get<StudyMaterialVersionHistoryOut>(
       `/nodes/${nodeId}/study-material/versions`,
-      { params: { archived: options?.archived ?? false } }
+      {
+        params: {
+          archived: options?.archived ?? false,
+          include_archived: options?.includeArchived ?? false,
+        },
+      }
     );
     return response.data;
   },

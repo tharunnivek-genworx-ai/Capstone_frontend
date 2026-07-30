@@ -35,9 +35,9 @@ import {
   GenerationJobFailedError,
 } from "../../generation/utils/generationJobErrors";
 import {
-  computeShouldShowHistoryHub,
   isStudyMaterialProgressing,
   partitionHistoryVersions,
+  resolveShouldShowHistoryHub,
   shouldSilentlyActivateOnSelect,
   type HistoryVersionPartitions,
 } from "../utils/versionHistoryPartitions";
@@ -50,9 +50,37 @@ import {
   loadInstructionBannerDismissals,
   saveInstructionBannerDismissals,
 } from "../utils/instructionBannerDismissal";
+import {
+  addGeneratingNode,
+  addRecoveringRun,
+  clearStudyMaterialModuleOwnership,
+  deleteGeneratingNode,
+  deleteRecoveringRun,
+  hasGeneratingNode,
+  hasRecoveringRun,
+} from "../utils/studyMaterialRunOwnership";
+import {
+  EXTERNAL_RESEARCH_FAIL_SOFT_MESSAGE,
+  SOURCE_PDF_DELETED_BLOCK_REASON,
+  extractStudyMaterialErrorDetail,
+  isEspaceNotPublishedError,
+  isPublishTransactionError,
+  isSourcePdfDeleted,
+  isUnpublishTransactionError,
+  publishSuccessToastMessage,
+} from "../utils/studyMaterialHookHelpers";
+import { refreshMentorUiStateForNode } from "../utils/studyMaterialMentorUiSync";
+import { routeToUnresolvedStudyMaterialRun } from "../utils/studyMaterialGenerationGuards";
+import { resolveVersionSelectPanelFlags } from "../utils/studyMaterialVersionSelect";
 
 // Re-export for consumers that import from this hook
 export type { NodeStudyStatePatch, NodeStudyState };
+/** @deprecated Prefer importing from `../utils/studyMaterialRunOwnership`. */
+export { clearStudyMaterialModuleOwnership };
+export {
+  EXTERNAL_RESEARCH_FAIL_SOFT_MESSAGE,
+  SOURCE_PDF_DELETED_BLOCK_REASON,
+} from "../utils/studyMaterialHookHelpers";
 
 type VersionHistoryLists = {
   history: StudyMaterialVersionSummary[];
@@ -60,39 +88,6 @@ type VersionHistoryLists = {
 };
 
 export type RefModalMode = "manage" | "view";
-
-/** Shown when a draft's frozen reference_material_id no longer has an active upload. */
-export const SOURCE_PDF_DELETED_BLOCK_REASON =
-  "The reference PDF for this draft was removed. Upload a new PDF, or discard drafts and generate fresh from page 1 without a reference document.";
-
-/** Design §14 — mild mentor copy when External Research fail-softs (not QC tone). */
-export const EXTERNAL_RESEARCH_FAIL_SOFT_MESSAGE =
-  "We couldn't find enough reliable information online for this topic, so this version was generated without external references. You can attach a reference PDF instead, or edit the generated content directly.";
-
-function isSourcePdfDeleted(
-  activeVersion: StudyMaterialVersionOut | null,
-  referenceMaterial: ReferenceMaterialOut | null,
-  isLoadingGenerationSource: boolean,
-): boolean {
-  return Boolean(
-    activeVersion?.reference_material_id != null &&
-    !referenceMaterial &&
-    !isLoadingGenerationSource
-  );
-}
-
-/** Nodes with an in-flight generate/regenerate/improve request (survives node switches). */
-const generatingNodeIds = new Set<string>();
-const recoveringRunIds = new Set<string>();
-
-/**
- * Clear module-level ownership Sets when space study-state is wiped (space switch).
- * Without this, `generatingNodeIds` can block Progress recovery after remount.
- */
-export function clearStudyMaterialModuleOwnership(): void {
-  generatingNodeIds.clear();
-  recoveringRunIds.clear();
-}
 
 interface UseStudyMaterialParams {
   node: NodeTreeNode | null;
@@ -356,6 +351,11 @@ export function useStudyMaterial({
     async () => {}
   );
   const versionHistoryRequestRef = useRef(0);
+  const versionHistoryInFlightRef = useRef<
+    Map<string, Promise<VersionHistoryLists | null>>
+  >(new Map());
+  /** Tracks page so we only re-fetch mentor UI when *entering* Material (e.g. after quiz). */
+  const previousStudyPageRef = useRef<TopicContentPage | null>(null);
   const generationSourceRequestRef = useRef(0);
   const topicResourcesRequestRef = useRef(0);
   const nodeMediaByNodeRef = useRef<Map<string, NodeMediaOut[]>>(new Map());
@@ -550,36 +550,15 @@ export function useStudyMaterial({
 
   const refreshMentorUiState = useCallback(
     async (nodeId: string, viewingId?: string | null) => {
-      setIsLoadingMentorUiState(true);
-      try {
-        const state = await studyMaterialService.getMentorUiState(
-          nodeId,
-          viewingId ?? viewingVersionId
-        );
-        mentorUiStateByNodeRef.current.set(nodeId, state);
-        mentorUiFetchedNodeIdsRef.current.add(nodeId);
-        if (isViewingNode(nodeId)) {
-          applyMentorUiState(nodeId, state);
-        }
-        if (state.has_versions) {
-          patchNodeStudyState(nodeId, { hasTriggeredGeneration: true });
-        } else {
-          patchNodeStudyState(nodeId, {
-            hasTriggeredGeneration: false,
-            studyMaterialContent: null,
-            activeVersion: null,
-          });
-        }
-      } catch {
-        if (isViewingNode(nodeId)) {
-          // Keep per-node cache so a transient failure does not grey out Material.
-          applyMentorUiState(nodeId, mentorUiStateByNodeRef.current.get(nodeId) ?? null);
-        }
-      } finally {
-        if (isViewingNode(nodeId)) {
-          setIsLoadingMentorUiState(false);
-        }
-      }
+      await refreshMentorUiStateForNode(nodeId, viewingId, {
+        viewingVersionId,
+        mentorUiStateByNode: mentorUiStateByNodeRef.current,
+        mentorUiFetchedNodeIds: mentorUiFetchedNodeIdsRef.current,
+        isViewingNode,
+        applyMentorUiState,
+        patchNodeStudyState,
+        setIsLoadingMentorUiState,
+      });
     },
     [viewingVersionId, patchNodeStudyState, applyMentorUiState]
   );
@@ -596,26 +575,39 @@ export function useStudyMaterial({
   }, []);
 
   const refreshVersionHistory = useCallback(async (nodeId: string): Promise<VersionHistoryLists | null> => {
+    const existing = versionHistoryInFlightRef.current.get(nodeId);
+    if (existing) return existing;
+
     const requestId = ++versionHistoryRequestRef.current;
     setIsLoadingVersions(true);
-    try {
-      const [history, archived] = await Promise.all([
-        studyMaterialService.listVersions(nodeId, { archived: false }),
-        studyMaterialService.listVersions(nodeId, { archived: true }),
-      ]);
-      if (requestId !== versionHistoryRequestRef.current) return null;
-      setVersionHistory(history.versions);
-      setArchivedVersionHistory(archived.versions);
-      await refreshClearDraftsEligibility(nodeId);
-      return { history: history.versions, archived: archived.versions };
-    } catch {
-      /* non-critical */
-      return null;
-    } finally {
-      if (requestId === versionHistoryRequestRef.current) {
-        setIsLoadingVersions(false);
+    const request = (async () => {
+      try {
+        const response = await studyMaterialService.listVersions(nodeId, {
+          includeArchived: true,
+        });
+        if (requestId !== versionHistoryRequestRef.current) return null;
+        const history = response.versions.filter((version) => !version.is_archived);
+        const archived = response.versions.filter((version) => version.is_archived);
+        setVersionHistory(history);
+        setArchivedVersionHistory(archived);
+        await refreshClearDraftsEligibility(nodeId);
+        return { history, archived };
+      } catch {
+        /* non-critical */
+        return null;
+      } finally {
+        if (requestId === versionHistoryRequestRef.current) {
+          setIsLoadingVersions(false);
+        }
       }
-    }
+    })();
+    versionHistoryInFlightRef.current.set(nodeId, request);
+    void request.finally(() => {
+      if (versionHistoryInFlightRef.current.get(nodeId) === request) {
+        versionHistoryInFlightRef.current.delete(nodeId);
+      }
+    });
+    return request;
   }, [refreshClearDraftsEligibility]);
 
   refreshVersionHistoryRef.current = refreshVersionHistory;
@@ -686,16 +678,8 @@ export function useStudyMaterial({
 
   const shouldShowHistoryHub = useMemo(
     () =>
-      activeMentorUiState != null &&
-      computeShouldShowHistoryHub(
-        versionHistory,
-        archivedVersionHistory,
-        activeMentorUiState,
-        { isGeneratingOrProgressing },
-      ),
+      resolveShouldShowHistoryHub(activeMentorUiState, { isGeneratingOrProgressing }),
     [
-      versionHistory,
-      archivedVersionHistory,
       activeMentorUiState,
       isGeneratingOrProgressing,
     ]
@@ -769,23 +753,6 @@ export function useStudyMaterial({
     void refreshTopicResourcesRef.current();
   }, [node?.node_id, isMentor]);
 
-  // Enable study-material navigation when mentor-accessible versions exist
-  useEffect(() => {
-    if (!node || !isMentor || hasTriggeredGeneration) return;
-    const nodeId = node.node_id;
-    let cancelled = false;
-    studyMaterialService
-      .getMentorUiState(nodeId)
-      .then((state) => {
-        if (cancelled || !state.has_versions) return;
-        patchNodeStudyState(nodeId, { hasTriggeredGeneration: true });
-      })
-      .catch(() => {/* non-critical */ });
-    return () => {
-      cancelled = true;
-    };
-  }, [node?.node_id, isMentor, hasTriggeredGeneration, patchNodeStudyState]);
-
   // Re-fetch mentor UI state whenever the node changes, when viewingVersionId
   // changes, OR when the effective instruction changes (e.g. after reparenting
   // the node in the tree, or after saving updated teaching settings).
@@ -796,6 +763,24 @@ export function useStudyMaterial({
     if (!node || !isMentor) return;
     void refreshMentorUiStateRef.current(node.node_id, viewingVersionId);
   }, [node?.node_id, isMentor, viewingVersionId, currentEffectiveInstruction, spaceIsPublished]);
+
+  // Node switches are covered by the general mentor-ui refresh; reset so we don't
+  // treat the previous node's page as "entered Material" for this node.
+  useEffect(() => {
+    previousStudyPageRef.current = null;
+  }, [node?.node_id]);
+
+  // Refresh mentor UI when returning to Material (e.g. after publishing a quiz).
+  // Narrower than the old always-on page-2 effect: only fire on page *entry*, so we
+  // do not duplicate the general mentor-ui refresh above on every page-2 mount.
+  useEffect(() => {
+    const previousPage = previousStudyPageRef.current;
+    previousStudyPageRef.current = currentPage;
+    if (!node || !isMentor || currentPage !== 2) return;
+    // Skip initial mount / node switch (general effect already fetched) and stays on page 2.
+    if (previousPage === null || previousPage === 2) return;
+    void refreshMentorUiStateRef.current(node.node_id, viewingVersionId);
+  }, [node?.node_id, isMentor, currentPage, viewingVersionId]);
 
   // Reload active version after space publish/unpublish so is_published flags stay in sync.
   // Never latch Previous/Removed as the workspace activeVersion (Progress / hub recovery).
@@ -932,10 +917,10 @@ export function useStudyMaterial({
   // because Previous/Removed (or any activeVersion) is present.
   useEffect(() => {
     if (!node || !isMentor) return;
-    if (recoveringRunIds.has(node.node_id)) return;
+    if (hasRecoveringRun(node.node_id)) return;
 
     const probeDecision = decideActiveRunRecoveryProbe({
-      moduleOwnsNode: generatingNodeIds.has(node.node_id),
+      moduleOwnsNode: hasGeneratingNode(node.node_id),
       localIsGenerating: isGenerating,
       generationRunPaused,
       generationRunFailed,
@@ -943,12 +928,12 @@ export function useStudyMaterial({
     });
     if (!probeDecision.shouldProbe) return;
     if (probeDecision.clearModuleOwnership) {
-      generatingNodeIds.delete(node.node_id);
+      deleteGeneratingNode(node.node_id);
     }
 
     const nodeId = node.node_id;
     let cancelled = false;
-    recoveringRunIds.add(nodeId);
+    addRecoveringRun(nodeId);
     generationJobService
       .getActiveRun(nodeId, "study_material")
       .then(async (active) => {
@@ -984,7 +969,7 @@ export function useStudyMaterial({
           return;
         }
         // running — Progress wins even when a workspace draft or Previous history exists.
-        generatingNodeIds.add(nodeId);
+        addGeneratingNode(nodeId);
         patchNodeStudyState(nodeId, {
           currentPage: 2,
           isGenerating: true,
@@ -1033,7 +1018,7 @@ export function useStudyMaterial({
             });
           }
         } finally {
-          generatingNodeIds.delete(nodeId);
+          deleteGeneratingNode(nodeId);
           if (!cancelled && isViewingNode(nodeId)) {
             setProcessingLabel(null);
           }
@@ -1041,11 +1026,11 @@ export function useStudyMaterial({
       })
       .catch(() => {/* non-critical */})
       .finally(() => {
-        recoveringRunIds.delete(nodeId);
+        deleteRecoveringRun(nodeId);
       });
     return () => {
       cancelled = true;
-      recoveringRunIds.delete(nodeId);
+      deleteRecoveringRun(nodeId);
     };
   }, [
     node?.node_id,
@@ -1056,12 +1041,6 @@ export function useStudyMaterial({
     isGenerating,
     patchNodeStudyState,
   ]);
-
-  // Load version history on page 2 (once per node/page — not on every activeVersion change)
-  useEffect(() => {
-    if (!node || !isMentor || currentPage !== 2) return;
-    void refreshVersionHistoryRef.current(node.node_id);
-  }, [node?.node_id, currentPage, isMentor]);
 
   // When entering history-only mode, clear any auto-loaded document so the hub shows.
   // No-op while Progress is showing (Option A). Do NOT rewrite prevRef while progressing —
@@ -1197,12 +1176,6 @@ export function useStudyMaterial({
     mentorUiSyncedToNode,
   ]);
 
-  // Refresh mentor UI when returning to study material (e.g. after publishing a quiz)
-  useEffect(() => {
-    if (!node || !isMentor || currentPage !== 2) return;
-    void refreshMentorUiStateRef.current(node.node_id, viewingVersionId);
-  }, [node?.node_id, isMentor, currentPage, viewingVersionId]);
-
   // Load delete/regenerate eligibility whenever material exists for this node
   useEffect(() => {
     if (!node || !isMentor) return;
@@ -1218,41 +1191,8 @@ export function useStudyMaterial({
 
   // ── Helpers ───────────────────────────────────────────────────────────────
 
-  const extractErrorDetail = (err: unknown): string => {
-    const e = err as {
-      response?: { data?: string | { detail?: string | { message?: string; error_code?: string } } };
-      message?: string;
-    };
-    if (typeof e?.response?.data === "string") return e.response.data;
-    const detail = e?.response?.data?.detail;
-    if (typeof detail === "object" && detail?.message) return detail.message;
-    return (typeof detail === "string" ? detail : undefined) ?? e?.message ?? "Request failed.";
-  };
-
-  const isEspaceNotPublishedError = (err: unknown): boolean => {
-    const e = err as { response?: { data?: { detail?: { error_code?: string } } } };
-    return e?.response?.data?.detail?.error_code === "ESPACE_NOT_PUBLISHED";
-  };
-
-  const isPublishTransactionError = (err: unknown): boolean => {
-    const e = err as { response?: { data?: { detail?: { error_code?: string } } } };
-    return e?.response?.data?.detail?.error_code === "PUBLISH_TRANSACTION_FAILED";
-  };
-
-  const isUnpublishTransactionError = (err: unknown): boolean => {
-    const e = err as { response?: { data?: { detail?: { error_code?: string } } } };
-    return e?.response?.data?.detail?.error_code === "UNPUBLISH_TRANSACTION_FAILED";
-  };
-
-  const publishSuccessToast = (version: StudyMaterialVersionOut, preview: StudyMaterialPublishPreviewOut | null) => {
-    if (preview?.is_republishing_older) {
-      return `${version.display_label} is now live for students.`;
-    }
-    if (preview?.is_replacing_live_version && !preview.is_republishing_older) {
-      return `${version.display_label} replaced the live version.`;
-    }
-    return `${version.display_label} is now live for students.`;
-  };
+  const extractErrorDetail = extractStudyMaterialErrorDetail;
+  const publishSuccessToast = publishSuccessToastMessage;
 
   const finalizeVersionMutation = async (version: StudyMaterialVersionOut) => {
     if (!node) return null;
@@ -1357,13 +1297,10 @@ export function useStudyMaterial({
       });
       setUnpublishPreview(null);
       setPendingUnpublishVersionId(null);
-      const versionLists = await finalizeVersionMutation(version);
+      await finalizeVersionMutation(version);
       const nodeId = node.node_id;
-      const uiState = await studyMaterialService.getMentorUiState(nodeId, null);
-      const willShowHistoryHub = Boolean(
-        versionLists &&
-          computeShouldShowHistoryHub(versionLists.history, versionLists.archived, uiState)
-      );
+      const uiState = mentorUiStateByNodeRef.current.get(nodeId) ?? null;
+      const willShowHistoryHub = Boolean(uiState?.show_history_hub);
 
       if (willShowHistoryHub) {
         setViewingVersionId(null);
@@ -1413,42 +1350,12 @@ export function useStudyMaterial({
   // Returns true (and routes the mentor to Continue / Delete UI) when such a run
   // exists, so callers abort. Closes the race where a mentor clicks
   // Generate on page 1 right after a reload, before recovery rehydrates paused state.
-  const routeToUnresolvedRunIfAny = async (nodeId: string): Promise<boolean> => {
-    try {
-      const active = await generationJobService.getActiveRun(nodeId, "study_material");
-      if (active?.run_id && active.status === "paused") {
-        generatingNodeIds.delete(nodeId);
-        patchNodeStudyState(nodeId, {
-          currentPage: 2,
-          hasTriggeredGeneration: true,
-          ...patchForGenerationJobPaused(active.run_id, "study_material"),
-        });
-        if (isViewingNode(nodeId)) {
-          setProcessingLabel(null);
-        }
-        return true;
-      }
-      if (active?.run_id && active.status === "failed") {
-        generatingNodeIds.delete(nodeId);
-        patchNodeStudyState(nodeId, {
-          currentPage: 2,
-          hasTriggeredGeneration: true,
-          ...patchForGenerationJobFailure(
-            new GenerationJobFailedError("Generation failed.", active.run_id),
-            active.run_id,
-            "study_material",
-          ),
-        });
-        if (isViewingNode(nodeId)) {
-          setProcessingLabel(null);
-        }
-        return true;
-      }
-    } catch {
-      /* non-critical — fall through and let the normal generate path proceed */
-    }
-    return false;
-  };
+  const routeToUnresolvedRunIfAny = async (nodeId: string): Promise<boolean> =>
+    routeToUnresolvedStudyMaterialRun(nodeId, {
+      patchNodeStudyState,
+      isViewingNode,
+      setProcessingLabel,
+    });
 
   const handleGenerateStudyMaterial = async () => {
     if (!node || isGenerating) return;
@@ -1458,7 +1365,7 @@ export function useStudyMaterial({
         ? externalResearchEnabledProp
         : externalResearchByNode[nodeId]) && !referenceMaterial,
     );
-    generatingNodeIds.add(nodeId);
+    addGeneratingNode(nodeId);
     let latestRunId: string | null = null;
     patchNodeStudyState(nodeId, {
       hasTriggeredGeneration: true,
@@ -1520,7 +1427,7 @@ export function useStudyMaterial({
         });
       }
     } finally {
-      generatingNodeIds.delete(nodeId);
+      deleteGeneratingNode(nodeId);
       if (isViewingNode(nodeId)) {
         setProcessingLabel(null);
       }
@@ -1535,7 +1442,7 @@ export function useStudyMaterial({
         ? externalResearchEnabledProp
         : externalResearchByNode[nodeId]) && !referenceMaterial,
     );
-    generatingNodeIds.add(nodeId);
+    addGeneratingNode(nodeId);
     let latestRunId: string | null = null;
     setIsDeletingDrafts(true);
     setShowRegenerateConfirmModal(false);
@@ -1624,7 +1531,7 @@ export function useStudyMaterial({
         }
       }
     } finally {
-      generatingNodeIds.delete(nodeId);
+      deleteGeneratingNode(nodeId);
       setIsDeletingDrafts(false);
       if (isViewingNode(nodeId)) {
         setProcessingLabel(null);
@@ -1639,7 +1546,7 @@ export function useStudyMaterial({
       return;
     }
     const nodeId = node.node_id;
-    generatingNodeIds.add(nodeId);
+    addGeneratingNode(nodeId);
     let latestRunId: string | null = null;
     patchNodeStudyState(nodeId, {
       isGenerating: true,
@@ -1706,7 +1613,7 @@ export function useStudyMaterial({
         ? { currentPage: 2, hasTriggeredGeneration: true, ...failure }
         : failure);
     } finally {
-      generatingNodeIds.delete(nodeId);
+      deleteGeneratingNode(nodeId);
       if (isViewingNode(nodeId)) {
         setProcessingLabel(null);
       }
@@ -1745,7 +1652,7 @@ export function useStudyMaterial({
     if (!runId) return;
 
     const nodeId = node.node_id;
-    generatingNodeIds.add(nodeId);
+    addGeneratingNode(nodeId);
     setIsResumingFailedGeneration(true);
     // Drop the paused checklist seed so Continue cannot paint a stale step list.
     // Panel shows "Resuming…" until onResumeLive flips to the normal progress UI.
@@ -1787,7 +1694,7 @@ export function useStudyMaterial({
         ...patchForGenerationJobFailure(err, runId, "study_material"),
       });
     } finally {
-      generatingNodeIds.delete(nodeId);
+      deleteGeneratingNode(nodeId);
       setIsResumingFailedGeneration(false);
       if (isViewingNode(nodeId)) {
         setProcessingLabel(null);
@@ -1796,7 +1703,7 @@ export function useStudyMaterial({
   };
 
   const patchPausedGenerationState = useCallback((nodeId: string, runId: string) => {
-    generatingNodeIds.delete(nodeId);
+    deleteGeneratingNode(nodeId);
     patchNodeStudyState(nodeId, {
       currentPage: 2,
       hasTriggeredGeneration: true,
@@ -1842,7 +1749,7 @@ export function useStudyMaterial({
       toast.error(extractErrorDetail(pauseErr));
       patchNodeStudyState(nodeId, { isPausingGeneration: false });
     } finally {
-      generatingNodeIds.delete(nodeId);
+      deleteGeneratingNode(nodeId);
       if (isViewingNode(nodeId)) {
         setProcessingLabel(null);
       }
@@ -1893,10 +1800,13 @@ export function useStudyMaterial({
     const nodeId = node.node_id;
     const summary = findVersionSummary(versionId);
 
-    if (summary?.is_archived) {
+    const panelFlags = resolveVersionSelectPanelFlags(summary);
+    if (panelFlags.showArchivedPanel === true) {
       setShowArchivedPanel(true);
-    } else if (summary?.mentor_display_badge === "Previous for students") {
+    } else if (panelFlags.showArchivedPanel === false) {
       setShowArchivedPanel(false);
+    }
+    if (panelFlags.expandStudentArchive) {
       setStudentArchiveExpanded(true);
     }
     setViewingVersionId(versionId);
@@ -1994,12 +1904,9 @@ export function useStudyMaterial({
         return;
       }
 
-      const uiState = await studyMaterialService.getMentorUiState(nodeId, null);
-      const willShowHistoryHub = computeShouldShowHistoryHub(
-        versionLists.history,
-        versionLists.archived,
-        uiState,
-      );
+      await refreshMentorUiStateRef.current(nodeId, null);
+      const uiState = mentorUiStateByNodeRef.current.get(nodeId) ?? null;
+      const willShowHistoryHub = Boolean(uiState?.show_history_hub);
 
       if (willShowHistoryHub) {
         patchNodeStudyState(nodeId, {
@@ -2034,7 +1941,6 @@ export function useStudyMaterial({
         }
       }
 
-      await refreshMentorUiStateRef.current(nodeId, null);
       toast.success("Draft moved to archive.");
     } catch (err) {
       toast.error(extractErrorDetail(err));

@@ -25,37 +25,6 @@ export function getExtraPart(
   return previewParts.find((p) => p.type === "extra");
 }
 
-export function buildRailQuote(
-  mode: InstructionMode,
-  modeText: string,
-  previewParts: EffectiveInstructionPart[]
-): string {
-  const inherited = getInheritedText(previewParts);
-  const standardText = inherited ? `"${inherited}"` : "No section default style set yet.";
-
-  if (mode === "inherit") {
-    return standardText;
-  }
-
-  if (mode === "extend") {
-    const note = modeText.trim();
-    return note
-      ? `${standardText} + "${note}"`
-      : `${standardText} (add your note below)`;
-  }
-
-  const custom = modeText.trim();
-  return custom
-    ? `"${custom}"`
-    : "Write your own instructions below — this will replace the default style.";
-}
-
-export function getApproachSummary(mode: InstructionMode): string {
-  if (mode === "inherit") return "Using the section's default style";
-  if (mode === "extend") return "Default style, plus a topic note";
-  return "Custom instruction for this topic only";
-}
-
 function quoteInstruction(text: string): ReactNode {
   return <span>&ldquo;{text}&rdquo;</span>;
 }

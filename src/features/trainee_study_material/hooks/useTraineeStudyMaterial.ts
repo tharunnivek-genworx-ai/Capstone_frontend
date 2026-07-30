@@ -2,10 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import toast from "react-hot-toast";
 import type { TraineeStudyMaterialOut } from "../types/traineeStudyMaterial.types";
 import { traineeStudyMaterialService } from "../services/traineeStudyMaterialService";
-import {
-  measureScrollDepth,
-  resolveScrollContainer,
-} from "../utils/scrollDepth";
+import { measureScrollDepth } from "../utils/scrollDepth";
 import { notifyNodesUnlocked } from "../utils/unlockEvents";
 
 interface UseTraineeStudyMaterialParams {
@@ -22,7 +19,8 @@ export interface UseTraineeStudyMaterialReturn {
   isDownloadingPdf: boolean;
   readPercent: number;
   handleDownloadPdf: () => Promise<void>;
-  scrollContainerRef: React.RefCallback<HTMLDivElement>;
+  /** Attach to the real scroll host (page/fullscreen `__content`), not the viewer. */
+  scrollHostRef: React.RefCallback<HTMLDivElement>;
 }
 
 function extractErrorDetail(err: unknown): string {
@@ -118,14 +116,13 @@ export function useTraineeStudyMaterial({
     };
   }, [nodeId]);
 
-  const scrollContainerRef = useCallback<React.RefCallback<HTMLDivElement>>((anchor) => {
+  const scrollHostRef = useCallback<React.RefCallback<HTMLDivElement>>((host) => {
     scrollCleanupRef.current?.();
     scrollCleanupRef.current = null;
-    if (!anchor || !nodeId || !material || material.node_id !== nodeId) return;
+    if (!host || !nodeId || !material || material.node_id !== nodeId) return;
 
-    const container = resolveScrollContainer(anchor);
     const handleScroll = () => {
-      const measuredDepth = measureScrollDepth(anchor);
+      const measuredDepth = measureScrollDepth(host);
       latestMeasuredDepth.current = measuredDepth;
       // Update the bar immediately from local scroll depth; persist is debounced.
       setReadPercent((prev) =>
@@ -139,18 +136,23 @@ export function useTraineeStudyMaterial({
       }, 400);
     };
 
-    container.addEventListener("scroll", handleScroll, { passive: true });
+    host.addEventListener("scroll", handleScroll, { passive: true });
     const initialMeasurementFrame = window.requestAnimationFrame(handleScroll);
     const resizeObserver =
       typeof ResizeObserver === "undefined"
         ? null
         : new ResizeObserver(() => handleScroll());
-    resizeObserver?.observe(anchor);
-    if (container !== anchor) resizeObserver?.observe(container);
+    // Host border box may stay fixed while nested content grows (images, markdown).
+    resizeObserver?.observe(host);
+    let spine: Element | null = host.firstElementChild;
+    while (spine) {
+      if (spine instanceof HTMLElement) resizeObserver?.observe(spine);
+      spine = spine.firstElementChild;
+    }
     scrollCleanupRef.current = () => {
       window.cancelAnimationFrame(initialMeasurementFrame);
       resizeObserver?.disconnect();
-      container.removeEventListener("scroll", handleScroll);
+      host.removeEventListener("scroll", handleScroll);
       if (progressTimer.current !== null) {
         window.clearTimeout(progressTimer.current);
         progressTimer.current = null;
@@ -184,6 +186,6 @@ export function useTraineeStudyMaterial({
     isDownloadingPdf,
     readPercent,
     handleDownloadPdf,
-    scrollContainerRef,
+    scrollHostRef,
   };
 }

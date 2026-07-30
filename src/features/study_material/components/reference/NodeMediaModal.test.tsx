@@ -5,7 +5,6 @@ import userEvent from "@testing-library/user-event";
 import NodeMediaModal from "./NodeMediaModal";
 import type { NodeMediaOut } from "../../types/studyMaterial.types";
 import { referenceMaterialService } from "../../services/referenceMaterialService";
-import { trackVideoEvent } from "../../../../utils/videoAnalytics";
 
 vi.mock("../../services/referenceMaterialService", () => ({
   referenceMaterialService: {
@@ -14,10 +13,6 @@ vi.mock("../../services/referenceMaterialService", () => ({
     attachNodeMediaFile: vi.fn(),
     attachNodeMediaLink: vi.fn(),
   },
-}));
-
-vi.mock("../../../../utils/videoAnalytics", () => ({
-  trackVideoEvent: vi.fn(),
 }));
 
 vi.mock("react-hot-toast", () => ({
@@ -71,15 +66,6 @@ describe("NodeMediaModal", () => {
 
     expect(screen.getByTestId("youtube-player-modal")).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Mentor video" })).toBeInTheDocument();
-    expect(trackVideoEvent).toHaveBeenCalledWith(
-      "watch_in_app",
-      expect.objectContaining({
-        surface: "mentor",
-        nodeId: "node-1",
-        mediaId: "media-1",
-        videoId: VIDEO_ID,
-      }),
-    );
   });
 
   it("opens non-YouTube video links externally", async () => {
@@ -101,13 +87,6 @@ describe("NodeMediaModal", () => {
 
     expect(screen.queryByTestId("youtube-player-modal")).not.toBeInTheDocument();
     expect(openSpy).toHaveBeenCalledWith("https://vimeo.com/123", "_blank", "noopener,noreferrer");
-    expect(trackVideoEvent).toHaveBeenCalledWith("open_external_fallback", {
-      surface: "mentor",
-      nodeId: "node-1",
-      mediaId: "media-1",
-      url: "https://vimeo.com/123",
-      reason: "non_youtube",
-    });
   });
 
   it("shows Preview for pasted YouTube URLs before attach", async () => {

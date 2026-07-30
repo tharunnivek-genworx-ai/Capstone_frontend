@@ -1,67 +1,19 @@
 import { describe, expect, it } from "vitest";
 
-import type {
-  StudyMaterialMentorUiStateOut,
-  StudyMaterialVersionSummary,
-} from "../types/studyMaterial.types";
 import {
   computeShouldShowHistoryHub,
   isHistoricalMentorSummary,
   isStudyMaterialProgressing,
   isWorkspaceDraftSummary,
   partitionHistoryVersions,
+  resolveShouldShowHistoryHub,
   shouldSilentlyActivateOnSelect,
 } from "./versionHistoryPartitions";
-
-function makeVersion(
-  overrides: Partial<StudyMaterialVersionSummary> & Pick<StudyMaterialVersionSummary, "version_id">,
-): StudyMaterialVersionSummary {
-  return {
-    version_number: 1,
-    generation_type: "generate",
-    based_on_version_id: null,
-    based_on_version_number: null,
-    lineage_chain: [],
-    mentor_feedback_preview: null,
-    reference_material_id: null,
-    is_active: false,
-    is_published: false,
-    is_archived: false,
-    archived_at: null,
-    published_at: null,
-    lifecycle_status: "draft",
-    mentor_display_badge: "Your draft",
-    student_visibility_hint: null,
-    created_at: "2026-01-01T12:00:00Z",
-    display_label: "v1",
-    ...overrides,
-  };
-}
-
-function makeMentorUiState(
-  overrides: Partial<StudyMaterialMentorUiStateOut> = {},
-): StudyMaterialMentorUiStateOut {
-  return {
-    node_id: "node-1",
-    has_versions: true,
-    active_version_id: null,
-    published_version_id: null,
-    can_access_study_material: true,
-    can_access_quiz: false,
-    instruction_changed_since_generation: false,
-    current_effective_instruction: "",
-    generation_instruction_snapshot: null,
-    displayed_version_actions: null,
-    student_visibility: {
-      live_material_label: null,
-      live_material_version_id: null,
-      previous_version_count: 0,
-      previous_version_labels: [],
-      live_quiz_title: null,
-    },
-    ...overrides,
-  };
-}
+import {
+  HISTORY_HUB_PARITY_FIXTURES,
+  makeHistoryHubMentorUiState as makeMentorUiState,
+  makeHistoryHubVersion as makeVersion,
+} from "./historyHubParity.fixtures";
 
 describe("partitionHistoryVersions", () => {
   it("buckets versions into student archive, removed, mentor archive, and workspace drafts", () => {
@@ -191,7 +143,75 @@ describe("layer helpers", () => {
   });
 });
 
+describe("resolveShouldShowHistoryHub", () => {
+  it.each(
+    HISTORY_HUB_PARITY_FIXTURES.flatMap((fixture) =>
+      [false, true].map((isGeneratingOrProgressing) => ({
+        ...fixture,
+        isGeneratingOrProgressing,
+      })),
+    ),
+  )(
+    "API show_history_hub=$eligible ($id) × Progress=$isGeneratingOrProgressing",
+    ({
+      mentorUiState,
+      eligible,
+      isGeneratingOrProgressing,
+    }) => {
+      expect(
+        resolveShouldShowHistoryHub(mentorUiState, {
+          isGeneratingOrProgressing,
+        }),
+      ).toBe(isGeneratingOrProgressing ? false : eligible);
+    },
+  );
+
+  it("prefers server show_history_hub over client recomputation", () => {
+    // Client rule would be true; server says false.
+    expect(
+      resolveShouldShowHistoryHub(makeMentorUiState({ show_history_hub: false })),
+    ).toBe(false);
+    // Client rule would be false (live); server says true.
+    expect(
+      resolveShouldShowHistoryHub(
+        makeMentorUiState({
+          published_version_id: "live-1",
+          show_history_hub: true,
+        }),
+      ),
+    ).toBe(true);
+  });
+
+  it("returns false when mentor UI state is null", () => {
+    expect(resolveShouldShowHistoryHub(null)).toBe(false);
+  });
+});
+
 describe("computeShouldShowHistoryHub", () => {
+  it.each(
+    HISTORY_HUB_PARITY_FIXTURES.flatMap((fixture) =>
+      [false, true].map((isGeneratingOrProgressing) => ({
+        ...fixture,
+        isGeneratingOrProgressing,
+      })),
+    ),
+  )(
+    "matches $id ($name) eligibility with Progress=$isGeneratingOrProgressing",
+    ({
+      versionHistory,
+      archivedVersionHistory,
+      mentorUiState,
+      eligible,
+      isGeneratingOrProgressing,
+    }) => {
+      expect(
+        computeShouldShowHistoryHub(versionHistory, archivedVersionHistory, mentorUiState, {
+          isGeneratingOrProgressing,
+        }),
+      ).toBe(isGeneratingOrProgressing ? false : eligible);
+    },
+  );
+
   it("shows hub when there is no live version, no active draft, and one archived version", () => {
     const archivedVersionHistory = [
       makeVersion({

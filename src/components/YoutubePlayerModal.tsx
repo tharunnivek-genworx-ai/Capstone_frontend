@@ -3,11 +3,8 @@ import { ExternalLink } from "lucide-react";
 import toast from "react-hot-toast";
 import ModalPortal from "./ModalPortal";
 import { toEmbedUrl, toWatchUrl } from "../utils/youtubeUrl";
-import { trackVideoEvent } from "../utils/videoAnalytics";
 
 const EMBED_LOAD_TIMEOUT_MS = 15_000;
-
-export type YoutubePlayerSurface = "trainee" | "mentor";
 
 export interface YoutubePlayerModalProps {
   isOpen: boolean;
@@ -15,9 +12,6 @@ export interface YoutubePlayerModalProps {
   videoId: string;
   title?: string;
   watchUrl: string;
-  surface: YoutubePlayerSurface;
-  mediaId?: string;
-  nodeId?: string;
 }
 
 type PlayerState = "loading" | "ready" | "error";
@@ -57,27 +51,12 @@ const YoutubePlayerModal: React.FC<YoutubePlayerModalProps> = ({
   videoId,
   title,
   watchUrl,
-  surface,
-  mediaId,
-  nodeId,
 }) => {
   const titleId = useId();
   const errorDescriptionId = useId();
   const dialogRef = useRef<HTMLDivElement>(null);
   const closeButtonRef = useRef<HTMLButtonElement>(null);
-  const hasTrackedWatchRef = useRef(false);
   const [playerState, setPlayerState] = useState<PlayerState>("loading");
-
-  const analyticsBase = useMemo(
-    () => ({
-      surface,
-      nodeId,
-      mediaId,
-      videoId,
-      url: watchUrl,
-    }),
-    [surface, nodeId, mediaId, videoId, watchUrl],
-  );
 
   const embedUrl = useMemo(
     () => toEmbedUrl(videoId, { startSeconds: parseStartSeconds(watchUrl) }),
@@ -100,19 +79,11 @@ const YoutubePlayerModal: React.FC<YoutubePlayerModalProps> = ({
 
   const displayTitle = title?.trim() || "YouTube video";
 
-  const reportEmbedError = useCallback(
-    (reason: string) => {
-      setPlayerState("error");
-      trackVideoEvent("embed_error", { ...analyticsBase, reason });
-    },
-    [analyticsBase],
-  );
+  const reportEmbedError = useCallback(() => {
+    setPlayerState("error");
+  }, []);
 
   const handleOpenExternal = useCallback(() => {
-    trackVideoEvent("open_external_fallback", {
-      ...analyticsBase,
-      reason: playerState === "error" ? "embed_error" : "user_choice",
-    });
     if (!externalWatchUrl) {
       toast.error("Unable to open this video externally.");
       return;
@@ -121,45 +92,33 @@ const YoutubePlayerModal: React.FC<YoutubePlayerModalProps> = ({
     if (!opened) {
       toast.error("Your browser blocked the new tab. Allow popups to continue.");
     }
-  }, [analyticsBase, externalWatchUrl, playerState]);
+  }, [externalWatchUrl]);
 
   const handleIframeLoad = useCallback(() => {
     setPlayerState("ready");
   }, []);
 
   const handleIframeError = useCallback(() => {
-    reportEmbedError("iframe_error");
+    reportEmbedError();
   }, [reportEmbedError]);
 
   useEffect(() => {
     if (!isOpen) {
       setPlayerState("loading");
-      hasTrackedWatchRef.current = false;
       return;
     }
 
     if (!embedUrl) {
-      reportEmbedError("invalid_embed_url");
+      reportEmbedError();
       return;
     }
 
-    if (!hasTrackedWatchRef.current) {
-      hasTrackedWatchRef.current = true;
-      trackVideoEvent("watch_in_app", analyticsBase);
-    }
-
     const timeoutId = window.setTimeout(() => {
-      setPlayerState((current) => {
-        if (current !== "loading") {
-          return current;
-        }
-        trackVideoEvent("embed_error", { ...analyticsBase, reason: "load_timeout" });
-        return "error";
-      });
+      setPlayerState((current) => (current !== "loading" ? current : "error"));
     }, EMBED_LOAD_TIMEOUT_MS);
 
     return () => window.clearTimeout(timeoutId);
-  }, [isOpen, embedUrl, analyticsBase, reportEmbedError]);
+  }, [isOpen, embedUrl, reportEmbedError]);
 
   useEffect(() => {
     if (!isOpen) {

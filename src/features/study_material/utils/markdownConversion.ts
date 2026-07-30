@@ -2,21 +2,6 @@ import { marked } from "marked";
 import TurndownService from "turndown";
 import { gfm } from "turndown-plugin-gfm";
 
-/** Recover markdown when older clients stored the full API JSON as a string. */
-export function normalizeStudyContent(raw: string): string {
-  const trimmed = raw.trim();
-  if (!trimmed.startsWith("{") || !trimmed.includes('"content"')) {
-    return raw;
-  }
-  try {
-    const parsed = JSON.parse(trimmed) as { content?: string };
-    if (typeof parsed.content === "string") return parsed.content;
-  } catch {
-    /* not JSON */
-  }
-  return raw;
-}
-
 let turndownService: TurndownService | null = null;
 
 function getTurndownService(): TurndownService {
@@ -34,8 +19,7 @@ function getTurndownService(): TurndownService {
 }
 
 export function markdownToHtml(markdown: string): string {
-  const normalized = normalizeStudyContent(markdown);
-  return marked.parse(normalized, { async: false, gfm: true, breaks: true }) as string;
+  return marked.parse(markdown, { async: false, gfm: true, breaks: true }) as string;
 }
 
 export function htmlToMarkdown(html: string): string {

@@ -26,11 +26,14 @@ import StudyMaterialPublishConfirmModal from "../../study_material/components/ve
 import StudyMaterialUnpublishConfirmModal from "../../study_material/components/version/StudyMaterialUnpublishConfirmModal";
 import StudyMaterialMentorWorkspace from "../../study_material/components/material/StudyMaterialMentorWorkspace";
 import BatchParentHub from "../../study_material/components/queue/BatchParentHub";
-import { shouldShowBatchHub } from "../../study_material/utils/batchHubEligibility";
+import {
+  isGenerateAllStepWaiting,
+  shouldShowBatchHub,
+} from "../../study_material/utils/batchHubEligibility";
 import { isStudyMaterialProgressing } from "../../study_material/utils/versionHistoryPartitions";
 import EspaceNotPublishedModal from "../../study_material/components/space/EspaceNotPublishedModal";
-import QuizPage3 from "../../quiz/components/QuizPage3";
-import QuizPage4 from "../../quiz/components/QuizPage4";
+import MentorQuizReviewPage from "../../quiz/components/MentorQuizReviewPage";
+import MentorHintsPage from "../../quiz/components/MentorHintsPage";
 import GenerationProgressPanel from "../../generation/components/GenerationProgressPanel";
 import { useGenerationProgress } from "../../generation/hooks/useGenerationProgress";
 import { useGenerationRunResume } from "../../generation/hooks/useGenerationRunResume";
@@ -41,6 +44,10 @@ import {
   getSavedInstructionText,
 } from "../../study_material/components/generate/instructionModeUtils";
 import { FileText, Zap } from "lucide-react";
+import {
+  getHintsDisabledTooltip,
+  getQuizDisabledTooltip,
+} from "../utils/topicPageNavTooltips";
 
 type BatchHubDrill = { kind: "material"; nodeId: string } | null;
 
@@ -73,8 +80,6 @@ interface NodeDetailPanelProps {
   contentRefreshToken?: number;
   /** Batch step status for this node when part of an active generate-all job. */
   batchStepStatus?: BatchStepStatus | null;
-  /** @deprecated Prefer batchStepStatus; kept for callers that only pass the waiting flag. */
-  isWaitingForGenerateAll?: boolean;
   /** Space-scoped external research preference for the active topic. */
   externalResearchEnabled?: boolean;
   onExternalResearchChange?: (enabled: boolean) => void;
@@ -100,17 +105,13 @@ const NodeDetailPanel: React.FC<NodeDetailPanelProps> = ({
   onMentorProgressRefresh,
   contentRefreshToken = 0,
   batchStepStatus = null,
-  isWaitingForGenerateAll = false,
   externalResearchEnabled,
   onExternalResearchChange,
   batchDetail = null,
   batchHubEnabled = false,
   onDismissBatchHub,
 }) => {
-  const blockedByBatch =
-    isWaitingForGenerateAll ||
-    batchStepStatus === "pending" ||
-    batchStepStatus === "running";
+  const blockedByBatch = isGenerateAllStepWaiting(batchStepStatus);
   // ── Batch parent hub (generate-all cohort only; never from normal generate) ─
   const [batchHubDrill, setBatchHubDrill] = useState<BatchHubDrill>(null);
   const [hubStack, setHubStack] = useState<string[]>([]);
@@ -510,31 +511,7 @@ const NodeDetailPanel: React.FC<NodeDetailPanelProps> = ({
           </div>
 
           {/* Right: pagination */}
-          {isMentor && !isRenaming && (() => {
-            // ── Compute accurate tab tooltips from backend state ─────────────
-            // Quiz tab: three distinct locked states
-            let quizDisabledTooltip: string;
-            if (!sm.canAccessQuiz) {
-              if (!sm.mentorUiState?.has_versions) {
-                quizDisabledTooltip = "Generate study material first";
-              } else if (spaceIsPublished === false) {
-                quizDisabledTooltip = "Publish the space to access Quiz";
-              } else {
-                quizDisabledTooltip = "Generate study material first";
-              }
-            } else {
-              quizDisabledTooltip = "Generate study material first";
-            }
-
-            // Hints tab: locked until a quiz exists
-            let hintsDisabledTooltip: string;
-            if (!qz.canAccessHints && qz.quizDraftExists) {
-              hintsDisabledTooltip = qz.hintsLockedTooltip ?? "Quiz must be in an accessible state to view Hints";
-            } else {
-              hintsDisabledTooltip = "Generate a quiz first";
-            }
-
-            return (
+          {isMentor && !isRenaming && (
               <div className="node-detail-panel__nav">
                 <TopicPageNav
                   currentPage={sm.currentPage}
@@ -542,12 +519,19 @@ const NodeDetailPanel: React.FC<NodeDetailPanelProps> = ({
                   canAccessQuiz={sm.canAccessQuiz}
                   canAccessHints={sm.canAccessQuiz && qz.canAccessHints}
                   onPageChange={sm.setCurrentPage}
-                  quizDisabledTooltip={quizDisabledTooltip}
-                  hintsDisabledTooltip={hintsDisabledTooltip}
+                  quizDisabledTooltip={getQuizDisabledTooltip({
+                    canAccessQuiz: sm.canAccessQuiz,
+                    hasVersions: sm.mentorUiState?.has_versions,
+                    spaceIsPublished,
+                  })}
+                  hintsDisabledTooltip={getHintsDisabledTooltip({
+                    canAccessHints: qz.canAccessHints,
+                    quizDraftExists: qz.quizDraftExists,
+                    hintsLockedTooltip: qz.hintsLockedTooltip,
+                  })}
                 />
               </div>
-            );
-          })()}
+          )}
         </div>
       </div>
 
@@ -577,7 +561,7 @@ const NodeDetailPanel: React.FC<NodeDetailPanelProps> = ({
               sm={sm}
               onOpenRefModal={() => sm.openRefModalManage()}
               onOpenMediaModal={() => sm.setShowNodeMediaModal(true)}
-              isWaitingForGenerateAll={blockedByBatch}
+              isQueuedInGenerateAll={blockedByBatch}
               runPaused={studyRunPaused}
               runFailed={studyRunFailed}
             />
@@ -801,7 +785,7 @@ const NodeDetailPanel: React.FC<NodeDetailPanelProps> = ({
 
         {/* PAGE 3 — Quiz */}
         {sm.currentPage === 3 && (
-          <QuizPage3
+          <MentorQuizReviewPage
             nodeTitle={node.title}
             qz={qz}
             studentVisibility={sm.mentorUiState?.student_visibility ?? null}
@@ -810,7 +794,7 @@ const NodeDetailPanel: React.FC<NodeDetailPanelProps> = ({
 
         {/* PAGE 4 — Hints */}
         {sm.currentPage === 4 && (
-          <QuizPage4
+          <MentorHintsPage
             qz={qz}
             onPageChange={sm.setCurrentPage}
             studentVisibility={sm.mentorUiState?.student_visibility ?? null}

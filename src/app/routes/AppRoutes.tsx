@@ -16,29 +16,15 @@ import Sidebar from "../../components/layout/Sidebar";
 import LearningSpacesSidebar from "../../components/layout/LearningSpacesSidebar";
 import { useAuth } from "../../features/auth/hooks/useAuth";
 
-/** Layout wrapper for authenticated pages — renders sidebar + main content area */
-const AdminLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => (
-  <div style={{ display: "flex", minHeight: "100vh" }}>
-    <Sidebar />
-    <main style={{ flex: 1, marginLeft: "240px", minHeight: "100vh", background: "var(--color-bg-page)", overflowY: "auto" }}>
-      {children}
-    </main>
-  </div>
-);
-
-/** Layout wrapper for mentor pages */
-const MentorLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => (
-  <div className="learning-experience" style={{ display: "flex", minHeight: "100vh" }}>
-    <Sidebar />
-    <main style={{ flex: 1, marginLeft: "240px", minHeight: "100vh", background: "var(--color-bg-page)", overflowY: "auto" }}>
-      {children}
-    </main>
-  </div>
-);
-
-/** Layout wrapper for trainee pages */
-const TraineeLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => (
-  <div className="learning-experience" style={{ display: "flex", minHeight: "100vh" }}>
+/** Shared shell for admin/mentor/trainee list pages — sidebar + main content. */
+const RoleShellLayout: React.FC<{
+  children: React.ReactNode;
+  learningExperience?: boolean;
+}> = ({ children, learningExperience = false }) => (
+  <div
+    className={learningExperience ? "learning-experience" : undefined}
+    style={{ display: "flex", minHeight: "100vh" }}
+  >
     <Sidebar />
     <main style={{ flex: 1, marginLeft: "240px", minHeight: "100vh", background: "var(--color-bg-page)", overflowY: "auto" }}>
       {children}
@@ -182,9 +168,9 @@ const AppRoutes: React.FC = () => {
         path="/dashboard"
         element={
           <ProtectedRoute requiredRole="itadmin">
-            <AdminLayout>
+            <RoleShellLayout>
               <AdminDashboard />
-            </AdminLayout>
+            </RoleShellLayout>
           </ProtectedRoute>
         }
       />
@@ -192,9 +178,9 @@ const AppRoutes: React.FC = () => {
         path="/admin/departments"
         element={
           <ProtectedRoute requiredRole="itadmin">
-            <AdminLayout>
+            <RoleShellLayout>
               <DepartmentManagementPage />
-            </AdminLayout>
+            </RoleShellLayout>
           </ProtectedRoute>
         }
       />
@@ -202,9 +188,9 @@ const AppRoutes: React.FC = () => {
         path="/admin/accounts"
         element={
           <ProtectedRoute requiredRole="itadmin">
-            <AdminLayout>
+            <RoleShellLayout>
               <AccountManagementPage />
-            </AdminLayout>
+            </RoleShellLayout>
           </ProtectedRoute>
         }
       />
@@ -214,9 +200,9 @@ const AppRoutes: React.FC = () => {
         path="/mentor/spaces"
         element={
           <ProtectedRoute requiredRole="mentor">
-            <MentorLayout>
+            <RoleShellLayout learningExperience>
               <SpacesListPage />
-            </MentorLayout>
+            </RoleShellLayout>
           </ProtectedRoute>
         }
       />
@@ -236,9 +222,9 @@ const AppRoutes: React.FC = () => {
         path="/trainee/spaces"
         element={
           <ProtectedRoute requiredRole="trainee">
-            <TraineeLayout>
+            <RoleShellLayout learningExperience>
               <SpacesListPage />
-            </TraineeLayout>
+            </RoleShellLayout>
           </ProtectedRoute>
         }
       />

@@ -13,6 +13,9 @@ const MAX_NOT_FOUND_RETRIES = 6;
 const ACTIVE_RUN_CLEAR_MAX_ATTEMPTS = 40;
 const ACTIVE_RUN_CLEAR_INTERVAL_MS = 250;
 
+const progressRequests = new Map<string, Promise<GenerationProgressOut>>();
+const runRequests = new Map<string, Promise<GenerationRunOut>>();
+
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => window.setTimeout(resolve, ms));
 }
@@ -24,10 +27,17 @@ function isNotFoundError(error: unknown): boolean {
 
 export const generationProgressService = {
   async get(sessionId: string): Promise<GenerationProgressOut> {
-    const response = await studyAgentClient.get<GenerationProgressOut>(
-      `/generation-progress/${sessionId}`,
-    );
-    return response.data;
+    const existing = progressRequests.get(sessionId);
+    if (existing) return existing;
+
+    const request = studyAgentClient
+      .get<GenerationProgressOut>(`/generation-progress/${sessionId}`)
+      .then((response) => response.data)
+      .finally(() => {
+        progressRequests.delete(sessionId);
+      });
+    progressRequests.set(sessionId, request);
+    return request;
   },
 };
 
@@ -44,10 +54,17 @@ export const generationJobService = {
   },
 
   async getRun(runId: string): Promise<GenerationRunOut> {
-    const response = await studyAgentClient.get<GenerationRunOut>(
-      `/generation-runs/${runId}`,
-    );
-    return response.data;
+    const existing = runRequests.get(runId);
+    if (existing) return existing;
+
+    const request = studyAgentClient
+      .get<GenerationRunOut>(`/generation-runs/${runId}`)
+      .then((response) => response.data)
+      .finally(() => {
+        runRequests.delete(runId);
+      });
+    runRequests.set(runId, request);
+    return request;
   },
 
   async getResult(runId: string): Promise<GenerationRunResultOut> {
@@ -180,46 +197,15 @@ export const generationJobService = {
       try {
         const progress = await generationProgressService.get(runId);
         notFoundRetries = 0;
-
-        // Progress storage can lag the durable run row (especially right after
-        // resume). Always reconcile before treating paused/failed as terminal.
-        try {
-          const run = await this.getRun(runId);
-          if (run.status === "running") {
-            const normalized: GenerationProgressOut =
-              progress.status === "running"
-                ? progress
-                : { ...progress, status: "running" };
-            onProgress?.(normalized);
-            // keep polling
-          } else if (run.status === "completed") {
-            const done: GenerationProgressOut = { ...progress, status: "completed" };
-            onProgress?.(done);
-            return done;
-          } else if (run.status === "paused") {
-            const paused: GenerationProgressOut = { ...progress, status: "paused" };
-            onProgress?.(paused);
-            return paused;
-          } else if (run.status === "failed" || run.status === "abandoned") {
-            const failed: GenerationProgressOut = {
-              ...progress,
-              status: "failed",
-              error: progress.error ?? run.error_message ?? "Generation failed.",
-            };
-            onProgress?.(failed);
-            return failed;
-          } else {
-            onProgress?.(progress);
-          }
-        } catch {
-          onProgress?.(progress);
-          if (
-            progress.status === "completed"
-            || progress.status === "failed"
-            || progress.status === "paused"
-          ) {
-            return progress;
-          }
+        // The progress endpoint derives status and errors from the durable run
+        // row, so a second GET /generation-runs/{id} on every tick is redundant.
+        onProgress?.(progress);
+        if (
+          progress.status === "completed"
+          || progress.status === "failed"
+          || progress.status === "paused"
+        ) {
+          return progress;
         }
       } catch (error) {
         if (isNotFoundError(error) && notFoundRetries < MAX_NOT_FOUND_RETRIES) {

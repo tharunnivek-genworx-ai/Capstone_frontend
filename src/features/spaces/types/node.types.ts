@@ -84,6 +84,8 @@ export interface NodeResponse {
   node_specific_instruction: string | null;
   tree_default_instruction: string | null;
   node_additive_instruction: string | null;
+  /** Computed by Identity from DB columns; prefer over column inference when present. */
+  instruction_mode?: "inherit" | "extend" | "replace";
   effective_instruction: string | null;
   effective_instruction_parts: EffectiveInstructionPart[];
   is_primary_learning_unit: boolean;
@@ -110,6 +112,8 @@ export interface NodeTreeNode {
   node_specific_instruction: string | null;
   tree_default_instruction: string | null;
   node_additive_instruction: string | null;
+  /** Computed by Identity from DB columns; prefer over column inference when present. */
+  instruction_mode?: "inherit" | "extend" | "replace";
   effective_instruction: string | null;
   effective_instruction_parts: EffectiveInstructionPart[];
   is_active: boolean;

@@ -15,9 +15,10 @@ describe("shouldShowCodeQualityScore", () => {
 });
 
 describe("shouldShowQcWarning", () => {
-  it("hides placement-only structural failures after max attempts", () => {
+  it("hides when API says shouldShowMentorQcWarning is false", () => {
     expect(
       shouldShowQcWarning(true, {
+        shouldShowMentorQcWarning: false,
         failed_checks: [
           {
             id: "det_equation_in_content",
@@ -25,20 +26,31 @@ describe("shouldShowQcWarning", () => {
             evidence: "An equation appears in prose.",
             corrective_hint: "Move it to a formula block.",
           },
-          {
-            id: "det_code_in_formula_block",
-            passed: false,
-            evidence: "Code appears in a formula block.",
-          },
         ],
         corrective_instructions: "Correct the block placement.",
       }),
     ).toBe(false);
   });
 
-  it("shows mixed or substantive failures when a diagnostic is present", () => {
+  it("honors snake_case should_show_mentor_qc_warning from API", () => {
     expect(
       shouldShowQcWarning(true, {
+        should_show_mentor_qc_warning: false,
+        corrective_instructions: "Correct the block placement.",
+      }),
+    ).toBe(false);
+    expect(
+      shouldShowQcWarning(true, {
+        should_show_mentor_qc_warning: true,
+        corrective_instructions: "Review content accuracy.",
+      }),
+    ).toBe(true);
+  });
+
+  it("shows when API allows mentor warning and a diagnostic is present", () => {
+    expect(
+      shouldShowQcWarning(true, {
+        shouldShowMentorQcWarning: true,
         failed_checks: [
           { id: "det_equation_in_content", passed: false },
           {
@@ -51,9 +63,10 @@ describe("shouldShowQcWarning", () => {
     ).toBe(true);
   });
 
-  it("hides an empty QC failure payload", () => {
+  it("hides an empty QC failure payload even when API allows the warning", () => {
     expect(
       shouldShowQcWarning(true, {
+        shouldShowMentorQcWarning: true,
         corrective_instructions: "   ",
         issues: [],
         summary: "",
@@ -69,7 +82,7 @@ describe("shouldShowQcWarning", () => {
     ).toBe(false);
   });
 
-  it("shows warning-presentation and quiz question messages", () => {
+  it("shows warning-presentation and quiz question messages without API flag", () => {
     expect(
       shouldShowQcWarning(true, {
         warning_presentation: {
@@ -94,6 +107,15 @@ describe("shouldShowQcWarning", () => {
       shouldShowQcWarning(true, {
         errorType: "rate_limited",
         mentorDismissedQcWarning: true,
+      }),
+    ).toBe(true);
+  });
+
+  it("lets errorType override a false mentor QC policy flag", () => {
+    expect(
+      shouldShowQcWarning(true, {
+        shouldShowMentorQcWarning: false,
+        errorType: "llm_infra_error",
       }),
     ).toBe(true);
   });

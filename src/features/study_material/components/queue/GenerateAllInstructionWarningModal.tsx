@@ -1,8 +1,8 @@
 import { useEffect } from "react";
-import type { StudyMaterialBatchPreviewWarnings } from "../../types/studyMaterialBatch.types";
+import type { BatchPreviewWarnings } from "../../types/studyMaterialBatch.types";
 
 interface GenerateAllInstructionWarningModalProps {
-  warnings: StudyMaterialBatchPreviewWarnings;
+  warnings: BatchPreviewWarnings;
   isSubmitting?: boolean;
   onClose: () => void;
   onBack: () => void;

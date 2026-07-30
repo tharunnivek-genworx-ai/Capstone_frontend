@@ -11,7 +11,6 @@ export interface MentorDepartment {
 /** Shapes that may carry mentor department fields (login, profile, etc.). */
 export type MentorDepartmentSource = {
   departmentid?: string | null;
-  department_id?: string | null;
   department_name?: string | null;
   department_code?: string | null;
 };
@@ -48,7 +47,7 @@ export function normalizeMentorDepartment(
   source: MentorDepartmentSource | null | undefined
 ): MentorDepartment | null {
   if (!source) return null;
-  const rawId = source.departmentid ?? source.department_id;
+  const rawId = source.departmentid;
   if (rawId === undefined || rawId === null || String(rawId).trim() === "") {
     return null;
   }
